@@ -1,9 +1,3 @@
-export interface TerminalExecutionPort {
-  execute(requestId: string): Promise<void>;
-}
-
-export interface QueuePort {
-  enqueue(requestId: string): Promise<void>;
-}
-
-export const infrastructureScaffoldVersion = "phase-01-plan-02";
+export * from "./access/in-memory-identity-store.js";
+export * from "./access/in-memory-session-store.js";
+export * from "./access/sha256-password-verifier.js";

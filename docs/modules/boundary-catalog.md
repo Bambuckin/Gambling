@@ -11,6 +11,7 @@ Use it before changing code across `apps/*` and `packages/*`.
 - `packages/infrastructure` contains adapter-facing abstractions, not UI or workflow decisions.
 - `packages/lottery-handlers` owns deterministic lottery handler contracts and later concrete handlers.
 - `packages/test-kit` owns fake adapters and smoke helpers for local verification.
+- Access identities and session lifecycle rules live in domain/application/infrastructure packages, never in runtime route files.
 - UI, domain, queue, ledger, and terminal adapters must remain separated.
 
 ## Module Ownership Matrix
@@ -19,9 +20,9 @@ Use it before changing code across `apps/*` and `packages/*`.
 |---|---|---|---|
 | `apps/web` | Web runtime shell and page routing entrypoint | Terminal automation details, ledger mutation logic, queue worker behavior | `apps/web/src/app/layout.tsx`, `apps/web/src/app/page.tsx` |
 | `apps/terminal-worker` | Worker process boot and execution host process | UI rendering, user session logic, lottery pricing/domain rules | `apps/terminal-worker/src/main.ts` |
-| `packages/domain` | Core contracts: request lifecycle, ledger operations, registry records, draw/ticket shapes | Transport protocols, DB wiring, queue engine implementation, browser automation selectors | `packages/domain/src/index.ts` |
-| `packages/application` | Typed ports for terminal execution, queue, and time source | Concrete adapter SDK bindings, JSX/UI concerns, persistence schema definitions | `packages/application/src/index.ts` |
-| `packages/infrastructure` | Infrastructure-facing abstraction placeholders and adapter boundary stubs | Domain state-machine ownership, handler business behavior, UI composition | `packages/infrastructure/src/index.ts` |
+| `packages/domain` | Core contracts: request lifecycle, ledger operations, registry records, draw/ticket shapes, access identity/session lifecycle types | Transport protocols, DB wiring, queue engine implementation, browser automation selectors | `packages/domain/src/index.ts`, `packages/domain/src/access.ts` |
+| `packages/application` | Typed ports and use cases for terminal execution, queue, time source, and access/session orchestration | Concrete adapter SDK bindings, JSX/UI concerns, persistence schema definitions | `packages/application/src/index.ts`, `packages/application/src/services/access-service.ts` |
+| `packages/infrastructure` | Adapter implementations for infrastructure concerns, including in-memory access identity/session stores and password verifier | Domain state-machine ownership, handler business behavior, UI composition | `packages/infrastructure/src/index.ts`, `packages/infrastructure/src/access/in-memory-identity-store.ts`, `packages/infrastructure/src/access/in-memory-session-store.ts` |
 | `packages/lottery-handlers` | Stable contracts for purchase/result handlers by lottery code | Web route/session handling, queue ownership, ledger accounting logic | `packages/lottery-handlers/src/contracts.ts`, `packages/lottery-handlers/src/index.ts` |
 | `packages/test-kit` | Fake terminal and fake lottery handlers for smoke/integration scaffolds | Production queue scheduling, production terminal sessions, final business truth | `packages/test-kit/src/fake-terminal.ts`, `packages/test-kit/src/fake-lottery-handler.ts` |
 
@@ -31,6 +32,7 @@ Use it before changing code across `apps/*` and `packages/*`.
 2. `apps/terminal-worker` may depend on `@lottery/application`, `@lottery/infrastructure`, and `@lottery/lottery-handlers` to run execution workflows.
 3. `@lottery/lottery-handlers` contracts must align with registry bindings from `@lottery/domain`.
 4. `@lottery/test-kit` must implement application/handler contracts without adding production-only assumptions.
+5. Access/session route handlers may use `AccessService` from `@lottery/application`, but must not bypass storage ports.
 
 ## Integration Points (Disallowed)
 
@@ -38,11 +40,13 @@ Use it before changing code across `apps/*` and `packages/*`.
 2. Domain package imports from runtime apps.
 3. Handler logic embedding web request/session concerns.
 4. Worker boot code embedding lottery-specific selector logic inline.
+5. Runtime UI/routes directly mutating identity/session storage without `AccessService`.
 
 ## Verification Notes
 
 - `corepack pnpm typecheck` confirms module exports and import boundaries compile.
 - `corepack pnpm test` currently validates request-state rules in `@lottery/domain`.
+- `corepack pnpm --filter @lottery/application test` validates access login/session lifecycle scenarios.
 - `corepack pnpm smoke` validates test-kit smoke entrypoint without a production terminal.
 
 ## Dependency Direction Policy

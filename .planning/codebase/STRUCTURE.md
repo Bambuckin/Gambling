@@ -37,12 +37,13 @@ docs/
 
 - `packages/domain`
   - Shared contracts and state transitions.
-  - Key files: `request-state.ts`, `ledger.ts`, `lottery-registry.ts`, `draw.ts`, `ticket.ts`.
+  - Key files: `request-state.ts`, `ledger.ts`, `lottery-registry.ts`, `draw.ts`, `ticket.ts`, `access.ts`.
 - `packages/application`
   - Use-case ports between orchestration and adapters.
-  - Key files: `ports/terminal-executor.ts`, `ports/queue.ts`, `ports/time-source.ts`.
+  - Key files: `ports/terminal-executor.ts`, `ports/queue.ts`, `ports/time-source.ts`, `ports/identity-store.ts`, `ports/session-store.ts`, `ports/password-verifier.ts`, `services/access-service.ts`.
 - `packages/infrastructure`
-  - Adapter boundary placeholder package for infrastructure integrations.
+  - Adapter package for infrastructure implementations.
+  - Key files: `access/in-memory-identity-store.ts`, `access/in-memory-session-store.ts`, `access/sha256-password-verifier.ts`.
 - `packages/lottery-handlers`
   - Contracts for deterministic purchase and result handlers by lottery code.
   - Key file: `contracts.ts`.
@@ -60,5 +61,6 @@ docs/
 ## Extension Paths
 
 - New lottery support extends `packages/lottery-handlers` contracts + registry bindings.
+- Access/session persistence can replace in-memory adapters by implementing application ports in `packages/infrastructure/src/access/`.
 - New operational flows should add runbooks under `docs/runbooks/`.
 - New module boundaries must be reflected in `docs/modules/boundary-catalog.md`.
