@@ -13,7 +13,7 @@
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation Contracts** - Зафиксировать каркас проекта, модульные границы, ADR и тестовый bootstrap.
-- [ ] **Phase 2: Access and Unified Shell** - Поднять авторизацию, роли и общий интерфейсный shell с возвратом в выбранную лотерею.
+- [x] **Phase 2: Access and Unified Shell** - Поднять авторизацию, роли и общий интерфейсный shell с возвратом в выбранную лотерею. (completed 2026-04-05)
 - [ ] **Phase 3: Lottery Registry and Draw Pipeline** - Реализовать реестр лотерей, управление доступностью и поток актуальных тиражей.
 - [ ] **Phase 4: Internal Ledger and Wallet Views** - Собрать внутренний ledger баланса, резервы и пользовательское отображение движения средств.
 - [ ] **Phase 5: Purchase Request Orchestration** - Построить подтверждение покупки, создание заявки, очередь и пользовательские статусы.
@@ -61,7 +61,7 @@ Plans:
 - [x] 02-02: Build unified shell routes, lottery entry flow, and post-login redirection.
 - [x] 02-03: Add role guards for UI and server boundaries.
 - [x] 02-04: Add access-related logs and verification scenarios.
-- [ ] 02-05: Add test UI harness for post-implementation access verification.
+- [x] 02-05: Add test UI harness for post-implementation access verification.
 
 ### Phase 3: Lottery Registry and Draw Pipeline
 **Goal**: Make lotteries configurable entities with per-lottery forms, visibility controls, and scheduled draw data freshness.
@@ -208,7 +208,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Contracts | 4/4 | Complete | 2026-04-05 |
-| 2. Access and Unified Shell | 4/5 | In Progress|  |
+| 2. Access and Unified Shell | 5/5 | Complete   | 2026-04-05 |
 | 3. Lottery Registry and Draw Pipeline | 0/4 | Not started | - |
 | 4. Internal Ledger and Wallet Views | 0/4 | Not started | - |
 | 5. Purchase Request Orchestration | 0/5 | Not started | - |

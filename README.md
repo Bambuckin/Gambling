@@ -1,6 +1,6 @@
 # Lottery Terminal Operations System
 
-Status: Phase 2 in progress (`02-01`..`02-04` complete, `02-05` next).
+Status: Phase 2 complete (`02-01`..`02-05` complete); Phase 3 (`03-01`) next.
 
 This repository is designed so a new session can continue from files on disk only.
 
@@ -31,6 +31,8 @@ This repository is designed so a new session can continue from files on disk onl
 23. `.planning/phases/02-access-and-unified-shell/02-03-SUMMARY.md`
 24. `.planning/phases/02-access-and-unified-shell/02-04-PLAN.md`
 25. `.planning/phases/02-access-and-unified-shell/02-04-SUMMARY.md`
+26. `.planning/phases/02-access-and-unified-shell/02-05-PLAN.md`
+27. `.planning/phases/02-access-and-unified-shell/02-05-SUMMARY.md`
 
 ## Locked Baseline (ADR-001)
 
@@ -86,4 +88,4 @@ Root workspace config files:
 
 ## Immediate Next Step
 
-Execute `02-05` in Phase 2 (`Access and Unified Shell`): add Access Lab test UI for post-implementation verification.
+Start `03-01` in Phase 3 (`Lottery Registry and Draw Pipeline`): implement lottery registry storage, ordering, visibility, and handler references.

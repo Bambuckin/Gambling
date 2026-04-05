@@ -17,6 +17,9 @@ export default function HomePage(): ReactElement {
           </li>
         ))}
       </ul>
+      <p>
+        <Link href="/debug/access-lab">Open Access Lab</Link>
+      </p>
     </section>
   );
 }

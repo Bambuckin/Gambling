@@ -28,8 +28,8 @@ docs/
 
 - `apps/web`
   - Next.js runtime shell with Phase 2 access and role-guard routes.
-  - Current entrypoints: `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/lottery/[lotteryCode]/page.tsx`, `src/app/admin/page.tsx`, `src/app/denied/page.tsx`, `src/middleware.ts`.
-  - Access helpers: `src/lib/access/access-runtime.ts`, `src/lib/access/entry-flow.ts`, `src/lib/access/session-cookie.ts`, `src/lib/access/cookie-names.ts`, `src/lib/access/lottery-catalog.ts`, `src/lib/access/role-guard.ts`.
+  - Current entrypoints: `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/lottery/[lotteryCode]/page.tsx`, `src/app/admin/page.tsx`, `src/app/denied/page.tsx`, `src/app/debug/access-lab/page.tsx`, `src/middleware.ts`.
+  - Access helpers: `src/lib/access/access-runtime.ts`, `src/lib/access/entry-flow.ts`, `src/lib/access/session-cookie.ts`, `src/lib/access/cookie-names.ts`, `src/lib/access/lottery-catalog.ts`, `src/lib/access/lab-scenarios.ts`, `src/lib/access/role-guard.ts`.
   - Build wiring: `next.config.ts` (workspace package transpile + extension alias for NodeNext imports).
 - `apps/terminal-worker`
   - Worker process host for queue + terminal execution flows.

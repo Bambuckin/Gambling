@@ -10,6 +10,7 @@ This checks the current local baseline:
 - request-state transition checks
 - smoke command availability for local workflows
 - access lifecycle audit event coverage (`login_success`, `login_denied`, `logout`)
+- Access Lab UI harness for post-implementation auth flow checks
 
 ## Preconditions
 
@@ -55,6 +56,27 @@ Expected result:
 - command exits with code `0`
 - `access-service.test.ts` confirms login/logout/denied flows append audit events with actor + timestamp
 
+## Step 5: Walk through Access Lab UI scenarios
+
+1. Start web app:
+
+```powershell
+corepack pnpm dev:web
+```
+
+2. Open `http://localhost:3000/debug/access-lab`.
+3. Run scenarios in order:
+   - `User Login With Return`
+   - `User To Admin Denied`
+   - `Logout Flow`
+4. Open each probe link shown after running the scenario.
+
+Expected result:
+
+- User scenario opens `/lottery/demo-lottery` after session creation
+- Admin-denied scenario redirects `/admin` to `/denied?...required=admin`
+- Logout scenario clears session and protected routes redirect to `/login`
+
 ## If a step fails
 
 1. Run `corepack pnpm typecheck` at repo root to surface cross-package drift.
@@ -64,6 +86,9 @@ Expected result:
    - `packages/application/src/ports/terminal-executor.ts`
    - `packages/application/src/ports/access-audit-log.ts`
    - `packages/application/src/services/access-service.ts`
+   - `apps/web/src/app/debug/access-lab/page.tsx`
+   - `apps/web/src/app/debug/access-lab/actions.ts`
+   - `apps/web/src/lib/access/lab-scenarios.ts`
 3. Confirm `nextState` values from fake terminal remain within `"success" | "retrying" | "error"`.
 4. Re-run this runbook after fixes.
 
@@ -73,3 +98,4 @@ Expected result:
 - Pass/fail per step
 - Any adapter contract mismatch and exact file path fixed
 - Access audit event assertions covered in the run
+- Access Lab scenarios executed and observed redirect outcomes

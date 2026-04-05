@@ -13,11 +13,11 @@
 
 ### Authentication
 
-- [ ] **AUTH-01**: Unauthenticated user opening a lottery is prompted for login and password before continuing.
-- [ ] **AUTH-02**: After successful authentication the user returns to the lottery originally selected before login.
-- [ ] **AUTH-03**: UI and API enforce role-based permissions for user and administrator actions.
-- [ ] **AUTH-04**: User session persists across page navigation and browser refresh until logout or expiry.
-- [ ] **AUTH-05**: System logs login, logout, and denied access events with actor and timestamp.
+- [x] **AUTH-01**: Unauthenticated user opening a lottery is prompted for login and password before continuing.
+- [x] **AUTH-02**: After successful authentication the user returns to the lottery originally selected before login.
+- [x] **AUTH-03**: UI and API enforce role-based permissions for user and administrator actions.
+- [x] **AUTH-04**: User session persists across page navigation and browser refresh until logout or expiry.
+- [x] **AUTH-05**: System logs login, logout, and denied access events with actor and timestamp.
 
 ### Lottery Registry
 
@@ -127,11 +127,11 @@
 | PLAT-01 | Phase 1 | Complete |
 | PLAT-02 | Phase 1 | Complete |
 | PLAT-03 | Phase 1 | Complete |
-| AUTH-01 | Phase 2 | Pending |
-| AUTH-02 | Phase 2 | Pending |
-| AUTH-03 | Phase 2 | Pending |
-| AUTH-04 | Phase 2 | Pending |
-| AUTH-05 | Phase 2 | Pending |
+| AUTH-01 | Phase 2 | Complete |
+| AUTH-02 | Phase 2 | Complete |
+| AUTH-03 | Phase 2 | Complete |
+| AUTH-04 | Phase 2 | Complete |
+| AUTH-05 | Phase 2 | Complete |
 | LOTR-01 | Phase 3 | Pending |
 | LOTR-02 | Phase 3 | Pending |
 | LOTR-03 | Phase 3 | Pending |
