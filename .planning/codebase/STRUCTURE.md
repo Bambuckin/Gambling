@@ -27,9 +27,9 @@ docs/
 ## Runtime Apps
 
 - `apps/web`
-  - Next.js runtime shell with Phase 2 access routes.
-  - Current entrypoints: `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/lottery/[lotteryCode]/page.tsx`.
-  - Access helpers: `src/lib/access/access-runtime.ts`, `src/lib/access/entry-flow.ts`, `src/lib/access/session-cookie.ts`, `src/lib/access/lottery-catalog.ts`.
+  - Next.js runtime shell with Phase 2 access and role-guard routes.
+  - Current entrypoints: `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/lottery/[lotteryCode]/page.tsx`, `src/app/admin/page.tsx`, `src/app/denied/page.tsx`, `src/middleware.ts`.
+  - Access helpers: `src/lib/access/access-runtime.ts`, `src/lib/access/entry-flow.ts`, `src/lib/access/session-cookie.ts`, `src/lib/access/cookie-names.ts`, `src/lib/access/lottery-catalog.ts`, `src/lib/access/role-guard.ts`.
   - Build wiring: `next.config.ts` (workspace package transpile + extension alias for NodeNext imports).
 - `apps/terminal-worker`
   - Worker process host for queue + terminal execution flows.
@@ -65,5 +65,6 @@ docs/
 - New lottery support extends `packages/lottery-handlers` contracts + registry bindings.
 - Access/session persistence can replace in-memory adapters by implementing application ports in `packages/infrastructure/src/access/`.
 - Web shell can bind external data sources via `LOTTERY_ACCESS_IDENTITIES_JSON` and `LOTTERY_SHELL_LOTTERIES_JSON` without touching route code.
+- Role routing decisions are centralized in `src/lib/access/role-guard.ts` and reused by middleware + server access guards.
 - New operational flows should add runbooks under `docs/runbooks/`.
 - New module boundaries must be reflected in `docs/modules/boundary-catalog.md`.

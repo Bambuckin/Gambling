@@ -1,8 +1,11 @@
-import type { AccessIdentity, AccessSession } from "@lottery/domain";
+import type { AccessIdentity, AccessSession, SessionRole } from "@lottery/domain";
 import { normalizeIdentityLogin } from "@lottery/domain";
 import { redirect } from "next/navigation";
 import { getAccessService } from "./access-runtime";
 import { clearSessionCookie, readSessionCookie, writeSessionCookie } from "./session-cookie";
+import { buildDeniedPath, buildLoginRedirectPath, normalizeReturnToPath, requireRole } from "./role-guard";
+
+export { normalizeReturnToPath };
 
 const LOTTERY_PATH_PREFIX = "/lottery/";
 const LOTTERY_CODE_PATTERN = /^[a-z0-9][a-z0-9-]{1,40}$/i;
@@ -10,6 +13,9 @@ const LOTTERY_CODE_PATTERN = /^[a-z0-9][a-z0-9-]{1,40}$/i;
 export interface AuthenticatedAccessContext {
   readonly identity: AccessIdentity;
   readonly session: AccessSession;
+}
+
+export interface AuthenticatedLotteryContext extends AuthenticatedAccessContext {
   readonly lotteryCode: string;
 }
 
@@ -19,26 +25,33 @@ export interface LoginSubmissionInput {
   readonly returnToPath: string | null;
 }
 
-export async function requireLotteryAccess(rawLotteryCode: string): Promise<AuthenticatedAccessContext> {
+export async function requireLotteryAccess(rawLotteryCode: string): Promise<AuthenticatedLotteryContext> {
   const lotteryCode = sanitizeLotteryCode(rawLotteryCode);
-  const returnToPath = lotteryPathFromCode(lotteryCode);
+  const access = await requireAccessRole(["user"], lotteryPathFromCode(lotteryCode));
 
+  return {
+    ...access,
+    lotteryCode
+  };
+}
+
+export async function requireAdminAccess(returnToPath = "/admin"): Promise<AuthenticatedAccessContext> {
+  return requireAccessRole(["admin"], returnToPath);
+}
+
+export async function resolveCurrentAccessRole(): Promise<SessionRole | null> {
   const sessionId = await readSessionCookie();
   if (!sessionId) {
-    return redirect(loginPath(returnToPath));
+    return null;
   }
 
   const authResult = await getAccessService().authenticate(sessionId);
   if (!authResult.ok) {
     await clearSessionCookie();
-    return redirect(loginPath(returnToPath, authResult.reason));
+    return null;
   }
 
-  return {
-    identity: authResult.identity,
-    session: authResult.session,
-    lotteryCode
-  };
+  return authResult.identity.role;
 }
 
 export async function submitLogin(input: LoginSubmissionInput): Promise<void> {
@@ -56,8 +69,8 @@ export async function submitLogin(input: LoginSubmissionInput): Promise<void> {
     return redirect(loginPath(fallbackReturnToPath, loginResult.reason));
   }
 
-  await writeSessionCookie(loginResult.session.sessionId);
-  return redirect(resolvePostLoginPath(loginResult.session, fallbackReturnToPath));
+  await writeSessionCookie(loginResult.session.sessionId, loginResult.identity.role);
+  return redirect(resolvePostLoginPath(loginResult.session, loginResult.identity.role, fallbackReturnToPath));
 }
 
 export async function submitLogout(): Promise<void> {
@@ -69,30 +82,8 @@ export async function submitLogout(): Promise<void> {
   await clearSessionCookie();
 }
 
-export function normalizeReturnToPath(value: string | null | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
-    return null;
-  }
-
-  return trimmed;
-}
-
 export function loginPath(returnToPath: string | null, error?: string): string {
-  const searchParams = new URLSearchParams();
-  if (returnToPath) {
-    searchParams.set("returnTo", returnToPath);
-  }
-  if (error) {
-    searchParams.set("error", error);
-  }
-
-  const query = searchParams.toString();
-  return query ? `/login?${query}` : "/login";
+  return buildLoginRedirectPath(returnToPath, error);
 }
 
 export function sanitizeLotteryCode(value: string): string {
@@ -102,6 +93,31 @@ export function sanitizeLotteryCode(value: string): string {
   }
 
   return "demo-lottery";
+}
+
+async function requireAccessRole(
+  requiredRoles: readonly SessionRole[],
+  returnToPath: string
+): Promise<AuthenticatedAccessContext> {
+  const sessionId = await readSessionCookie();
+  if (!sessionId) {
+    return redirect(loginPath(returnToPath, "session_not_found"));
+  }
+
+  const authResult = await getAccessService().authenticate(sessionId);
+  if (!authResult.ok) {
+    await clearSessionCookie();
+    return redirect(loginPath(returnToPath, authResult.reason));
+  }
+
+  if (!requireRole(authResult.identity.role, requiredRoles)) {
+    return redirect(buildDeniedPath(returnToPath, requiredRoles, authResult.identity.role));
+  }
+
+  return {
+    identity: authResult.identity,
+    session: authResult.session
+  };
 }
 
 function lotteryPathFromCode(lotteryCode: string): string {
@@ -121,7 +137,7 @@ function parseLotteryCodeFromPath(returnToPath: string | null): string | undefin
   return sanitizeLotteryCode(candidate);
 }
 
-function resolvePostLoginPath(session: AccessSession, fallbackReturnToPath: string | null): string {
+function resolvePostLoginPath(session: AccessSession, role: SessionRole, fallbackReturnToPath: string | null): string {
   if (fallbackReturnToPath) {
     return fallbackReturnToPath;
   }
@@ -130,5 +146,5 @@ function resolvePostLoginPath(session: AccessSession, fallbackReturnToPath: stri
     return lotteryPathFromCode(sanitizeLotteryCode(session.returnToLotteryCode));
   }
 
-  return "/lottery/demo-lottery";
+  return role === "admin" ? "/admin" : "/lottery/demo-lottery";
 }

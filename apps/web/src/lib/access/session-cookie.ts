@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
+import type { SessionRole } from "@lottery/domain";
+import { ACCESS_ROLE_HINT_COOKIE_NAME, ACCESS_SESSION_COOKIE_NAME } from "./cookie-names";
 
-export const ACCESS_SESSION_COOKIE_NAME = "lottery_access_session";
 const ACCESS_SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 8;
 
 export async function readSessionCookie(): Promise<string | null> {
@@ -8,10 +9,18 @@ export async function readSessionCookie(): Promise<string | null> {
   return cookieStore.get(ACCESS_SESSION_COOKIE_NAME)?.value ?? null;
 }
 
-export async function writeSessionCookie(sessionId: string): Promise<void> {
+export async function writeSessionCookie(sessionId: string, roleHint: SessionRole): Promise<void> {
   const cookieStore = await cookies();
 
   cookieStore.set(ACCESS_SESSION_COOKIE_NAME, sessionId, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: ACCESS_SESSION_COOKIE_MAX_AGE_SECONDS
+  });
+
+  cookieStore.set(ACCESS_ROLE_HINT_COOKIE_NAME, roleHint, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
@@ -23,6 +32,7 @@ export async function writeSessionCookie(sessionId: string): Promise<void> {
 export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(ACCESS_SESSION_COOKIE_NAME);
+  cookieStore.delete(ACCESS_ROLE_HINT_COOKIE_NAME);
 }
 
 export function buildSessionSetCookieHeader(sessionId: string): string {

@@ -1,6 +1,6 @@
 # Lottery Terminal Operations System
 
-Status: Phase 2 in progress (`02-01` and `02-02` complete, `02-03` next).
+Status: Phase 2 in progress (`02-01`, `02-02`, and `02-03` complete, `02-04` next).
 
 This repository is designed so a new session can continue from files on disk only.
 
@@ -27,6 +27,8 @@ This repository is designed so a new session can continue from files on disk onl
 19. `.planning/phases/02-access-and-unified-shell/.continue-here.md`
 20. `.planning/phases/02-access-and-unified-shell/02-02-PLAN.md`
 21. `.planning/phases/02-access-and-unified-shell/02-02-SUMMARY.md`
+22. `.planning/phases/02-access-and-unified-shell/02-03-PLAN.md`
+23. `.planning/phases/02-access-and-unified-shell/02-03-SUMMARY.md`
 
 ## Locked Baseline (ADR-001)
 
@@ -82,4 +84,4 @@ Root workspace config files:
 
 ## Immediate Next Step
 
-Execute `02-03` in Phase 2 (`Access and Unified Shell`): role guards for UI and server boundaries.
+Execute `02-04` in Phase 2 (`Access and Unified Shell`): add access events/logging and verification scenarios.

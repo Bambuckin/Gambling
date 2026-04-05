@@ -59,7 +59,7 @@ Plans:
 Plans:
 - [x] 02-01: Implement access domain, identity storage, and session lifecycle.
 - [x] 02-02: Build unified shell routes, lottery entry flow, and post-login redirection.
-- [ ] 02-03: Add role guards for UI and server boundaries.
+- [x] 02-03: Add role guards for UI and server boundaries.
 - [ ] 02-04: Add access-related logs and verification scenarios.
 - [ ] 02-05: Add test UI harness for post-implementation access verification.
 
@@ -208,7 +208,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Contracts | 4/4 | Complete | 2026-04-05 |
-| 2. Access and Unified Shell | 2/5 | In Progress | - |
+| 2. Access and Unified Shell | 3/5 | In Progress|  |
 | 3. Lottery Registry and Draw Pipeline | 0/4 | Not started | - |
 | 4. Internal Ledger and Wallet Views | 0/4 | Not started | - |
 | 5. Purchase Request Orchestration | 0/5 | Not started | - |
