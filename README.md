@@ -1,8 +1,8 @@
 # Lottery Terminal Operations System
 
-Status: planning-ready, implementation not started.
+Status: Phase 1 in progress (`01-01` baseline locked).
 
-This repository is organized so a future session can resume work from files on disk without relying on prior chat context.
+This repository is designed so a new session can continue from files on disk only.
 
 ## Start Here
 
@@ -10,42 +10,61 @@ This repository is organized so a future session can resume work from files on d
 2. `.planning/PROJECT.md`
 3. `.planning/REQUIREMENTS.md`
 4. `.planning/ROADMAP.md`
-5. `.planning/phases/01-foundation-contracts/01-CONTEXT.md`
-6. `.planning/phases/01-foundation-contracts/01-RESEARCH.md`
-7. `.planning/phases/01-foundation-contracts/01-01-PLAN.md` through `01-04-PLAN.md`
-8. `.planning/phases/01-foundation-contracts/.continue-here.md`
+5. `docs/adr/ADR-001-stack-and-repo-shape.md`
+6. `.planning/phases/01-foundation-contracts/01-CONTEXT.md`
+7. `.planning/phases/01-foundation-contracts/01-RESEARCH.md`
+8. `.planning/phases/01-foundation-contracts/01-01-PLAN.md` through `01-04-PLAN.md`
+9. `.planning/phases/01-foundation-contracts/.continue-here.md`
 
-## Current Intent
+## Locked Baseline (ADR-001)
 
-Build a LAN web system for lottery ticket operations with:
+ADR reference: `docs/adr/ADR-001-stack-and-repo-shape.md`
 
-- one shared user/admin web interface,
-- one main execution terminal,
-- registry-driven lottery modules,
-- internal balance ledger with reserve/debit/release/credit flows,
-- deterministic terminal handlers,
-- full operational and documentation traceability.
+Chosen workspace shape:
+
+- `apps/web`
+- `apps/terminal-worker`
+- `packages/domain`
+- `packages/application`
+- `packages/infrastructure`
+- `packages/lottery-handlers`
+- `packages/test-kit`
+
+Root workspace config files:
+
+- `package.json`
+- `pnpm-workspace.yaml`
+- `tsconfig.base.json`
+
+## Root Scripts
+
+- `pnpm dev:web`
+- `pnpm dev:worker`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm smoke`
 
 ## Working Rules
 
 - Keep business logic out of UI and terminal apps.
-- Treat balance and request state transitions as auditable domain events.
-- Add or change lotteries only through documented registry and handler contracts.
-- Preserve stepwise delivery: every phase must remain partially runnable and testable.
-- Update planning and docs artifacts when boundaries or decisions change.
+- Keep terminal execution isolated in worker plus adapter boundaries.
+- Treat balance and request transitions as auditable domain events.
+- Add or change lotteries only through registry and handler contracts.
+- Update `.planning/` and `docs/` when decisions or boundaries change.
 
 ## Documentation Map
 
-- `docs/adr/` — architectural decisions and principles
-- `docs/modules/` — module responsibilities and extension notes
-- `docs/runbooks/` — operator and maintenance procedures
-- `.planning/` — GSD roadmap, phase context, plans, state, and handoff artifacts
+- `docs/adr/` - architectural decisions and constraints
+- `docs/modules/` - module responsibilities and extension notes
+- `docs/runbooks/` - operator and maintenance procedures
+- `.planning/` - roadmap, plans, summaries, and state continuity
 
 ## Environment Note
 
-- Git is installed, available on PATH, and this repository is already initialized on `main`.
-- In this Codex desktop environment, some `gsd-tools` operations that spawn `git` from Node may need an unrestricted shell because sandboxed child-process spawns can fail with `EPERM`. That is an execution-environment constraint, not a repository setup problem.
+- Git is available on PATH and repository branch is `main`.
+- If a `gsd-tools` git step fails with sandbox `EPERM`, rerun that step via unrestricted shell.
 
 ## Immediate Next Step
 
-Resume with Phase 1 execution starting at `.planning/phases/01-foundation-contracts/01-01-PLAN.md`.
+After completing `01-01`, execute `.planning/phases/01-foundation-contracts/01-02-PLAN.md`.

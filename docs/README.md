@@ -1,21 +1,36 @@
 # Documentation Map
 
-This repository uses documentation as an execution surface, not as an afterthought.
+Documentation in this repository is part of execution, not a post-factum attachment.
 
-## Sections
+## Core Sections
 
-- `docs/adr/` — decisions that lock architecture, stack, and repository shape
-- `docs/modules/` — stable module boundaries, contracts, and ownership
-- `docs/runbooks/` — operational procedures, recovery, and extension workflows
+- `docs/adr/` - architecture, stack, and repository-shape decisions.
+- `docs/modules/` - stable module boundaries, contracts, and ownership.
+- `docs/runbooks/` - operational procedures, bootstrap, and incident handling.
 
-## Phase 1 Documentation Deliverables
+## Current Foundation Reference
 
-- ADR for stack and repo shape
-- module boundary catalog
-- local verification guide
-- lottery handler extension guide
-- operator runbooks for queue, terminal, and incident triage
+- `docs/adr/ADR-000-project-principles.md` - immutable project principles.
+- `docs/adr/ADR-001-stack-and-repo-shape.md` - selected workspace baseline.
+
+ADR-001 defines the workspace layout used by Phase 1:
+
+- `apps/web`
+- `apps/terminal-worker`
+- `packages/domain`
+- `packages/application`
+- `packages/infrastructure`
+- `packages/lottery-handlers`
+- `packages/test-kit`
 
 ## Session Independence Rule
 
-A future agent must be able to resume by reading repository files only. If a decision matters later, it belongs in one of the docs above or in `.planning/`.
+A future session must be able to continue from repository files alone.  
+If a decision affects future implementation, write it to `docs/` or `.planning/` immediately.
+
+## Entry Links for Continuation
+
+1. `.planning/STATE.md`
+2. `.planning/ROADMAP.md`
+3. `.planning/phases/01-foundation-contracts/.continue-here.md`
+4. `docs/adr/ADR-001-stack-and-repo-shape.md`
