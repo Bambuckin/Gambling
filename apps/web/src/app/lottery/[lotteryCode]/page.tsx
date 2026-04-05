@@ -23,6 +23,7 @@ import {
   getPurchaseRequestQueryService,
   getPurchaseRequestService
 } from "../../../lib/purchase/purchase-runtime";
+import { getTicketQueryService } from "../../../lib/ticket/ticket-runtime";
 
 type LotteryPageProps = {
   readonly params: Promise<{
@@ -63,6 +64,9 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
   const confirmationDraft = decodeConfirmationToken(quoteToken, lottery.lotteryCode);
   const purchaseRequests = (await getPurchaseRequestQueryService().listUserRequests(access.identity.identityId))
     .filter((request) => request.lotteryCode === lottery.lotteryCode);
+  const tickets = (await getTicketQueryService().listUserTickets(access.identity.identityId)).filter(
+    (ticket) => ticket.lotteryCode === lottery.lotteryCode
+  );
 
   return (
     <section>
@@ -217,6 +221,38 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
                     "Not cancelable"
                   )}
                 </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <h2>Ticket Outcomes</h2>
+      {tickets.length === 0 ? (
+        <p>No ticket verification outcomes yet.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Ticket</th>
+              <th>Request</th>
+              <th>Draw</th>
+              <th>Verification</th>
+              <th>Winning (minor)</th>
+              <th>Verified at</th>
+              <th>External reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tickets.map((ticket) => (
+              <tr key={ticket.ticketId}>
+                <td>{ticket.ticketId}</td>
+                <td>{ticket.requestId}</td>
+                <td>{ticket.drawId}</td>
+                <td>{ticket.verificationStatus}</td>
+                <td>{ticket.winningAmountMinor ?? 0}</td>
+                <td>{ticket.verifiedAt ?? "pending"}</td>
+                <td>{ticket.externalReference}</td>
               </tr>
             ))}
           </tbody>

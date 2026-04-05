@@ -10,6 +10,6 @@ Current runbooks:
 - `wallet-verification.md` - balance snapshot/history verification
 - `purchase-request-verification.md` - Phase 5 purchase request lifecycle checks
 - `queue-incident-triage.md` - queue/terminal incident investigation flow
-- `ticket-persistence-verification.md` - Phase 7 success-outcome ticket persistence checks
+- `ticket-persistence-verification.md` - Phase 7 ticket persistence, verification outcomes, and winnings visibility checks
 
 When a phase introduces new operational or verification behavior, update runbooks in the same step.

@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Internal Ledger and Wallet Views** - Собрать внутренний ledger баланса, резервы и пользовательское отображение движения средств. (completed 2026-04-05)
 - [x] **Phase 5: Purchase Request Orchestration** - Построить подтверждение покупки, создание заявки, очередь и пользовательские статусы. (completed 2026-04-05)
 - [x] **Phase 6: Main Terminal Execution Engine** - Подключить последовательное исполнение на терминале, retry и нормализацию результата. (completed 2026-04-05)
-- [ ] **Phase 7: Ticket Verification and Winnings** - Добавить хранение билетов, сверку после розыгрыша и начисление выигрыша.
+- [x] **Phase 7: Ticket Verification and Winnings** - Добавить хранение билетов, сверку после розыгрыша и начисление выигрыша. (completed 2026-04-05)
 - [ ] **Phase 8: Admin Operations and Observability** - Дать администратору полный операционный контур: очередь, ошибки, лотереи, терминал, алерты.
 - [ ] **Phase 9: Hardening, Extension Docs, and Release Readiness** - Закрыть документацию, расширяемость, регрессионные проверки и готовность к изменению системы.
 
@@ -159,7 +159,7 @@ Plans:
 - [x] 07-01: Persist ticket records and connect them to successful purchase outcomes.
 - [x] 07-02: Implement scheduled or triggered ticket verification flow through the terminal.
 - [x] 07-03: Normalize verification results and apply winnings to the ledger.
-- [ ] 07-04: Build user-facing ticket result views and verification coverage.
+- [x] 07-04: Build user-facing ticket result views and verification coverage.
 
 ### Phase 8: Admin Operations and Observability
 **Goal**: Provide administrators with queue control visibility, problem triage, terminal awareness, and actionable audits/alerts.
@@ -213,6 +213,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Internal Ledger and Wallet Views | 4/4 | Complete | 2026-04-05 |
 | 5. Purchase Request Orchestration | 5/5 | Complete    | 2026-04-05 |
 | 6. Main Terminal Execution Engine | 5/5 | Complete    | 2026-04-05 |
-| 7. Ticket Verification and Winnings | 3/4 | In progress | - |
+| 7. Ticket Verification and Winnings | 4/4 | Complete | 2026-04-05 |
 | 8. Admin Operations and Observability | 0/4 | Not started | - |
 | 9. Hardening, Extension Docs, and Release Readiness | 0/4 | Not started | - |

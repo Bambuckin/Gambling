@@ -98,6 +98,9 @@ export default async function PurchaseLabPage(): Promise<ReactElement> {
       <p>
         <Link href="/lottery/demo-lottery">Open Demo Lottery</Link>
       </p>
+      <p>
+        <Link href="/debug/ticket-lab">Open Ticket Lab</Link>
+      </p>
     </section>
   );
 }

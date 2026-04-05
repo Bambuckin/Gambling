@@ -26,6 +26,9 @@ export default async function HomePage(): Promise<ReactElement> {
       <p>
         <Link href="/debug/wallet-lab">Open Wallet Lab</Link>
       </p>
+      <p>
+        <Link href="/debug/ticket-lab">Open Ticket Lab</Link>
+      </p>
     </section>
   );
 }

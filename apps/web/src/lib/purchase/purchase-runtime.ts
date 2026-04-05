@@ -4,11 +4,12 @@ import {
   PurchaseRequestService,
   SystemTimeSource
 } from "@lottery/application";
-import { InMemoryPurchaseQueueStore, InMemoryPurchaseRequestStore } from "@lottery/infrastructure";
+import { InMemoryPurchaseQueueStore, InMemoryPurchaseRequestStore, InMemoryTicketStore } from "@lottery/infrastructure";
 import { getWalletLedgerService } from "../ledger/ledger-runtime";
 
 const requestStore = new InMemoryPurchaseRequestStore();
 const queueStore = new InMemoryPurchaseQueueStore();
+const ticketStore = new InMemoryTicketStore();
 
 let cachedRequestService: PurchaseRequestService | null = null;
 let cachedOrchestrationService: PurchaseOrchestrationService | null = null;
@@ -52,9 +53,11 @@ export function getPurchaseRequestQueryService(): PurchaseRequestQueryService {
 export function getPurchaseRuntimeStores(): {
   readonly requestStore: InMemoryPurchaseRequestStore;
   readonly queueStore: InMemoryPurchaseQueueStore;
+  readonly ticketStore: InMemoryTicketStore;
 } {
   return {
     requestStore,
-    queueStore
+    queueStore,
+    ticketStore
   };
 }

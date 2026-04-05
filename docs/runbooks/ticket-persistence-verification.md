@@ -70,6 +70,23 @@ Expected outcome:
 - replay of the same verification event returns `replayed=true` and does not duplicate winnings credit;
 - ledger winnings entry references `ticketId` and uses idempotency key `${ticketId}:winnings:${verificationEventId}`.
 
+## Step 5: Validate user-facing ticket outcomes and debug contour
+
+Run:
+
+```powershell
+corepack pnpm --filter @lottery/application test -- ticket-query-service
+corepack pnpm --filter @lottery/web build
+```
+
+Then manually open:
+- `/lottery/demo-lottery` (user view ticket outcomes section)
+- `/debug/ticket-lab` (verification-only ticket snapshot contour)
+
+Expected outcome:
+- lottery page renders ticket outcomes table with `verificationStatus`, `winningAmountMinor`, `verifiedAt`, and references;
+- ticket-lab renders ticket tables in read-only mode with no action buttons for mutation.
+
 ## Troubleshooting Matrix
 
 | Symptom | Likely boundary | Inspect first | Investigation command |
@@ -80,8 +97,10 @@ Expected outcome:
 | Worker build breaks after ticket persistence wiring | Worker/runtime integration boundary | `apps/terminal-worker/src/main.ts` | `corepack pnpm --filter @lottery/terminal-worker typecheck` |
 | Verification jobs are not created for pending tickets | Verification queue orchestration boundary | `ticket-verification-queue-service.ts`, `ticket-verification-job-store.ts` | `corepack pnpm --filter @lottery/application test -- ticket-verification-queue-service` |
 | Winnings are credited twice for one ticket verification | Verification-result idempotency boundary | `ticket-verification-result-service.ts`, `wallet-ledger-service.ts` | `corepack pnpm --filter @lottery/application test -- ticket-verification-result-service wallet-ledger-service` |
+| Ticket outcomes do not appear in user/debug UI | Ticket query projection boundary | `ticket-query-service.ts`, `apps/web/src/lib/ticket/ticket-runtime.ts`, `apps/web/src/app/debug/ticket-lab/page.tsx` | `corepack pnpm --filter @lottery/application test -- ticket-query-service; corepack pnpm --filter @lottery/web build` |
 
 ## Additional Notes
 
 - Ticket persistence is application-owned and must not be moved into runtime route files or worker store writes.
 - Verification result normalization and winnings credit remain application-owned (`TicketVerificationResultService`, `WalletLedgerService`), never runtime-owned.
+- Ticket Lab is verification-only and must remain read-only (no verify/replay/credit write controls).
