@@ -12,7 +12,7 @@
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation Contracts** - Зафиксировать каркас проекта, модульные границы, ADR и тестовый bootstrap.
+- [x] **Phase 1: Foundation Contracts** - Зафиксировать каркас проекта, модульные границы, ADR и тестовый bootstrap.
 - [ ] **Phase 2: Access and Unified Shell** - Поднять авторизацию, роли и общий интерфейсный shell с возвратом в выбранную лотерею.
 - [ ] **Phase 3: Lottery Registry and Draw Pipeline** - Реализовать реестр лотерей, управление доступностью и поток актуальных тиражей.
 - [ ] **Phase 4: Internal Ledger and Wallet Views** - Собрать внутренний ledger баланса, резервы и пользовательское отображение движения средств.
@@ -41,7 +41,7 @@ Plans:
 - [x] 01-01: Create repository skeleton, workspace conventions, and baseline bootstrap.
 - [x] 01-02: Scaffold runtime apps and shared packages, then wire workspace tooling.
 - [x] 01-03: Define core domain contracts, application ports, fake adapters, and state-machine checks.
-- [ ] 01-04: Finalize module/runbook docs and refresh repository entrypoints.
+- [x] 01-04: Finalize module/runbook docs and refresh repository entrypoints.
 
 ### Phase 2: Access and Unified Shell
 **Goal**: Deliver the first usable web shell with login, session handling, role separation, and return-to-lottery behavior.
@@ -206,7 +206,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Contracts | 3/4 | In Progress | - |
+| 1. Foundation Contracts | 4/4 | Complete | 2026-04-05 |
 | 2. Access and Unified Shell | 0/4 | Not started | - |
 | 3. Lottery Registry and Draw Pipeline | 0/4 | Not started | - |
 | 4. Internal Ledger and Wallet Views | 0/4 | Not started | - |

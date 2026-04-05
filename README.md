@@ -1,6 +1,6 @@
 # Lottery Terminal Operations System
 
-Status: Phase 1 in progress (`01-01`, `01-02`, and `01-03` complete; `01-04` active).
+Status: Phase 1 complete (`01-01` through `01-04` committed).
 
 This repository is designed so a new session can continue from files on disk only.
 
@@ -76,4 +76,4 @@ Root workspace config files:
 
 ## Immediate Next Step
 
-Complete `.planning/phases/01-foundation-contracts/01-04-PLAN.md`.
+Start planning and execution for Phase 2 (`Access and Unified Shell`), beginning with `02-01`.

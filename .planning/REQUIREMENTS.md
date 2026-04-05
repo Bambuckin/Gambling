@@ -84,8 +84,8 @@
 ### Documentation and Extension
 
 - [x] **DOCS-01**: Repository includes living architecture, module responsibility, and data-flow documentation aligned with implemented modules.
-- [ ] **DOCS-02**: Each module has local verification guidance covering unit, integration, or smoke checks for partial delivery.
-- [ ] **DOCS-03**: Adding or changing a lottery handler is documented through clear extension points and operator runbooks.
+- [x] **DOCS-02**: Each module has local verification guidance covering unit, integration, or smoke checks for partial delivery.
+- [x] **DOCS-03**: Adding or changing a lottery handler is documented through clear extension points and operator runbooks.
 
 ## v2 Requirements
 
@@ -170,9 +170,9 @@
 | AUDT-01 | Phase 8 | Pending |
 | AUDT-02 | Phase 8 | Pending |
 | AUDT-03 | Phase 8 | Pending |
-| DOCS-01 | Phase 9 | Complete |
-| DOCS-02 | Phase 9 | Pending |
-| DOCS-03 | Phase 9 | Pending |
+| DOCS-01 | Phase 1 | Complete |
+| DOCS-02 | Phase 1 | Complete |
+| DOCS-03 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 49 total
@@ -181,4 +181,4 @@
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-05 after 01-03 completion (PLAT-02 advanced)*
+*Last updated: 2026-04-05 after 01-04 completion (documentation baseline advanced)*
