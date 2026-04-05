@@ -11,7 +11,7 @@
   "scripts": {
     "lint": "node -e \"console.log('application lint is not configured yet')\"",
     "typecheck": "tsc -p tsconfig.json --pretty false",
-    "test": "vitest run src/__tests__/access-service.test.ts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@lottery/domain": "workspace:*"

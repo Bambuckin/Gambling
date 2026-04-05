@@ -18,11 +18,11 @@ Use it before changing code across `apps/*` and `packages/*`.
 
 | Module | Owns | Must Not Own | Current Entrypoints |
 |---|---|---|---|
-| `apps/web` | Web runtime shell, login/user/admin/denied/debug routes, middleware pre-filter, and route-level access entry flow (`src/lib/access/*`) | Terminal automation details, ledger mutation logic, queue worker behavior, direct auth-store mutation bypassing application service | `apps/web/src/app/layout.tsx`, `apps/web/src/app/page.tsx`, `apps/web/src/app/login/page.tsx`, `apps/web/src/app/lottery/[lotteryCode]/page.tsx`, `apps/web/src/app/admin/page.tsx`, `apps/web/src/app/debug/access-lab/page.tsx`, `apps/web/src/middleware.ts` |
+| `apps/web` | Web runtime shell, login/user/admin/denied/debug routes, middleware pre-filter, route-level access flow (`src/lib/access/*`), and registry runtime composition (`src/lib/registry/*`) | Terminal automation details, ledger mutation logic, queue worker behavior, direct auth-store mutation bypassing application service, registry business rules embedded in route files | `apps/web/src/app/layout.tsx`, `apps/web/src/app/page.tsx`, `apps/web/src/app/login/page.tsx`, `apps/web/src/app/lottery/[lotteryCode]/page.tsx`, `apps/web/src/app/admin/page.tsx`, `apps/web/src/app/debug/access-lab/page.tsx`, `apps/web/src/app/debug/registry-lab/page.tsx`, `apps/web/src/middleware.ts` |
 | `apps/terminal-worker` | Worker process boot and execution host process | UI rendering, user session logic, lottery pricing/domain rules | `apps/terminal-worker/src/main.ts` |
 | `packages/domain` | Core contracts: request lifecycle, ledger operations, registry records, draw/ticket shapes, access identity/session lifecycle types, and access audit event schema | Transport protocols, DB wiring, queue engine implementation, browser automation selectors | `packages/domain/src/index.ts`, `packages/domain/src/access.ts`, `packages/domain/src/access-audit.ts` |
-| `packages/application` | Typed ports and use cases for terminal execution, queue, time source, access/session orchestration, and access audit emission | Concrete adapter SDK bindings, JSX/UI concerns, persistence schema definitions | `packages/application/src/index.ts`, `packages/application/src/services/access-service.ts`, `packages/application/src/ports/access-audit-log.ts` |
-| `packages/infrastructure` | Adapter implementations for infrastructure concerns, including in-memory access identity/session stores, password verifier, and in-memory access audit log | Domain state-machine ownership, handler business behavior, UI composition | `packages/infrastructure/src/index.ts`, `packages/infrastructure/src/access/in-memory-identity-store.ts`, `packages/infrastructure/src/access/in-memory-session-store.ts`, `packages/infrastructure/src/access/in-memory-access-audit-log.ts` |
+| `packages/application` | Typed ports and use cases for terminal execution, queue, time source, access/session orchestration, access audit emission, and lottery registry orchestration | Concrete adapter SDK bindings, JSX/UI concerns, persistence schema definitions | `packages/application/src/index.ts`, `packages/application/src/services/access-service.ts`, `packages/application/src/services/lottery-registry-service.ts`, `packages/application/src/ports/access-audit-log.ts`, `packages/application/src/ports/lottery-registry-store.ts` |
+| `packages/infrastructure` | Adapter implementations for infrastructure concerns, including in-memory access identity/session stores, password verifier, access audit log, and lottery registry storage | Domain state-machine ownership, handler business behavior, UI composition | `packages/infrastructure/src/index.ts`, `packages/infrastructure/src/access/in-memory-identity-store.ts`, `packages/infrastructure/src/access/in-memory-session-store.ts`, `packages/infrastructure/src/access/in-memory-access-audit-log.ts`, `packages/infrastructure/src/registry/in-memory-lottery-registry-store.ts` |
 | `packages/lottery-handlers` | Stable contracts for purchase/result handlers by lottery code | Web route/session handling, queue ownership, ledger accounting logic | `packages/lottery-handlers/src/contracts.ts`, `packages/lottery-handlers/src/index.ts` |
 | `packages/test-kit` | Fake terminal and fake lottery handlers for smoke/integration scaffolds | Production queue scheduling, production terminal sessions, final business truth | `packages/test-kit/src/fake-terminal.ts`, `packages/test-kit/src/fake-lottery-handler.ts` |
 
@@ -36,6 +36,7 @@ Use it before changing code across `apps/*` and `packages/*`.
 6. `apps/web/src/lib/access/access-runtime.ts` may expose adapter-factory composition for ready data modules, but route files must stay unaware of concrete store implementations.
 7. `apps/web/src/middleware.ts` may use role-hint pre-checks for early redirects, but authoritative role/session validation stays in server-side access guards.
 8. Access lifecycle audit writes must go through `AccessAuditLog` port, never from route files directly.
+9. `apps/web/src/lib/registry/registry-runtime.ts` may compose registry adapters, while `apps/web/src/lib/access/lottery-catalog.ts` remains a read-only consumer.
 
 ## Integration Points (Disallowed)
 
@@ -50,8 +51,8 @@ Use it before changing code across `apps/*` and `packages/*`.
 
 - `corepack pnpm typecheck` confirms module exports and import boundaries compile.
 - `corepack pnpm test` currently validates request-state rules in `@lottery/domain`.
-- `corepack pnpm --filter @lottery/application test` validates access login/session lifecycle scenarios.
-- `corepack pnpm --filter @lottery/web build` validates role-guarded routes and middleware wiring.
+- `corepack pnpm --filter @lottery/application test` validates access lifecycle plus lottery registry service scenarios.
+- `corepack pnpm --filter @lottery/web build` validates role-guarded routes, registry-driven shell, and debug labs wiring.
 - `corepack pnpm smoke` validates test-kit smoke entrypoint without a production terminal.
 
 ## Dependency Direction Policy

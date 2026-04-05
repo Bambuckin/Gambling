@@ -2,8 +2,8 @@ import type { ReactElement } from "react";
 import Link from "next/link";
 import { readLotteryShellCatalog } from "../lib/access/lottery-catalog";
 
-export default function HomePage(): ReactElement {
-  const lotteries = readLotteryShellCatalog();
+export default async function HomePage(): Promise<ReactElement> {
+  const lotteries = await readLotteryShellCatalog();
 
   return (
     <section>
@@ -19,6 +19,9 @@ export default function HomePage(): ReactElement {
       </ul>
       <p>
         <Link href="/debug/access-lab">Open Access Lab</Link>
+      </p>
+      <p>
+        <Link href="/debug/registry-lab">Open Registry Lab</Link>
       </p>
     </section>
   );

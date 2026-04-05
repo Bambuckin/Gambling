@@ -2,3 +2,4 @@ export * from "./access/in-memory-identity-store.js";
 export * from "./access/in-memory-session-store.js";
 export * from "./access/in-memory-access-audit-log.js";
 export * from "./access/sha256-password-verifier.js";
+export * from "./registry/in-memory-lottery-registry-store.js";

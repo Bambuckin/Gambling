@@ -21,10 +21,10 @@
 
 ### Lottery Registry
 
-- [ ] **LOTR-01**: Main screen shows only enabled lotteries in administrator-defined order.
+- [x] **LOTR-01**: Main screen shows only enabled lotteries in administrator-defined order.
 - [ ] **LOTR-02**: Administrator can enable, disable, and reorder lotteries without deleting handlers or historical data.
 - [ ] **LOTR-03**: Every lottery page uses a common shell but renders lottery-specific purchase fields from registry metadata.
-- [ ] **LOTR-04**: Registry stores lottery code, title, visibility status, form schema, pricing rules, purchase handler, and result handler reference.
+- [x] **LOTR-04**: Registry stores lottery code, title, visibility status, form schema, pricing rules, purchase handler, and result handler reference.
 - [ ] **LOTR-05**: Lottery page shows lottery name, current balance, current draws, freshness status, and purchase controls.
 
 ### Draw Data
@@ -132,10 +132,10 @@
 | AUTH-03 | Phase 2 | Complete |
 | AUTH-04 | Phase 2 | Complete |
 | AUTH-05 | Phase 2 | Complete |
-| LOTR-01 | Phase 3 | Pending |
+| LOTR-01 | Phase 3 | Complete |
 | LOTR-02 | Phase 3 | Pending |
 | LOTR-03 | Phase 3 | Pending |
-| LOTR-04 | Phase 3 | Pending |
+| LOTR-04 | Phase 3 | Complete |
 | LOTR-05 | Phase 3 | Pending |
 | DRAW-01 | Phase 3 | Pending |
 | DRAW-02 | Phase 3 | Pending |

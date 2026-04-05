@@ -74,10 +74,10 @@ Plans:
   2. Lottery pages share a shell but render lottery-specific forms from registry metadata.
   3. Draw data is stored per lottery with freshness timestamps and clearly visible stale-state indicators.
   4. Purchase initiation is blocked when required draw data is missing or stale.
-**Plans**: 4 plans
+**Plans**: 1/4 plans executed
 
 Plans:
-- [ ] 03-01: Implement lottery registry storage, ordering, visibility, and handler references.
+- [x] 03-01: Implement lottery registry storage, ordering, visibility, and handler references.
 - [ ] 03-02: Build dynamic lottery form rendering from registry metadata.
 - [ ] 03-03: Implement draw refresh ingestion and freshness model.
 - [ ] 03-04: Add admin controls and verification coverage for registry/draw behavior.
@@ -209,7 +209,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Foundation Contracts | 4/4 | Complete | 2026-04-05 |
 | 2. Access and Unified Shell | 5/5 | Complete   | 2026-04-05 |
-| 3. Lottery Registry and Draw Pipeline | 0/4 | Not started | - |
+| 3. Lottery Registry and Draw Pipeline | 1/4 | In Progress | - |
 | 4. Internal Ledger and Wallet Views | 0/4 | Not started | - |
 | 5. Purchase Request Orchestration | 0/5 | Not started | - |
 | 6. Main Terminal Execution Engine | 0/5 | Not started | - |

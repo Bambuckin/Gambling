@@ -28,8 +28,9 @@ docs/
 
 - `apps/web`
   - Next.js runtime shell with Phase 2 access and role-guard routes.
-  - Current entrypoints: `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/lottery/[lotteryCode]/page.tsx`, `src/app/admin/page.tsx`, `src/app/denied/page.tsx`, `src/app/debug/access-lab/page.tsx`, `src/middleware.ts`.
+  - Current entrypoints: `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/lottery/[lotteryCode]/page.tsx`, `src/app/admin/page.tsx`, `src/app/denied/page.tsx`, `src/app/debug/access-lab/page.tsx`, `src/app/debug/registry-lab/page.tsx`, `src/middleware.ts`.
   - Access helpers: `src/lib/access/access-runtime.ts`, `src/lib/access/entry-flow.ts`, `src/lib/access/session-cookie.ts`, `src/lib/access/cookie-names.ts`, `src/lib/access/lottery-catalog.ts`, `src/lib/access/lab-scenarios.ts`, `src/lib/access/role-guard.ts`.
+  - Registry helpers: `src/lib/registry/registry-runtime.ts`.
   - Build wiring: `next.config.ts` (workspace package transpile + extension alias for NodeNext imports).
 - `apps/terminal-worker`
   - Worker process host for queue + terminal execution flows.
@@ -42,10 +43,10 @@ docs/
   - Key files: `request-state.ts`, `ledger.ts`, `lottery-registry.ts`, `draw.ts`, `ticket.ts`, `access.ts`, `access-audit.ts`.
 - `packages/application`
   - Use-case ports between orchestration and adapters.
-  - Key files: `ports/terminal-executor.ts`, `ports/queue.ts`, `ports/time-source.ts`, `ports/identity-store.ts`, `ports/session-store.ts`, `ports/password-verifier.ts`, `ports/access-audit-log.ts`, `services/access-service.ts`.
+  - Key files: `ports/terminal-executor.ts`, `ports/queue.ts`, `ports/time-source.ts`, `ports/identity-store.ts`, `ports/session-store.ts`, `ports/password-verifier.ts`, `ports/access-audit-log.ts`, `ports/lottery-registry-store.ts`, `services/access-service.ts`, `services/lottery-registry-service.ts`.
 - `packages/infrastructure`
   - Adapter package for infrastructure implementations.
-  - Key files: `access/in-memory-identity-store.ts`, `access/in-memory-session-store.ts`, `access/in-memory-access-audit-log.ts`, `access/sha256-password-verifier.ts`.
+  - Key files: `access/in-memory-identity-store.ts`, `access/in-memory-session-store.ts`, `access/in-memory-access-audit-log.ts`, `access/sha256-password-verifier.ts`, `registry/in-memory-lottery-registry-store.ts`.
 - `packages/lottery-handlers`
   - Contracts for deterministic purchase and result handlers by lottery code.
   - Key file: `contracts.ts`.
@@ -59,13 +60,16 @@ docs/
 - `docs/modules/boundary-catalog.md` defines ownership and anti-ownership rules.
 - `docs/runbooks/` carries repeatable operator and local verification procedures.
 - `.planning/STATE.md` and `.planning/phases/02-access-and-unified-shell/.continue-here.md` are current session continuity anchors.
+- `.planning/phases/03-lottery-registry-and-draw-pipeline/.continue-here.md` tracks current phase execution checkpoint.
 
 ## Extension Paths
 
 - New lottery support extends `packages/lottery-handlers` contracts + registry bindings.
+- Registry seed/runtime wiring for shell verification lives in `apps/web/src/lib/registry/registry-runtime.ts`.
 - Access/session persistence can replace in-memory adapters by implementing application ports in `packages/infrastructure/src/access/`.
+- Registry persistence can replace in-memory adapter by implementing `LotteryRegistryStore` in `packages/application/src/ports/lottery-registry-store.ts`.
 - Access audit persistence can swap in-memory adapter by implementing `AccessAuditLog` port in `packages/application/src/ports/access-audit-log.ts`.
-- Web shell can bind external data sources via `LOTTERY_ACCESS_IDENTITIES_JSON` and `LOTTERY_SHELL_LOTTERIES_JSON` without touching route code.
+- Web shell can bind external data sources via `LOTTERY_ACCESS_IDENTITIES_JSON`, `LOTTERY_REGISTRY_ENTRIES_JSON`, and legacy `LOTTERY_SHELL_LOTTERIES_JSON` compatibility mapping without touching route code.
 - Role routing decisions are centralized in `src/lib/access/role-guard.ts` and reused by middleware + server access guards.
 - New operational flows should add runbooks under `docs/runbooks/`.
 - New module boundaries must be reflected in `docs/modules/boundary-catalog.md`.

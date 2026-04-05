@@ -1,46 +1,30 @@
+import { getLotteryRegistryService } from "../registry/registry-runtime";
+
 export interface LotteryShellEntry {
   readonly code: string;
   readonly title: string;
 }
 
-const DEFAULT_LOTTERY_CATALOG: LotteryShellEntry[] = [
-  { code: "demo-lottery", title: "Demo Lottery" },
-  { code: "gosloto-6x45", title: "Gosloto 6x45" }
-];
+const FALLBACK_LOTTERY_CODE = "demo-lottery";
 
-export function readLotteryShellCatalog(): LotteryShellEntry[] {
-  const raw = process.env.LOTTERY_SHELL_LOTTERIES_JSON;
-  if (!raw) {
-    return DEFAULT_LOTTERY_CATALOG;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      return DEFAULT_LOTTERY_CATALOG;
-    }
-
-    const entries = parsed
-      .map((entry) => sanitizeCatalogEntry(entry))
-      .filter((entry): entry is LotteryShellEntry => entry !== null);
-
-    return entries.length > 0 ? entries : DEFAULT_LOTTERY_CATALOG;
-  } catch {
-    return DEFAULT_LOTTERY_CATALOG;
-  }
+export async function readLotteryShellCatalog(): Promise<LotteryShellEntry[]> {
+  const visible = await getLotteryRegistryService().getVisibleLotteries();
+  return visible.map((entry) => ({
+    code: entry.lotteryCode,
+    title: entry.title
+  }));
 }
 
-function sanitizeCatalogEntry(input: unknown): LotteryShellEntry | null {
-  if (!input || typeof input !== "object") {
-    return null;
+export async function isLotteryEnabled(lotteryCode: string): Promise<boolean> {
+  const lottery = await getLotteryRegistryService().getLotteryByCode(lotteryCode);
+  return Boolean(lottery?.enabled);
+}
+
+export async function resolveFallbackLotteryCode(preferredLotteryCode: string): Promise<string> {
+  const visible = await getLotteryRegistryService().getVisibleLotteries();
+  if (visible.some((entry) => entry.lotteryCode === preferredLotteryCode)) {
+    return preferredLotteryCode;
   }
 
-  const record = input as Record<string, unknown>;
-  const code = typeof record.code === "string" ? record.code.trim().toLowerCase() : "";
-  const title = typeof record.title === "string" ? record.title.trim() : "";
-  if (!code || !title) {
-    return null;
-  }
-
-  return { code, title };
+  return visible[0]?.lotteryCode ?? FALLBACK_LOTTERY_CODE;
 }

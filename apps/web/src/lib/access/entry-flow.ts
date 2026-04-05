@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getAccessService } from "./access-runtime";
 import { clearSessionCookie, readSessionCookie, writeSessionCookie } from "./session-cookie";
 import { buildDeniedPath, buildLoginRedirectPath, normalizeReturnToPath, requireRole } from "./role-guard";
+import { isLotteryEnabled, resolveFallbackLotteryCode } from "./lottery-catalog";
 
 export { normalizeReturnToPath };
 
@@ -26,7 +27,7 @@ export interface LoginSubmissionInput {
 }
 
 export async function requireLotteryAccess(rawLotteryCode: string): Promise<AuthenticatedLotteryContext> {
-  const lotteryCode = sanitizeLotteryCode(rawLotteryCode);
+  const lotteryCode = await resolveAllowedLotteryCode(rawLotteryCode);
   const access = await requireAccessRole(["user"], lotteryPathFromCode(lotteryCode));
 
   return {
@@ -92,6 +93,16 @@ export function sanitizeLotteryCode(value: string): string {
   }
 
   return "demo-lottery";
+}
+
+async function resolveAllowedLotteryCode(rawLotteryCode: string): Promise<string> {
+  const candidateCode = sanitizeLotteryCode(rawLotteryCode);
+  const enabled = await isLotteryEnabled(candidateCode);
+  if (enabled) {
+    return candidateCode;
+  }
+
+  return resolveFallbackLotteryCode(candidateCode);
 }
 
 async function requireAccessRole(
