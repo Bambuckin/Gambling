@@ -39,13 +39,13 @@ docs/
 
 - `packages/domain`
   - Shared contracts and state transitions.
-  - Key files: `request-state.ts`, `ledger.ts`, `lottery-registry.ts`, `draw.ts`, `ticket.ts`, `access.ts`.
+  - Key files: `request-state.ts`, `ledger.ts`, `lottery-registry.ts`, `draw.ts`, `ticket.ts`, `access.ts`, `access-audit.ts`.
 - `packages/application`
   - Use-case ports between orchestration and adapters.
-  - Key files: `ports/terminal-executor.ts`, `ports/queue.ts`, `ports/time-source.ts`, `ports/identity-store.ts`, `ports/session-store.ts`, `ports/password-verifier.ts`, `services/access-service.ts`.
+  - Key files: `ports/terminal-executor.ts`, `ports/queue.ts`, `ports/time-source.ts`, `ports/identity-store.ts`, `ports/session-store.ts`, `ports/password-verifier.ts`, `ports/access-audit-log.ts`, `services/access-service.ts`.
 - `packages/infrastructure`
   - Adapter package for infrastructure implementations.
-  - Key files: `access/in-memory-identity-store.ts`, `access/in-memory-session-store.ts`, `access/sha256-password-verifier.ts`.
+  - Key files: `access/in-memory-identity-store.ts`, `access/in-memory-session-store.ts`, `access/in-memory-access-audit-log.ts`, `access/sha256-password-verifier.ts`.
 - `packages/lottery-handlers`
   - Contracts for deterministic purchase and result handlers by lottery code.
   - Key file: `contracts.ts`.
@@ -64,6 +64,7 @@ docs/
 
 - New lottery support extends `packages/lottery-handlers` contracts + registry bindings.
 - Access/session persistence can replace in-memory adapters by implementing application ports in `packages/infrastructure/src/access/`.
+- Access audit persistence can swap in-memory adapter by implementing `AccessAuditLog` port in `packages/application/src/ports/access-audit-log.ts`.
 - Web shell can bind external data sources via `LOTTERY_ACCESS_IDENTITIES_JSON` and `LOTTERY_SHELL_LOTTERIES_JSON` without touching route code.
 - Role routing decisions are centralized in `src/lib/access/role-guard.ts` and reused by middleware + server access guards.
 - New operational flows should add runbooks under `docs/runbooks/`.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AccessIdentity, AccessSession } from "@lottery/domain";
+import type { AccessAuditEvent, AccessIdentity, AccessSession } from "@lottery/domain";
+import type { AccessAuditLog } from "../ports/access-audit-log.js";
 import type { IdentityStore } from "../ports/identity-store.js";
 import type { PasswordVerifier } from "../ports/password-verifier.js";
 import type { SessionStore } from "../ports/session-store.js";
@@ -9,7 +10,7 @@ import { AccessService, type AccessSessionFactory } from "../services/access-ser
 describe("AccessService", () => {
   it("creates and authenticates an active session after successful login", async () => {
     const time = new MutableTimeSource("2026-04-05T10:00:00.000Z");
-    const { service } = createAccessHarness({
+    const { service, auditLog } = createAccessHarness({
       time,
       identities: [
         createIdentity({
@@ -50,10 +51,22 @@ describe("AccessService", () => {
     }
 
     expect(authResult.session.lastSeenAt).toBe("2026-04-05T10:15:00.000Z");
+    expect(auditLog.events).toEqual([
+      {
+        type: "login_success",
+        occurredAt: "2026-04-05T10:00:00.000Z",
+        sessionId: "session-1",
+        actor: {
+          login: "operator",
+          identityId: "identity-user",
+          role: "user"
+        }
+      }
+    ]);
   });
 
   it("rejects login with invalid password", async () => {
-    const { service, sessionStore } = createAccessHarness({
+    const { service, sessionStore, auditLog } = createAccessHarness({
       identities: [
         createIdentity({
           identityId: "identity-admin",
@@ -75,11 +88,59 @@ describe("AccessService", () => {
       reason: "invalid_password"
     });
     expect(await sessionStore.findById("session-1")).toBeNull();
+    expect(auditLog.events).toEqual([
+      {
+        type: "login_denied",
+        occurredAt: "2026-04-05T10:00:00.000Z",
+        reason: "invalid_password",
+        actor: {
+          login: "admin",
+          identityId: "identity-admin",
+          role: "admin"
+        }
+      }
+    ]);
+  });
+
+  it("rejects login for disabled identity and appends denied audit event", async () => {
+    const { service, auditLog } = createAccessHarness({
+      identities: [
+        createIdentity({
+          identityId: "identity-disabled",
+          login: "disabled",
+          passwordHash: "disabled-pass",
+          role: "user",
+          status: "disabled"
+        })
+      ]
+    });
+
+    const loginResult = await service.login({
+      login: "disabled",
+      password: "disabled-pass"
+    });
+
+    expect(loginResult).toEqual({
+      ok: false,
+      reason: "identity_disabled"
+    });
+    expect(auditLog.events).toEqual([
+      {
+        type: "login_denied",
+        occurredAt: "2026-04-05T10:00:00.000Z",
+        reason: "identity_disabled",
+        actor: {
+          login: "disabled",
+          identityId: "identity-disabled",
+          role: "user"
+        }
+      }
+    ]);
   });
 
   it("expires and revokes stale sessions during authenticate", async () => {
     const time = new MutableTimeSource("2026-04-05T10:00:00.000Z");
-    const { service, sessionStore } = createAccessHarness({
+    const { service, sessionStore, auditLog } = createAccessHarness({
       time,
       sessionTtlSeconds: 30,
       identities: [
@@ -111,11 +172,23 @@ describe("AccessService", () => {
 
     const revoked = await sessionStore.findById(loginResult.session.sessionId);
     expect(revoked?.revokedAt).toBe("2026-04-05T10:01:00.000Z");
+    expect(auditLog.events).toEqual([
+      {
+        type: "login_success",
+        occurredAt: "2026-04-05T10:00:00.000Z",
+        sessionId: "session-1",
+        actor: {
+          login: "user",
+          identityId: "identity-user",
+          role: "user"
+        }
+      }
+    ]);
   });
 
   it("revokes session on logout and blocks further authenticate", async () => {
     const time = new MutableTimeSource("2026-04-05T10:00:00.000Z");
-    const { service } = createAccessHarness({
+    const { service, auditLog } = createAccessHarness({
       time,
       identities: [
         createIdentity({
@@ -145,6 +218,28 @@ describe("AccessService", () => {
       ok: false,
       reason: "session_revoked"
     });
+    expect(auditLog.events).toEqual([
+      {
+        type: "login_success",
+        occurredAt: "2026-04-05T10:00:00.000Z",
+        sessionId: "session-1",
+        actor: {
+          login: "runner",
+          identityId: "identity-user",
+          role: "user"
+        }
+      },
+      {
+        type: "logout",
+        occurredAt: "2026-04-05T10:00:00.000Z",
+        sessionId: "session-1",
+        actor: {
+          login: "runner",
+          identityId: "identity-user",
+          role: "user"
+        }
+      }
+    ]);
   });
 });
 
@@ -157,14 +252,17 @@ interface AccessHarnessInput {
 function createAccessHarness(input: AccessHarnessInput): {
   readonly service: AccessService;
   readonly sessionStore: TestSessionStore;
+  readonly auditLog: TestAccessAuditLog;
 } {
   const timeSource = input.time ?? new MutableTimeSource("2026-04-05T10:00:00.000Z");
   const identityStore = new TestIdentityStore(input.identities);
   const sessionStore = new TestSessionStore();
+  const auditLog = new TestAccessAuditLog();
 
   const dependencies = {
     identityStore,
     sessionStore,
+    accessAuditLog: auditLog,
     passwordVerifier: new PlainTextPasswordVerifier(),
     timeSource,
     sessionFactory: new SequentialSessionFactory(),
@@ -181,7 +279,7 @@ function createAccessHarness(input: AccessHarnessInput): {
 
   const service = new AccessService(dependencies);
 
-  return { service, sessionStore };
+  return { service, sessionStore, auditLog };
 }
 
 function createIdentity(input: {
@@ -258,6 +356,17 @@ class TestSessionStore implements SessionStore {
 class PlainTextPasswordVerifier implements PasswordVerifier {
   async verify(plainTextPassword: string, passwordHash: string): Promise<boolean> {
     return plainTextPassword === passwordHash;
+  }
+}
+
+class TestAccessAuditLog implements AccessAuditLog {
+  readonly events: AccessAuditEvent[] = [];
+
+  async append(event: AccessAuditEvent): Promise<void> {
+    this.events.push({
+      ...event,
+      actor: { ...event.actor }
+    });
   }
 }
 

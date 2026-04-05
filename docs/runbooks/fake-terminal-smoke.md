@@ -4,11 +4,12 @@ Use this runbook to verify the local fake-adapter path works without a productio
 
 ## Scope
 
-This checks the current Phase 1 baseline:
+This checks the current local baseline:
 
 - fake terminal adapter contract compatibility
 - request-state transition checks
 - smoke command availability for local workflows
+- access lifecycle audit event coverage (`login_success`, `login_denied`, `logout`)
 
 ## Preconditions
 
@@ -43,6 +44,17 @@ Expected result:
 - command exits with code `0`
 - output contains `test-kit smoke scaffold ready`
 
+## Step 4: Verify access audit lifecycle checks
+
+```powershell
+corepack pnpm --filter @lottery/application test
+```
+
+Expected result:
+
+- command exits with code `0`
+- `access-service.test.ts` confirms login/logout/denied flows append audit events with actor + timestamp
+
 ## If a step fails
 
 1. Run `corepack pnpm typecheck` at repo root to surface cross-package drift.
@@ -50,6 +62,8 @@ Expected result:
    - `packages/test-kit/src/fake-terminal.ts`
    - `packages/test-kit/src/fake-lottery-handler.ts`
    - `packages/application/src/ports/terminal-executor.ts`
+   - `packages/application/src/ports/access-audit-log.ts`
+   - `packages/application/src/services/access-service.ts`
 3. Confirm `nextState` values from fake terminal remain within `"success" | "retrying" | "error"`.
 4. Re-run this runbook after fixes.
 
@@ -58,3 +72,4 @@ Expected result:
 - Commands executed
 - Pass/fail per step
 - Any adapter contract mismatch and exact file path fixed
+- Access audit event assertions covered in the run

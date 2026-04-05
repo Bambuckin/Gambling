@@ -10,6 +10,7 @@ import {
 } from "@lottery/application";
 import {
   InMemoryIdentityStore,
+  InMemoryAccessAuditLog,
   InMemorySessionStore,
   Sha256PasswordVerifier,
   hashAccessPassword
@@ -23,6 +24,7 @@ export interface AccessRuntimeAdapters {
   readonly identityStore: IdentityStore;
   readonly sessionStore: SessionStore;
   readonly passwordVerifier: PasswordVerifier;
+  readonly accessAuditLog: AccessServiceDependencies["accessAuditLog"];
 }
 
 interface AccessIdentitySeed {
@@ -59,6 +61,7 @@ export function createDefaultAccessRuntimeFactory(): AccessRuntimeFactory {
         identityStore: adapters.identityStore,
         sessionStore: adapters.sessionStore,
         passwordVerifier: adapters.passwordVerifier,
+        accessAuditLog: adapters.accessAuditLog,
         timeSource: new SystemTimeSource()
       };
     }
@@ -71,6 +74,7 @@ function createDefaultAdapters(): AccessRuntimeAdapters {
   return {
     identityStore: new InMemoryIdentityStore(seededIdentities),
     sessionStore: new InMemorySessionStore(),
+    accessAuditLog: new InMemoryAccessAuditLog(),
     passwordVerifier: new Sha256PasswordVerifier()
   };
 }

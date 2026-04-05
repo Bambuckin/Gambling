@@ -1,6 +1,8 @@
 import {
   type AccessIdentity,
+  type AccessAuditEvent,
   type AccessSession,
+  type AccessLoginDeniedReason,
   isSessionValid,
   normalizeIdentityLogin,
   resolveSessionStatus,
@@ -10,6 +12,7 @@ import type { TimeSource } from "../ports/time-source.js";
 import type { IdentityStore } from "../ports/identity-store.js";
 import type { PasswordVerifier } from "../ports/password-verifier.js";
 import type { SessionStore } from "../ports/session-store.js";
+import type { AccessAuditLog } from "../ports/access-audit-log.js";
 
 export type LoginFailureReason = "identity_not_found" | "identity_disabled" | "invalid_password";
 export type AuthenticateFailureReason =
@@ -43,6 +46,7 @@ export interface AccessServiceDependencies {
   readonly sessionStore: SessionStore;
   readonly passwordVerifier: PasswordVerifier;
   readonly timeSource: TimeSource;
+  readonly accessAuditLog: AccessAuditLog;
   readonly sessionFactory?: AccessSessionFactory;
   readonly config?: AccessServiceConfig;
 }
@@ -79,6 +83,7 @@ export class AccessService {
   private readonly sessionStore: SessionStore;
   private readonly passwordVerifier: PasswordVerifier;
   private readonly timeSource: TimeSource;
+  private readonly accessAuditLog: AccessAuditLog;
   private readonly sessionFactory: AccessSessionFactory;
   private readonly sessionTtlSeconds: number;
 
@@ -87,23 +92,35 @@ export class AccessService {
     this.sessionStore = dependencies.sessionStore;
     this.passwordVerifier = dependencies.passwordVerifier;
     this.timeSource = dependencies.timeSource;
+    this.accessAuditLog = dependencies.accessAuditLog;
     this.sessionFactory = dependencies.sessionFactory ?? new RandomSessionFactory();
     this.sessionTtlSeconds = dependencies.config?.sessionTtlSeconds ?? DEFAULT_SESSION_TTL_SECONDS;
   }
 
   async login(command: LoginCommand): Promise<LoginResult> {
     const login = normalizeIdentityLogin(command.login);
+    const deniedAt = this.timeSource.nowIso();
     const identity = await this.identityStore.findByLogin(login);
     if (!identity) {
+      await this.accessAuditLog.append({
+        type: "login_denied",
+        occurredAt: deniedAt,
+        reason: "identity_not_found",
+        actor: {
+          login
+        }
+      });
       return { ok: false, reason: "identity_not_found" };
     }
 
     if (identity.status !== "active") {
+      await this.logLoginDenied(identity, "identity_disabled", deniedAt);
       return { ok: false, reason: "identity_disabled" };
     }
 
     const passwordMatches = await this.passwordVerifier.verify(command.password, identity.passwordHash);
     if (!passwordMatches) {
+      await this.logLoginDenied(identity, "invalid_password", deniedAt);
       return { ok: false, reason: "invalid_password" };
     }
 
@@ -120,6 +137,16 @@ export class AccessService {
     };
 
     await this.sessionStore.create(session);
+    await this.accessAuditLog.append({
+      type: "login_success",
+      occurredAt: issuedAt,
+      sessionId: session.sessionId,
+      actor: {
+        login: identity.login,
+        identityId: identity.identityId,
+        role: identity.role
+      }
+    });
 
     return {
       ok: true,
@@ -165,7 +192,8 @@ export class AccessService {
   }
 
   async logout(sessionId: string): Promise<LogoutResult> {
-    const revokedSession = await this.sessionStore.revoke(sessionId, this.timeSource.nowIso());
+    const revokedAt = this.timeSource.nowIso();
+    const revokedSession = await this.sessionStore.revoke(sessionId, revokedAt);
     if (!revokedSession) {
       return {
         ok: false,
@@ -173,7 +201,38 @@ export class AccessService {
       };
     }
 
+    const identity = await this.identityStore.findById(revokedSession.identityId);
+    await this.accessAuditLog.append({
+      type: "logout",
+      occurredAt: revokedAt,
+      sessionId: revokedSession.sessionId,
+      actor: {
+        login: identity?.login ?? revokedSession.identityId,
+        identityId: revokedSession.identityId,
+        role: identity?.role ?? revokedSession.role
+      }
+    });
+
     return { ok: true };
+  }
+
+  private async logLoginDenied(
+    identity: AccessIdentity,
+    reason: AccessLoginDeniedReason,
+    occurredAt: string
+  ): Promise<void> {
+    const event: AccessAuditEvent = {
+      type: "login_denied",
+      occurredAt,
+      reason,
+      actor: {
+        login: identity.login,
+        identityId: identity.identityId,
+        role: identity.role
+      }
+    };
+
+    await this.accessAuditLog.append(event);
   }
 }
 
