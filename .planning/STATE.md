@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-02 and advanced to 05-03
-last_updated: "2026-04-05T19:56:00.000Z"
+stopped_at: Completed 05-03 and advanced to 05-04
+last_updated: "2026-04-05T20:11:00.000Z"
 last_activity: 2026-04-05
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 22
-  completed_plans: 19
-  percent: 86
+  completed_plans: 20
+  percent: 91
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 5 (Purchase Request Orchestration) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Executing Phase 5
-Last activity: 2026-04-05 -- 05-02 complete, proceeding to 05-03
+Last activity: 2026-04-05 -- 05-03 complete, proceeding to 05-04
 
-Progress: [█████████░] 86% (19/22 plan summaries)
+Progress: [█████████░] 91% (20/22 plan summaries)
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Progress: [█████████░] 86% (19/22 plan summaries)
 | Phase 4 P04 | 15 min | 3 tasks | 4 files |
 | Phase 5 P1 | 12min | 3 tasks | 8 files |
 | Phase 5 P2 | 16min | 3 tasks | 12 files |
+| Phase 5 P3 | 11min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,7 @@ Recent decisions affecting current work:
 - [Phase 4]: Wallet aggregate now derives from immutable ledger history via WalletLedgerService — Replaces hash-based preview with auditable read path before reserve/debit/release mutation rules.
 - [Phase 5]: Purchase draft validation and fixed pricing quote are centralized in PurchaseDraftService before confirmation. — Route actions now delegate payload checks and quote math to application/domain layers, reducing duplicated rule logic and keeping pricing deterministic.
 - [Phase 5]: Purchase requests are now persisted as immutable awaiting_confirmation snapshots through PurchaseRequestService. — Confirmation and persistence moved behind a store-backed service boundary, preventing route-level lifecycle drift and enabling replay-safe request creation.
+- [Phase 5]: Confirmed requests now reserve funds and enter queued state via PurchaseOrchestrationService. — Queue insertion and reserve side effects are now coordinated in one service boundary with replay-safe request keys, preventing duplicate reserve records and route-level drift.
 
 ### Pending Todos
 
@@ -120,12 +122,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- No active blockers for executing 05-03.
+- No active blockers for executing 05-04.
 
 ## Session Continuity
 
-Last session: 2026-04-05T19:56:00.000Z
-Stopped at: Completed 05-02 and advanced to 05-03
+Last session: 2026-04-05T20:11:00.000Z
+Stopped at: Completed 05-03 and advanced to 05-04
 Resume file: .planning/phases/05-purchase-request-orchestration/.continue-here.md
 
 Repository baseline: `main`, git operational.

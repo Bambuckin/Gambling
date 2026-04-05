@@ -6,3 +6,4 @@ export * from "./registry/in-memory-lottery-registry-store.js";
 export * from "./draw/in-memory-draw-store.js";
 export * from "./ledger/in-memory-ledger-store.js";
 export * from "./purchase/in-memory-purchase-request-store.js";
+export * from "./purchase/in-memory-purchase-queue-store.js";

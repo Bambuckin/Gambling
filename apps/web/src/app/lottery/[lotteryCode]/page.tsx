@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import {
   PurchaseDraftService,
   PurchaseDraftServiceError,
+  PurchaseOrchestrationServiceError,
   PurchaseRequestServiceError
 } from "@lottery/application";
 import type { DrawAvailabilityState, PurchaseDraftPayload, PurchaseDraftPayloadValue } from "@lottery/domain";
@@ -12,7 +13,7 @@ import { LotteryFormFields } from "../../../lib/lottery-form/render-lottery-form
 import { getDrawRefreshService } from "../../../lib/draw/draw-runtime";
 import { LEDGER_DEFAULT_CURRENCY, getWalletLedgerService } from "../../../lib/ledger/ledger-runtime";
 import { buildWalletMovementRows } from "../../../lib/ledger/wallet-view";
-import { getPurchaseRequestService } from "../../../lib/purchase/purchase-request-runtime";
+import { getPurchaseOrchestrationService, getPurchaseRequestService } from "../../../lib/purchase/purchase-runtime";
 
 type LotteryPageProps = {
   readonly params: Promise<{
@@ -278,7 +279,7 @@ async function confirmPurchaseRequestAction(formData: FormData): Promise<void> {
   }
 
   try {
-    const createResult = await getPurchaseRequestService().createAwaitingConfirmation({
+    await getPurchaseRequestService().createAwaitingConfirmation({
       requestId: confirmationDraft.requestId,
       userId: access.identity.identityId,
       lotteryCode: lottery.lotteryCode,
@@ -288,15 +289,20 @@ async function confirmPurchaseRequestAction(formData: FormData): Promise<void> {
       currency: confirmationDraft.currency
     });
 
-    const message = createResult.replayed
-      ? `Request ${createResult.request.snapshot.requestId} already exists with state ${createResult.request.state}.`
-      : `Request ${createResult.request.snapshot.requestId} created with state ${createResult.request.state}.`;
+    const queueResult = await getPurchaseOrchestrationService().confirmAndQueueRequest({
+      requestId: confirmationDraft.requestId,
+      userId: access.identity.identityId
+    });
+
+    const message = queueResult.replayed
+      ? `Request ${queueResult.request.snapshot.requestId} is already queued (attempts ${queueResult.queueItem.attemptCount}).`
+      : `Request ${queueResult.request.snapshot.requestId} queued with status ${queueResult.request.state}.`;
 
     return redirect(
-      `/lottery/${lottery.lotteryCode}?draft=confirmed&message=${encodeURIComponent(message)}`
+      `/lottery/${lottery.lotteryCode}?draft=queued&message=${encodeURIComponent(message)}`
     );
   } catch (error) {
-    if (error instanceof PurchaseRequestServiceError) {
+    if (error instanceof PurchaseRequestServiceError || error instanceof PurchaseOrchestrationServiceError) {
       return redirect(
         `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(error.message)}`
       );
