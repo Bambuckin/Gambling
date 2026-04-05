@@ -3,11 +3,14 @@ import {
   SystemTimeSource,
   TerminalExecutionAttemptService,
   TerminalRetryService,
+  TicketVerificationResultService,
   TicketPersistenceService,
   TicketVerificationQueueService,
+  WalletLedgerService,
   type TerminalExecutionResult
 } from "@lottery/application";
 import {
+  InMemoryLedgerStore,
   InMemoryPurchaseQueueStore,
   InMemoryPurchaseRequestStore,
   InMemoryTerminalExecutionLock,
@@ -25,8 +28,13 @@ const timeSource = new SystemTimeSource();
 const requestStore = new InMemoryPurchaseRequestStore();
 const queueStore = new InMemoryPurchaseQueueStore();
 const executionLock = new InMemoryTerminalExecutionLock();
+const ledgerStore = new InMemoryLedgerStore();
 const ticketStore = new InMemoryTicketStore();
 const verificationJobStore = new InMemoryTicketVerificationJobStore();
+const walletLedgerService = new WalletLedgerService({
+  ledgerStore,
+  timeSource
+});
 
 const queueService = new PurchaseExecutionQueueService({
   requestStore,
@@ -47,6 +55,12 @@ const retryService = new TerminalRetryService({
 const verificationQueueService = new TicketVerificationQueueService({
   ticketStore,
   jobStore: verificationJobStore,
+  timeSource
+});
+const verificationResultService = new TicketVerificationResultService({
+  ticketStore,
+  purchaseRequestStore: requestStore,
+  walletLedgerService,
   timeSource
 });
 const handlerRuntime = new TerminalHandlerRuntime();
@@ -155,24 +169,44 @@ async function processTicketVerificationQueue(): Promise<void> {
     drawId: verificationJob.drawId,
     externalTicketReference: verificationJob.externalReference
   });
+  const verificationEventId = `${verificationJob.jobId}:attempt:${verificationJob.attemptCount}`;
 
-  if (result.status === "error") {
+  try {
+    const recorded = await verificationResultService.recordVerificationResult({
+      ticketId: verificationJob.ticketId,
+      verificationEventId,
+      terminalStatus: result.status,
+      winningAmountMinor: result.winningAmountMinor,
+      rawOutput: result.rawTerminalOutput
+    });
+
+    if (result.status === "error") {
+      await verificationQueueService.markVerificationJobError(verificationJob.jobId, {
+        error: "terminal verification error",
+        rawTerminalOutput: result.rawTerminalOutput
+      });
+      console.warn(
+        `[terminal-worker] verification job failed job=${verificationJob.jobId} status=${result.status}`
+      );
+      return;
+    }
+
+    await verificationQueueService.markVerificationJobDone(verificationJob.jobId, {
+      rawTerminalOutput: result.rawTerminalOutput
+    });
+    console.log(
+      `[terminal-worker] verification job done job=${verificationJob.jobId} status=${result.status} ticket=${recorded.ticket.ticketId} replayed=${recorded.replayed}`
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     await verificationQueueService.markVerificationJobError(verificationJob.jobId, {
-      error: "terminal verification error",
+      error: message,
       rawTerminalOutput: result.rawTerminalOutput
     });
     console.warn(
-      `[terminal-worker] verification job failed job=${verificationJob.jobId} status=${result.status}`
+      `[terminal-worker] verification result apply failed job=${verificationJob.jobId} message=${message}`
     );
-    return;
   }
-
-  await verificationQueueService.markVerificationJobDone(verificationJob.jobId, {
-    rawTerminalOutput: result.rawTerminalOutput
-  });
-  console.log(
-    `[terminal-worker] verification job done job=${verificationJob.jobId} status=${result.status}`
-  );
 }
 
 function startWorker(): void {

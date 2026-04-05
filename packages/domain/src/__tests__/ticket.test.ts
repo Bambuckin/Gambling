@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyTicketVerificationOutcome,
   completeTicketVerificationJob,
   createPurchasedTicketRecord,
   createTicketVerificationJob,
@@ -33,7 +34,8 @@ describe("createPurchasedTicketRecord", () => {
       verificationStatus: "pending",
       verificationRawOutput: null,
       winningAmountMinor: null,
-      verifiedAt: null
+      verifiedAt: null,
+      lastVerificationEventId: null
     });
   });
 
@@ -160,6 +162,80 @@ describe("ticket verification jobs", () => {
       completeTicketVerificationJob(queuedJob, {
         updatedAt: "2026-04-05T23:08:10.000Z",
         rawTerminalOutput: "n/a"
+      })
+    ).toThrow(TicketValidationError);
+  });
+});
+
+describe("applyTicketVerificationOutcome", () => {
+  it("applies verified outcome with winning amount and verified timestamp", () => {
+    const ticket = createPurchasedTicketRecord({
+      ticketId: "req-920:ticket",
+      requestId: "req-920",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-920",
+      purchasedAt: "2026-04-05T23:10:00.000Z",
+      externalReference: "demo-ext-920"
+    });
+
+    const verified = applyTicketVerificationOutcome(ticket, {
+      verificationStatus: "verified",
+      verificationEventId: "job:req-920:1",
+      verifiedAt: "2026-04-05T23:11:00.000Z",
+      rawTerminalOutput: "[result] win",
+      winningAmountMinor: 1500
+    });
+
+    expect(verified.verificationStatus).toBe("verified");
+    expect(verified.winningAmountMinor).toBe(1500);
+    expect(verified.verifiedAt).toBe("2026-04-05T23:11:00.000Z");
+    expect(verified.lastVerificationEventId).toBe("job:req-920:1");
+  });
+
+  it("applies failed outcome and stores raw terminal output", () => {
+    const ticket = createPurchasedTicketRecord({
+      ticketId: "req-921:ticket",
+      requestId: "req-921",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-921",
+      purchasedAt: "2026-04-05T23:12:00.000Z",
+      externalReference: "demo-ext-921"
+    });
+
+    const failed = applyTicketVerificationOutcome(ticket, {
+      verificationStatus: "failed",
+      verificationEventId: "job:req-921:1",
+      verifiedAt: "2026-04-05T23:13:00.000Z",
+      rawTerminalOutput: "[result] error",
+      winningAmountMinor: 0
+    });
+
+    expect(failed.verificationStatus).toBe("failed");
+    expect(failed.winningAmountMinor).toBeNull();
+    expect(failed.verifiedAt).toBe("2026-04-05T23:13:00.000Z");
+    expect(failed.verificationRawOutput).toContain("error");
+  });
+
+  it("rejects negative winning amount", () => {
+    const ticket = createPurchasedTicketRecord({
+      ticketId: "req-922:ticket",
+      requestId: "req-922",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-922",
+      purchasedAt: "2026-04-05T23:14:00.000Z",
+      externalReference: "demo-ext-922"
+    });
+
+    expect(() =>
+      applyTicketVerificationOutcome(ticket, {
+        verificationStatus: "verified",
+        verificationEventId: "job:req-922:1",
+        verifiedAt: "2026-04-05T23:15:00.000Z",
+        rawTerminalOutput: "[result] win",
+        winningAmountMinor: -1
       })
     ).toThrow(TicketValidationError);
   });

@@ -110,13 +110,18 @@ class InMemoryTicketStore implements TicketStore {
     return this.tickets.map((ticket) => cloneTicket(ticket));
   }
 
+  async getTicketById(ticketId: string): Promise<TicketRecord | null> {
+    const ticket = this.tickets.find((entry) => entry.ticketId === ticketId) ?? null;
+    return ticket ? cloneTicket(ticket) : null;
+  }
+
   async getTicketByRequestId(requestId: string): Promise<TicketRecord | null> {
     const ticket = this.tickets.find((entry) => entry.requestId === requestId) ?? null;
     return ticket ? cloneTicket(ticket) : null;
   }
 
   async saveTicket(ticket: TicketRecord): Promise<void> {
-    const filtered = this.tickets.filter((entry) => entry.requestId !== ticket.requestId);
+    const filtered = this.tickets.filter((entry) => entry.ticketId !== ticket.ticketId);
     this.tickets = [...filtered, cloneTicket(ticket)];
   }
 }

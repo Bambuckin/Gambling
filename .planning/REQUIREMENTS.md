@@ -39,7 +39,7 @@
 - [x] **BAL-01**: Confirmed purchase request creates a balance reserve instead of an immediate final debit.
 - [x] **BAL-02**: Successful purchase converts a reserve into a final debit linked to the originating request.
 - [x] **BAL-03**: Final failure or allowed cancellation releases the reserve and restores available funds.
-- [ ] **BAL-04**: Winning ticket verification credits winnings to the user balance.
+- [x] **BAL-04**: Winning ticket verification credits winnings to the user balance.
 - [x] **BAL-05**: Every balance mutation is stored as an immutable ledger entry linked to the related request or ticket.
 - [x] **BAL-06**: User can view available balance, reserved funds, and balance movement history.
 
@@ -65,7 +65,7 @@
 
 - [x] **TICK-01**: Successful purchase stores a ticket record linked to the originating request and chosen draw.
 - [x] **TICK-02**: After draw availability, the terminal can read ticket results without additional manual steps after verification starts.
-- [ ] **TICK-03**: Ticket stores purchase status, verification status, terminal result text, and winning amount.
+- [x] **TICK-03**: Ticket stores purchase status, verification status, terminal result text, and winning amount.
 - [ ] **TICK-04**: User sees updated ticket outcome and balance after verification completes.
 
 ### Administration
@@ -160,9 +160,9 @@
 | TERM-06 | Phase 6 | Complete |
 | TICK-01 | Phase 7 | Complete |
 | TICK-02 | Phase 7 | Complete |
-| TICK-03 | Phase 7 | Pending |
+| TICK-03 | Phase 7 | Complete |
 | TICK-04 | Phase 7 | Pending |
-| BAL-04 | Phase 7 | Pending |
+| BAL-04 | Phase 7 | Complete |
 | ADMIN-01 | Phase 8 | Pending |
 | ADMIN-02 | Phase 8 | Pending |
 | ADMIN-03 | Phase 8 | Pending |
@@ -181,4 +181,4 @@
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-05 after 07-02 completion (verification trigger flow closed)*
+*Last updated: 2026-04-05 after 07-03 completion (verification normalization and winnings credit closed)*

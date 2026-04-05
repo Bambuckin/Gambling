@@ -27,5 +27,6 @@ export * from "./services/terminal-handler-resolver-service.js";
 export * from "./services/terminal-execution-attempt-service.js";
 export * from "./services/ticket-persistence-service.js";
 export * from "./services/ticket-verification-queue-service.js";
+export * from "./services/ticket-verification-result-service.js";
 export * from "./services/terminal-retry-service.js";
 export * from "./services/terminal-health-service.js";

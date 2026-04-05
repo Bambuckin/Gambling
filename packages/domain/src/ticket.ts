@@ -19,6 +19,7 @@ export interface TicketRecord {
   readonly verificationRawOutput: string | null;
   readonly winningAmountMinor: number | null;
   readonly verifiedAt: string | null;
+  readonly lastVerificationEventId: string | null;
 }
 
 export interface CreatePurchasedTicketRecordInput {
@@ -55,6 +56,14 @@ export interface CreateTicketVerificationJobInput {
   readonly enqueuedAt: string;
 }
 
+export interface ApplyTicketVerificationOutcomeInput {
+  readonly verificationStatus: Extract<TicketVerificationState, "verified" | "failed">;
+  readonly verificationEventId: string;
+  readonly verifiedAt: string;
+  readonly rawTerminalOutput: string;
+  readonly winningAmountMinor?: number | null;
+}
+
 export class TicketValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -85,7 +94,8 @@ export function createPurchasedTicketRecord(input: CreatePurchasedTicketRecordIn
     verificationStatus: "pending",
     verificationRawOutput: null,
     winningAmountMinor: null,
-    verifiedAt: null
+    verifiedAt: null,
+    lastVerificationEventId: null
   };
 }
 
@@ -171,6 +181,37 @@ export function failTicketVerificationJob(
   };
 }
 
+export function applyTicketVerificationOutcome(
+  ticket: TicketRecord,
+  input: ApplyTicketVerificationOutcomeInput
+): TicketRecord {
+  const verificationEventId = requireNonEmpty(input.verificationEventId, "verificationEventId");
+  const verifiedAt = requireValidIso(input.verifiedAt, "verifiedAt");
+  const rawTerminalOutput = requireNonEmpty(input.rawTerminalOutput, "rawTerminalOutput");
+  const winningAmountMinor = normalizeNonNegativeMinorOrNull(input.winningAmountMinor ?? null, "winningAmountMinor");
+
+  if (ticket.verificationStatus !== "pending") {
+    if (ticket.lastVerificationEventId === verificationEventId) {
+      return {
+        ...ticket
+      };
+    }
+
+    throw new TicketValidationError(
+      `ticket "${ticket.ticketId}" cannot apply verification from status "${ticket.verificationStatus}"`
+    );
+  }
+
+  return {
+    ...ticket,
+    verificationStatus: input.verificationStatus,
+    verificationRawOutput: rawTerminalOutput,
+    winningAmountMinor: input.verificationStatus === "verified" ? winningAmountMinor ?? 0 : null,
+    verifiedAt,
+    lastVerificationEventId: verificationEventId
+  };
+}
+
 function requireNonEmpty(value: string, field: string): string {
   const normalized = value.trim();
   if (!normalized) {
@@ -185,4 +226,16 @@ function requireValidIso(value: string, field: string): string {
     throw new TicketValidationError(`${field} must be a valid ISO date string`);
   }
   return normalized;
+}
+
+function normalizeNonNegativeMinorOrNull(value: number | null, field: string): number | null {
+  if (value === null) {
+    return null;
+  }
+
+  if (!Number.isInteger(value) || value < 0) {
+    throw new TicketValidationError(`${field} must be a non-negative integer`);
+  }
+
+  return value;
 }

@@ -235,6 +235,63 @@ describe("WalletLedgerService", () => {
     await expect(reserveAction).rejects.toThrow("requestId is required");
   });
 
+  it("credits winnings with ticket-linked idempotency key", async () => {
+    const service = createService();
+
+    const credit = await service.creditWinnings({
+      userId: "seed-user",
+      requestId: "req-ticket-win",
+      ticketId: "req-ticket-win:ticket",
+      verificationEventId: "verify-1",
+      amountMinor: 2300,
+      currency: "RUB",
+      drawId: "draw-ticket-win"
+    });
+
+    expect(credit.replayed).toBe(false);
+    expect(credit.entry.operation).toBe("credit");
+    expect(credit.entry.reference).toEqual({
+      requestId: "req-ticket-win",
+      ticketId: "req-ticket-win:ticket",
+      drawId: "draw-ticket-win"
+    });
+    expect(credit.entry.idempotencyKey).toBe("req-ticket-win:ticket:winnings:verify-1");
+    expect(credit.snapshot).toEqual({
+      userId: "seed-user",
+      availableMinor: 2300,
+      reservedMinor: 0,
+      currency: "RUB"
+    });
+  });
+
+  it("suppresses duplicate winnings credits by verification event", async () => {
+    const service = createService();
+
+    const first = await service.creditWinnings({
+      userId: "seed-user",
+      requestId: "req-ticket-replay",
+      ticketId: "req-ticket-replay:ticket",
+      verificationEventId: "verify-2",
+      amountMinor: 1900,
+      currency: "RUB"
+    });
+    const replay = await service.creditWinnings({
+      userId: "seed-user",
+      requestId: "req-ticket-replay",
+      ticketId: "req-ticket-replay:ticket",
+      verificationEventId: "verify-2",
+      amountMinor: 1900,
+      currency: "RUB"
+    });
+
+    expect(first.replayed).toBe(false);
+    expect(replay.replayed).toBe(true);
+    expect(replay.entry.entryId).toBe(first.entry.entryId);
+    expect((await service.listEntries("seed-user")).map((entry) => entry.idempotencyKey)).toEqual([
+      "req-ticket-replay:ticket:winnings:verify-2"
+    ]);
+  });
+
   it("rejects idempotency conflicts with different payload", async () => {
     const service = createService();
 

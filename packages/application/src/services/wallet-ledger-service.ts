@@ -44,6 +44,18 @@ export interface WalletLedgerRequestCommandInput {
   readonly createdAt?: string;
 }
 
+export interface WalletLedgerWinningsCommandInput {
+  readonly userId: string;
+  readonly requestId: string;
+  readonly ticketId: string;
+  readonly verificationEventId: string;
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly drawId?: string;
+  readonly entryId?: string;
+  readonly createdAt?: string;
+}
+
 export interface WalletLedgerRecordResult {
   readonly entry: LedgerEntry;
   readonly snapshot: BalanceSnapshot;
@@ -127,6 +139,22 @@ export class WalletLedgerService {
       currency: input.currency,
       idempotencyKey: input.idempotencyKey,
       reference: buildRequestReference(input),
+      ...(input.entryId ? { entryId: input.entryId } : {}),
+      ...(input.createdAt ? { createdAt: input.createdAt } : {})
+    });
+  }
+
+  async creditWinnings(input: WalletLedgerWinningsCommandInput): Promise<WalletLedgerRecordResult> {
+    const ticketId = requireNonEmpty(input.ticketId, "ticketId");
+    const verificationEventId = requireNonEmpty(input.verificationEventId, "verificationEventId");
+
+    return this.recordEntry({
+      userId: input.userId,
+      operation: "credit",
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      idempotencyKey: `${ticketId}:winnings:${verificationEventId}`,
+      reference: buildWinningsReference(input, ticketId),
       ...(input.entryId ? { entryId: input.entryId } : {}),
       ...(input.createdAt ? { createdAt: input.createdAt } : {})
     });
@@ -254,4 +282,28 @@ function buildRequestReference(input: WalletLedgerRequestCommandInput): LedgerRe
     ...(ticketId ? { ticketId } : {}),
     ...(drawId ? { drawId } : {})
   };
+}
+
+function buildWinningsReference(input: WalletLedgerWinningsCommandInput, ticketId: string): LedgerReference {
+  const requestId = input.requestId.trim();
+  if (!requestId) {
+    throw new WalletLedgerValidationError("requestId is required for winnings credit operations");
+  }
+
+  const drawId = input.drawId?.trim();
+
+  return {
+    requestId,
+    ticketId,
+    ...(drawId ? { drawId } : {})
+  };
+}
+
+function requireNonEmpty(value: string, field: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new WalletLedgerValidationError(`${field} is required`);
+  }
+
+  return normalized;
 }
