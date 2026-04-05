@@ -1,0 +1,19 @@
+{
+  "name": "@lottery/terminal-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "node --enable-source-maps src/main.ts",
+    "lint": "node -e \"console.log('worker lint is not configured yet')\"",
+    "typecheck": "tsc -p tsconfig.json --pretty false",
+    "test": "node -e \"console.log('worker tests are not configured yet')\""
+  },
+  "dependencies": {
+    "pg-boss": "^10.1.6"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}
