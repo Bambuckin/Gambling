@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-04-05T12:59:20.075Z"
+status: planning
+stopped_at: Completed Phase 3 (03-04) and ready for 04-01
+last_updated: "2026-04-05T13:18:03.442Z"
 last_activity: 2026-04-05
 progress:
   total_phases: 9
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 13
-  completed_plans: 12
-  percent: 92
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
@@ -21,22 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Each confirmed purchase should move predictably from the web interface to the single main terminal with correct reserve and debit behavior, clear status, and full event traceability.  
-**Current focus:** Phase 3 -- Lottery Registry and Draw Pipeline
+**Current focus:** Phase 4 -- Internal Ledger and Wallet Views
 
 ## Current Position
 
-Phase: 3 (Lottery Registry and Draw Pipeline) -- IN PROGRESS
-Plan: 4 of 4
-Status: Ready to execute
+Phase: 4
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-04-05
 
-Progress: [#########.] 85% (11/13 plan summaries)
+Progress: [##########] 100% (13/13 plan summaries)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 11
+- Total plans completed: 13
 - Average duration: 23 min
 - Total execution time: 3.86 hours
 
@@ -46,7 +46,7 @@ Progress: [#########.] 85% (11/13 plan summaries)
 |-------|-------|-------|----------|
 | 1 | 4 | 78 min | 20 min |
 | 2 | 5 | 128 min | 26 min |
-| 3 | 2 | 26 min | 13 min |
+| 3 | 4 | - | - |
 | 4 | 0 | 0 min | 0 min |
 | 5 | 0 | 0 min | 0 min |
 | 6 | 0 | 0 min | 0 min |
@@ -56,12 +56,13 @@ Progress: [#########.] 85% (11/13 plan summaries)
 
 **Recent Trend:**
 
-- Last 5 plans: 02-03 (27 min), 02-04 (18 min), 02-05 (24 min), 03-01 (8 min), 03-02 (18 min)
+- Last 5 plans: 02-05 (24 min), 03-01 (8 min), 03-02 (18 min), 03-03 (6 min), 03-04 (16 min)
 - Trend: Stable
 
 | Phase 3 P01 | 8 min | 4 tasks | 19 files |
 | Phase 3 P02 | 18 min | 3 tasks | 9 files |
 | Phase 3 P03 | 6 min | 3 tasks | 11 files |
+| Phase 3 P04 | 16 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,8 @@ Recent decisions affecting current work:
 - [Phase 03]: Lottery page submits metadata-driven purchase draft via server action without hardcoded lottery-specific JSX
 - [Phase 03]: DrawRefreshService now resolves missing/stale/fresh states and exposes purchase-blocking contract
 - [Phase 03]: Lottery page now blocks purchase draft submission when draw data is stale or missing
+- [Phase 3]: Admin registry mutations now flow through LotteryRegistryService boundaries — Admin UI uses helper boundary and service methods for enable/disable/reorder so route files do not own registry business rules
+- [Phase 3]: Phase 3 keeps separate operational and verification UI surfaces — Admin Console owns mutation controls while Registry Lab remains test-only contour for safe manual inspection
 
 ### Pending Todos
 
@@ -108,12 +111,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- No active blockers for starting 03-03.
+- No active blockers for starting 04-01.
 
 ## Session Continuity
 
-Last session: 2026-04-05T12:59:20.071Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-04-05T13:17:57.618Z
+Stopped at: Completed Phase 3 (03-04) and ready for 04-01
 Resume file: .planning/phases/03-lottery-registry-and-draw-pipeline/.continue-here.md
 
 Repository baseline: `main`, git operational.

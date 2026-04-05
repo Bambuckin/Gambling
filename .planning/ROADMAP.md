@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation Contracts** - Зафиксировать каркас проекта, модульные границы, ADR и тестовый bootstrap.
 - [x] **Phase 2: Access and Unified Shell** - Поднять авторизацию, роли и общий интерфейсный shell с возвратом в выбранную лотерею. (completed 2026-04-05)
-- [ ] **Phase 3: Lottery Registry and Draw Pipeline** - Реализовать реестр лотерей, управление доступностью и поток актуальных тиражей.
+- [x] **Phase 3: Lottery Registry and Draw Pipeline** - Реализовать реестр лотерей, управление доступностью и поток актуальных тиражей. (completed 2026-04-05)
 - [ ] **Phase 4: Internal Ledger and Wallet Views** - Собрать внутренний ledger баланса, резервы и пользовательское отображение движения средств.
 - [ ] **Phase 5: Purchase Request Orchestration** - Построить подтверждение покупки, создание заявки, очередь и пользовательские статусы.
 - [ ] **Phase 6: Main Terminal Execution Engine** - Подключить последовательное исполнение на терминале, retry и нормализацию результата.
@@ -74,13 +74,13 @@ Plans:
   2. Lottery pages share a shell but render lottery-specific forms from registry metadata.
   3. Draw data is stored per lottery with freshness timestamps and clearly visible stale-state indicators.
   4. Purchase initiation is blocked when required draw data is missing or stale.
-**Plans**: 1/4 plans executed
+**Plans**: 4/4 plans complete
 
 Plans:
 - [x] 03-01: Implement lottery registry storage, ordering, visibility, and handler references.
 - [x] 03-02: Build dynamic lottery form rendering from registry metadata.
 - [x] 03-03: Implement draw refresh ingestion and freshness model.
-- [ ] 03-04: Add admin controls and verification coverage for registry/draw behavior.
+- [x] 03-04: Add admin controls and verification coverage for registry/draw behavior.
 
 ### Phase 4: Internal Ledger and Wallet Views
 **Goal**: Deliver the internal money model with reserve/debit/release flows, immutable ledger entries, and wallet visibility.
@@ -209,7 +209,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Foundation Contracts | 4/4 | Complete | 2026-04-05 |
 | 2. Access and Unified Shell | 5/5 | Complete   | 2026-04-05 |
-| 3. Lottery Registry and Draw Pipeline | 3/4 | In Progress|  |
+| 3. Lottery Registry and Draw Pipeline | 4/4 | Complete    | 2026-04-05 |
 | 4. Internal Ledger and Wallet Views | 0/4 | Not started | - |
 | 5. Purchase Request Orchestration | 0/5 | Not started | - |
 | 6. Main Terminal Execution Engine | 0/5 | Not started | - |

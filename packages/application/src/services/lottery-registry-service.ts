@@ -27,6 +27,8 @@ export interface LotteryRegistryUpsertInput {
   };
 }
 
+export type LotteryOrderDirection = "up" | "down";
+
 export class LotteryRegistryValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -87,6 +89,35 @@ export class LotteryRegistryService {
       pricing: current.pricing,
       handlers: current.handlers
     });
+  }
+
+  async moveLottery(lotteryCode: string, direction: LotteryOrderDirection): Promise<LotteryRegistryEntry[]> {
+    const normalizedCode = normalizeLotteryCode(lotteryCode);
+    const all = await this.listAllLotteries();
+    const currentIndex = all.findIndex((entry) => entry.lotteryCode === normalizedCode);
+    if (currentIndex === -1) {
+      throw new LotteryRegistryValidationError(`lottery "${normalizedCode}" is not registered`);
+    }
+
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= all.length) {
+      return all;
+    }
+
+    const reordered = all.map((entry) => cloneEntry(entry));
+    const [moved] = reordered.splice(currentIndex, 1);
+    if (!moved) {
+      return all;
+    }
+    reordered.splice(targetIndex, 0, moved);
+
+    const normalizedOrder = reordered.map((entry, index) => ({
+      ...entry,
+      displayOrder: (index + 1) * 10
+    }));
+
+    await this.registryStore.saveEntries(normalizedOrder);
+    return normalizedOrder;
   }
 
   async replaceAll(entries: readonly LotteryRegistryUpsertInput[]): Promise<LotteryRegistryEntry[]> {
@@ -163,6 +194,14 @@ function sanitizeRegistryEntry(input: LotteryRegistryUpsertInput | LotteryRegist
   }
 
   return nextEntry;
+}
+
+function cloneEntry(entry: LotteryRegistryEntry): LotteryRegistryEntry {
+  return {
+    ...entry,
+    pricing: { ...entry.pricing },
+    handlers: { ...entry.handlers }
+  };
 }
 
 function assertUniqueCodes(entries: readonly LotteryRegistryEntry[]): void {

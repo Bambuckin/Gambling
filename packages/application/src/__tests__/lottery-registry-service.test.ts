@@ -46,6 +46,50 @@ describe("lottery registry service", () => {
     expect(updated?.handlers.resultHandler).toBe("handlers.demo.result.v2");
   });
 
+  it("toggles lottery visibility without mutating handler bindings", async () => {
+    const original = createEntry({
+      lotteryCode: "visibility-demo",
+      enabled: true,
+      handlers: {
+        purchaseHandler: "handlers.visibility.purchase.v1",
+        resultHandler: "handlers.visibility.result.v1"
+      }
+    });
+    const service = new LotteryRegistryService({
+      registryStore: new InMemoryLotteryRegistryStore([original])
+    });
+
+    const disabled = await service.setLotteryEnabled("visibility-demo", false);
+    expect(disabled.enabled).toBe(false);
+    expect(disabled.handlers).toEqual(original.handlers);
+
+    const enabledAgain = await service.setLotteryEnabled("visibility-demo", true);
+    expect(enabledAgain.enabled).toBe(true);
+    expect(enabledAgain.handlers).toEqual(original.handlers);
+  });
+
+  it("moves lotteries up and down while rebalancing display order", async () => {
+    const service = new LotteryRegistryService({
+      registryStore: new InMemoryLotteryRegistryStore([
+        createEntry({ lotteryCode: "lottery-a", displayOrder: 10 }),
+        createEntry({ lotteryCode: "lottery-b", displayOrder: 20 }),
+        createEntry({ lotteryCode: "lottery-c", displayOrder: 30 })
+      ])
+    });
+
+    const movedUp = await service.moveLottery("lottery-c", "up");
+    expect(movedUp.map((entry) => entry.lotteryCode)).toEqual(["lottery-a", "lottery-c", "lottery-b"]);
+    expect(movedUp.map((entry) => entry.displayOrder)).toEqual([10, 20, 30]);
+
+    const movedDown = await service.moveLottery("lottery-a", "down");
+    expect(movedDown.map((entry) => entry.lotteryCode)).toEqual(["lottery-c", "lottery-a", "lottery-b"]);
+    expect(movedDown.map((entry) => entry.displayOrder)).toEqual([10, 20, 30]);
+
+    const boundary = await service.moveLottery("lottery-b", "down");
+    expect(boundary.map((entry) => entry.lotteryCode)).toEqual(["lottery-c", "lottery-a", "lottery-b"]);
+    expect(boundary.map((entry) => entry.displayOrder)).toEqual([10, 20, 30]);
+  });
+
   it("throws on duplicate lottery codes during replaceAll", async () => {
     const service = new LotteryRegistryService({
       registryStore: new InMemoryLotteryRegistryStore([])
