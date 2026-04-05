@@ -12,6 +12,9 @@
     "test": "node -e \"console.log('web tests are not configured yet')\""
   },
   "dependencies": {
+    "@lottery/application": "workspace:*",
+    "@lottery/domain": "workspace:*",
+    "@lottery/infrastructure": "workspace:*",
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

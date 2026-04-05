@@ -18,7 +18,7 @@ Use it before changing code across `apps/*` and `packages/*`.
 
 | Module | Owns | Must Not Own | Current Entrypoints |
 |---|---|---|---|
-| `apps/web` | Web runtime shell and page routing entrypoint | Terminal automation details, ledger mutation logic, queue worker behavior | `apps/web/src/app/layout.tsx`, `apps/web/src/app/page.tsx` |
+| `apps/web` | Web runtime shell, login/lottery routes, and route-level access entry flow (`src/lib/access/*`) | Terminal automation details, ledger mutation logic, queue worker behavior, direct auth-store mutation bypassing application service | `apps/web/src/app/layout.tsx`, `apps/web/src/app/page.tsx`, `apps/web/src/app/login/page.tsx`, `apps/web/src/app/lottery/[lotteryCode]/page.tsx` |
 | `apps/terminal-worker` | Worker process boot and execution host process | UI rendering, user session logic, lottery pricing/domain rules | `apps/terminal-worker/src/main.ts` |
 | `packages/domain` | Core contracts: request lifecycle, ledger operations, registry records, draw/ticket shapes, access identity/session lifecycle types | Transport protocols, DB wiring, queue engine implementation, browser automation selectors | `packages/domain/src/index.ts`, `packages/domain/src/access.ts` |
 | `packages/application` | Typed ports and use cases for terminal execution, queue, time source, and access/session orchestration | Concrete adapter SDK bindings, JSX/UI concerns, persistence schema definitions | `packages/application/src/index.ts`, `packages/application/src/services/access-service.ts` |
@@ -33,6 +33,7 @@ Use it before changing code across `apps/*` and `packages/*`.
 3. `@lottery/lottery-handlers` contracts must align with registry bindings from `@lottery/domain`.
 4. `@lottery/test-kit` must implement application/handler contracts without adding production-only assumptions.
 5. Access/session route handlers may use `AccessService` from `@lottery/application`, but must not bypass storage ports.
+6. `apps/web/src/lib/access/access-runtime.ts` may expose adapter-factory composition for ready data modules, but route files must stay unaware of concrete store implementations.
 
 ## Integration Points (Disallowed)
 

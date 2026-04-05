@@ -27,8 +27,10 @@ docs/
 ## Runtime Apps
 
 - `apps/web`
-  - Next.js runtime shell.
-  - Current entrypoints: `src/app/layout.tsx`, `src/app/page.tsx`.
+  - Next.js runtime shell with Phase 2 access routes.
+  - Current entrypoints: `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/lottery/[lotteryCode]/page.tsx`.
+  - Access helpers: `src/lib/access/access-runtime.ts`, `src/lib/access/entry-flow.ts`, `src/lib/access/session-cookie.ts`, `src/lib/access/lottery-catalog.ts`.
+  - Build wiring: `next.config.ts` (workspace package transpile + extension alias for NodeNext imports).
 - `apps/terminal-worker`
   - Worker process host for queue + terminal execution flows.
   - Current entrypoint: `src/main.ts`.
@@ -56,11 +58,12 @@ docs/
 - `docs/adr/ADR-001-stack-and-repo-shape.md` is the stack and shape gate.
 - `docs/modules/boundary-catalog.md` defines ownership and anti-ownership rules.
 - `docs/runbooks/` carries repeatable operator and local verification procedures.
-- `.planning/STATE.md` and `.planning/phases/01-foundation-contracts/.continue-here.md` are session continuity anchors.
+- `.planning/STATE.md` and `.planning/phases/02-access-and-unified-shell/.continue-here.md` are current session continuity anchors.
 
 ## Extension Paths
 
 - New lottery support extends `packages/lottery-handlers` contracts + registry bindings.
 - Access/session persistence can replace in-memory adapters by implementing application ports in `packages/infrastructure/src/access/`.
+- Web shell can bind external data sources via `LOTTERY_ACCESS_IDENTITIES_JSON` and `LOTTERY_SHELL_LOTTERIES_JSON` without touching route code.
 - New operational flows should add runbooks under `docs/runbooks/`.
 - New module boundaries must be reflected in `docs/modules/boundary-catalog.md`.
