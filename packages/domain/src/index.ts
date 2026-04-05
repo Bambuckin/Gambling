@@ -4,6 +4,7 @@ export * from "./lottery-registry.js";
 export * from "./purchase-draft.js";
 export * from "./purchase-request.js";
 export * from "./terminal-execution.js";
+export * from "./terminal-attempt.js";
 export * from "./draw.js";
 export * from "./ticket.js";
 export * from "./access.js";

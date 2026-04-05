@@ -22,3 +22,4 @@ export * from "./services/purchase-orchestration-service.js";
 export * from "./services/purchase-request-query-service.js";
 export * from "./services/purchase-execution-queue-service.js";
 export * from "./services/terminal-handler-resolver-service.js";
+export * from "./services/terminal-execution-attempt-service.js";
