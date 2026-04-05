@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-04-05T07:20:51.056Z",
+  "timestamp": "2026-04-05T08:08:55.093Z",
   "phase": "1",
   "phase_name": "Foundation Contracts",
   "phase_dir": ".planning/phases/01-foundation-contracts",
@@ -13,7 +13,7 @@
       "id": 0,
       "name": "Phase 1 planning package",
       "status": "done",
-      "progress": "project scaffolding docs, phase context, research, executable plans, and session handoff artifacts created"
+      "progress": "project scaffolding docs, phase context, research, executable plans, session handoff artifacts, and git/bootstrap continuity cleanup created"
     }
   ],
   "remaining_tasks": [
@@ -40,18 +40,12 @@
   ],
   "blockers": [
     {
-      "description": "git is not available on PATH in the current environment, so GSD commit steps cannot run automatically",
-      "type": "human_action",
-      "workaround": "Install git or add it to PATH before expecting automated GSD commit steps"
+      "description": "Stack is not locked yet; execute 01-01-PLAN.md before broad scaffolding",
+      "type": "planning_gate",
+      "workaround": "Write ADR-001 first, then align root workspace files and scripts to that decision"
     }
   ],
-  "human_actions_pending": [
-    {
-      "action": "Ensure git is available on PATH if commit automation is required",
-      "context": "Planning artifacts exist, but commit helpers cannot run without git",
-      "blocking": false
-    }
-  ],
+  "human_actions_pending": [],
   "decisions": [
     {
       "decision": "Phase 1 is documentation-first and ADR-first before broad scaffolding",
@@ -69,24 +63,7 @@
       "phase": "1"
     }
   ],
-  "uncommitted_files": [
-    "README.md",
-    "AGENTS.md",
-    "docs/README.md",
-    "docs/adr/ADR-000-project-principles.md",
-    "docs/modules/README.md",
-    "docs/runbooks/README.md",
-    ".planning/PROJECT.md",
-    ".planning/REQUIREMENTS.md",
-    ".planning/ROADMAP.md",
-    ".planning/STATE.md",
-    ".planning/phases/01-foundation-contracts/01-CONTEXT.md",
-    ".planning/phases/01-foundation-contracts/01-RESEARCH.md",
-    ".planning/phases/01-foundation-contracts/01-01-PLAN.md",
-    ".planning/phases/01-foundation-contracts/01-02-PLAN.md",
-    ".planning/phases/01-foundation-contracts/01-03-PLAN.md",
-    ".planning/phases/01-foundation-contracts/01-04-PLAN.md"
-  ],
+  "uncommitted_files": [],
   "next_action": "Read .planning/phases/01-foundation-contracts/.continue-here.md, then start Phase 1 execution with 01-01-PLAN.md",
-  "context_notes": "The repository is organized for session independence. Do not skip ADR-001 or jump straight into feature scaffolding; Phase 1 exists to lock stack, structure, contracts, and verification."
+  "context_notes": "The repository is organized for session independence. Git is operational on PATH and the repo is on main. In this Codex desktop environment, some gsd-tools git steps may need an unrestricted shell because sandboxed Node child-process spawns can return EPERM. Do not skip ADR-001 or jump straight into feature scaffolding; Phase 1 exists to lock stack, structure, contracts, and verification."
 }

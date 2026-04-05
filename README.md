@@ -41,6 +41,11 @@ Build a LAN web system for lottery ticket operations with:
 - `docs/runbooks/` — operator and maintenance procedures
 - `.planning/` — GSD roadmap, phase context, plans, state, and handoff artifacts
 
+## Environment Note
+
+- Git is installed, available on PATH, and this repository is already initialized on `main`.
+- In this Codex desktop environment, some `gsd-tools` operations that spawn `git` from Node may need an unrestricted shell because sandboxed child-process spawns can fail with `EPERM`. That is an execution-environment constraint, not a repository setup problem.
+
 ## Immediate Next Step
 
 Resume with Phase 1 execution starting at `.planning/phases/01-foundation-contracts/01-01-PLAN.md`.

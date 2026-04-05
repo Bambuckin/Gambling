@@ -2,6 +2,10 @@
 
 This directory will hold operator-facing procedures.
 
+Current runbooks:
+
+- `local-bootstrap.md` - how to verify git, planning state, and the correct Phase 1 entrypoint before implementation resumes
+
 Expected runbooks after Phase 1:
 
 - local bootstrap
