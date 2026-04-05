@@ -68,3 +68,5 @@ None yet.
 Last session: 2026-04-05 07:20 UTC
 Stopped at: Phase 1 planning package created; next step is `01-01-PLAN.md`
 Resume file: .planning/phases/01-foundation-contracts/.continue-here.md
+
+Repository baseline: committed on `main` as `4fe4a52`
