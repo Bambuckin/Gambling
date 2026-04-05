@@ -5,6 +5,7 @@ import type { DrawAvailabilityState } from "@lottery/domain";
 import type { LotteryOrderDirection, PurchaseQueuePriority } from "@lottery/application";
 import { requireAdminAccess, submitLogout } from "../../lib/access/entry-flow";
 import { getDrawRefreshService } from "../../lib/draw/draw-runtime";
+import { getOperationsAlertService, getOperationsAuditService } from "../../lib/observability/operations-runtime";
 import { listAdminRegistryEntries, moveAdminLottery, setAdminLotteryEnabled } from "../../lib/registry/admin-registry";
 import { getAdminOperationsQueryService, getAdminQueueService } from "../../lib/purchase/purchase-runtime";
 
@@ -18,12 +19,13 @@ type AdminPageProps = {
 export default async function AdminPage({ searchParams }: AdminPageProps): Promise<ReactElement> {
   const access = await requireAdminAccess("/admin");
   const entries = await listAdminRegistryEntries();
-  const [drawStates, queueSnapshot, operationsSnapshot] = await Promise.all([
+  const [drawStates, queueSnapshot, operationsSnapshot, operationsAlerts] = await Promise.all([
     Promise.all(
       entries.map(async (entry) => [entry.lotteryCode, await getDrawRefreshService().getDrawState(entry.lotteryCode)] as const)
     ),
     getAdminQueueService().getQueueSnapshot(),
-    getAdminOperationsQueryService().getSnapshot()
+    getAdminOperationsQueryService().getSnapshot(),
+    getOperationsAlertService().listActiveAlerts()
   ]);
   const drawStateByLotteryCode = new Map<string, DrawAvailabilityState>(drawStates);
   const resolvedSearchParams = await searchParams;
@@ -39,6 +41,36 @@ export default async function AdminPage({ searchParams }: AdminPageProps): Promi
       <p>Session id: {access.session.sessionId}</p>
       <p>Total lotteries: {entries.length}</p>
       {status && statusMessage ? <p>Action [{status}]: {statusMessage}</p> : null}
+
+      <h2>Operations Alerts</h2>
+      {operationsAlerts.length === 0 ? (
+        <p>No active critical/warning alerts.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Severity</th>
+              <th>Category</th>
+              <th>Title</th>
+              <th>Description</th>
+              <th>References</th>
+              <th>Detected at</th>
+            </tr>
+          </thead>
+          <tbody>
+            {operationsAlerts.map((alert) => (
+              <tr key={alert.alertId}>
+                <td>{alert.severity}</td>
+                <td>{alert.category}</td>
+                <td>{alert.title}</td>
+                <td>{alert.description}</td>
+                <td>{alert.referenceIds.length > 0 ? alert.referenceIds.join(", ") : "none"}</td>
+                <td>{alert.detectedAt}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <h2>Queue Operations</h2>
       <h3>Terminal Status</h3>
@@ -290,7 +322,7 @@ async function moveLotteryAction(formData: FormData): Promise<void> {
 async function setQueuePriorityAction(formData: FormData): Promise<void> {
   "use server";
 
-  await requireAdminAccess("/admin");
+  const access = await requireAdminAccess("/admin");
 
   try {
     const requestId = readRequiredFormValue(formData, "requestId");
@@ -298,6 +330,18 @@ async function setQueuePriorityAction(formData: FormData): Promise<void> {
     const queueItem = await getAdminQueueService().setQueuePriority({
       requestId,
       priority
+    });
+    await getOperationsAuditService().recordAdminQueueAction({
+      actor: toAdminAuditActor(access),
+      action: "queue_priority_changed",
+      requestId: queueItem.requestId,
+      reference: {
+        requestId: queueItem.requestId,
+        userId: queueItem.userId,
+        lotteryCode: queueItem.lotteryCode,
+        drawId: queueItem.drawId
+      },
+      message: `admin set queue priority to ${queueItem.priority}`
     });
     return redirect(
       `/admin?status=ok&message=${encodeURIComponent(`request ${queueItem.requestId} priority -> ${queueItem.priority}`)}`
@@ -312,12 +356,26 @@ async function setQueuePriorityAction(formData: FormData): Promise<void> {
 async function enqueueAsAdminPriorityAction(formData: FormData): Promise<void> {
   "use server";
 
-  await requireAdminAccess("/admin");
+  const access = await requireAdminAccess("/admin");
 
   try {
     const requestId = readRequiredFormValue(formData, "requestId");
     const queued = await getAdminQueueService().enqueueAsAdminPriority({
       requestId
+    });
+    await getOperationsAuditService().recordAdminQueueAction({
+      actor: toAdminAuditActor(access),
+      action: "admin_priority_enqueued",
+      requestId: queued.request.snapshot.requestId,
+      reference: {
+        requestId: queued.request.snapshot.requestId,
+        userId: queued.request.snapshot.userId,
+        lotteryCode: queued.request.snapshot.lotteryCode,
+        drawId: queued.request.snapshot.drawId
+      },
+      message: queued.replayed
+        ? `admin replayed queue request with ${queued.queueItem.priority} priority`
+        : "admin enqueued request as admin-priority"
     });
     const message = queued.replayed
       ? `request ${queued.request.snapshot.requestId} already queued; priority is ${queued.queueItem.priority}`
@@ -402,4 +460,16 @@ function formatAnomalyHint(hint: "retrying" | "error" | "stale-executing"): stri
   }
 
   return hint;
+}
+
+function toAdminAuditActor(access: Awaited<ReturnType<typeof requireAdminAccess>>): {
+  readonly actorId: string;
+  readonly actorRole: "admin";
+  readonly actorLabel: string;
+} {
+  return {
+    actorId: access.identity.identityId,
+    actorRole: "admin",
+    actorLabel: access.identity.displayName
+  };
 }

@@ -73,13 +73,13 @@
 - [x] **ADMIN-01**: Administrator can view queue contents, including priority flag, queue order, and current executing request.
 - [x] **ADMIN-02**: Administrator can create priority requests that enter the queue above regular requests without interrupting active execution.
 - [x] **ADMIN-03**: Administrator can view failed or problematic requests with last error, attempt count, and related lottery/user.
-- [ ] **ADMIN-04**: Administrative interface shows lottery controls, terminal status, audit summaries, and financial exception events.
+- [x] **ADMIN-04**: Administrative interface shows lottery controls, terminal status, audit summaries, and financial exception events.
 
 ### Audit and Alerts
 
-- [ ] **AUDT-01**: System logs key user, admin, request, terminal, and balance events with actor, timestamp, related entities, and outcome.
-- [ ] **AUDT-02**: Each purchase request retains a state transition journal from creation through final status.
-- [ ] **AUDT-03**: Critical purchase or terminal failures raise visible operational alerts for administrators.
+- [x] **AUDT-01**: System logs key user, admin, request, terminal, and balance events with actor, timestamp, related entities, and outcome.
+- [x] **AUDT-02**: Each purchase request retains a state transition journal from creation through final status.
+- [x] **AUDT-03**: Critical purchase or terminal failures raise visible operational alerts for administrators.
 
 ### Documentation and Extension
 
@@ -166,10 +166,10 @@
 | ADMIN-01 | Phase 8 | Complete |
 | ADMIN-02 | Phase 8 | Complete |
 | ADMIN-03 | Phase 8 | Complete |
-| ADMIN-04 | Phase 8 | Pending |
-| AUDT-01 | Phase 8 | Pending |
-| AUDT-02 | Phase 8 | Pending |
-| AUDT-03 | Phase 8 | Pending |
+| ADMIN-04 | Phase 8 | Complete |
+| AUDT-01 | Phase 8 | Complete |
+| AUDT-02 | Phase 8 | Complete |
+| AUDT-03 | Phase 8 | Complete |
 | DOCS-01 | Phase 1 | Complete |
 | DOCS-02 | Phase 1 | Complete |
 | DOCS-03 | Phase 1 | Complete |
@@ -181,4 +181,4 @@
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-05 after 08-02 completion (terminal/problem dashboard visibility)*
+*Last updated: 2026-04-05 after 08-03 completion (structured operations audit and alert coverage)*
