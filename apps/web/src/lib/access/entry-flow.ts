@@ -47,7 +47,6 @@ export async function resolveCurrentAccessRole(): Promise<SessionRole | null> {
 
   const authResult = await getAccessService().authenticate(sessionId);
   if (!authResult.ok) {
-    await clearSessionCookie();
     return null;
   }
 
@@ -106,7 +105,6 @@ async function requireAccessRole(
 
   const authResult = await getAccessService().authenticate(sessionId);
   if (!authResult.ok) {
-    await clearSessionCookie();
     return redirect(loginPath(returnToPath, authResult.reason));
   }
 
