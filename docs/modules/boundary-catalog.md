@@ -41,6 +41,7 @@ Use it before changing code across `apps/*` and `packages/*`.
 11. Draw freshness checks (`missing|stale|fresh`) are resolved in application service and consumed by web UI for purchase gating; route actions must not reimplement freshness math.
 12. Admin registry controls may mutate visibility and order only through `apps/web/src/lib/registry/admin-registry.ts` and `LotteryRegistryService`.
 13. Wallet balances shown in web routes are read through `WalletLedgerService`; reserve/debit/release mutation logic and idempotency guards stay in application layer.
+14. `apps/web/src/app/debug/wallet-lab/page.tsx` is verification-only and may read ledger snapshots/history, but must not perform ledger mutations.
 
 ## Integration Points (Disallowed)
 
@@ -50,6 +51,7 @@ Use it before changing code across `apps/*` and `packages/*`.
 4. Worker boot code embedding lottery-specific selector logic inline.
 5. Runtime UI/routes directly mutating identity/session storage without `AccessService`.
 6. Treating middleware role-hint cookie as the only authorization check.
+7. Adding reserve/debit/release write actions directly in debug routes.
 
 ## Verification Notes
 

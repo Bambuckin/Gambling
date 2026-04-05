@@ -36,12 +36,12 @@
 
 ### Balance
 
-- [ ] **BAL-01**: Confirmed purchase request creates a balance reserve instead of an immediate final debit.
-- [ ] **BAL-02**: Successful purchase converts a reserve into a final debit linked to the originating request.
-- [ ] **BAL-03**: Final failure or allowed cancellation releases the reserve and restores available funds.
+- [x] **BAL-01**: Confirmed purchase request creates a balance reserve instead of an immediate final debit.
+- [x] **BAL-02**: Successful purchase converts a reserve into a final debit linked to the originating request.
+- [x] **BAL-03**: Final failure or allowed cancellation releases the reserve and restores available funds.
 - [ ] **BAL-04**: Winning ticket verification credits winnings to the user balance.
-- [ ] **BAL-05**: Every balance mutation is stored as an immutable ledger entry linked to the related request or ticket.
-- [ ] **BAL-06**: User can view available balance, reserved funds, and balance movement history.
+- [x] **BAL-05**: Every balance mutation is stored as an immutable ledger entry linked to the related request or ticket.
+- [x] **BAL-06**: User can view available balance, reserved funds, and balance movement history.
 
 ### Purchase Requests
 
@@ -141,11 +141,11 @@
 | DRAW-02 | Phase 3 | Complete |
 | DRAW-03 | Phase 3 | Complete |
 | DRAW-04 | Phase 3 | Complete |
-| BAL-01 | Phase 4 | Pending |
-| BAL-02 | Phase 4 | Pending |
-| BAL-03 | Phase 4 | Pending |
-| BAL-05 | Phase 4 | Pending |
-| BAL-06 | Phase 4 | Pending |
+| BAL-01 | Phase 4 | Complete |
+| BAL-02 | Phase 4 | Complete |
+| BAL-03 | Phase 4 | Complete |
+| BAL-05 | Phase 4 | Complete |
+| BAL-06 | Phase 4 | Complete |
 | PURC-01 | Phase 5 | Pending |
 | PURC-02 | Phase 5 | Pending |
 | PURC-03 | Phase 5 | Pending |
@@ -181,4 +181,4 @@
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-05 after 01-04 completion (documentation baseline advanced)*
+*Last updated: 2026-04-05 after 04-04 completion (Phase 4 balance requirements closed)*

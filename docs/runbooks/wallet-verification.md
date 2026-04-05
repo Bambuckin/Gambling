@@ -53,8 +53,15 @@ Expected outcome:
 - reserve/debit/release transitions stay traceable by request reference.
 - Snapshot math remains consistent with immutable ledger history.
 
-## Troubleshooting
+## Troubleshooting Matrix
+
+| Symptom | Likely boundary | Inspect first | Investigation command |
+|---|---|---|---|
+| `double debit` for same request | `packages/application` command/idempotency ownership | `packages/application/src/services/wallet-ledger-service.ts`, `packages/application/src/__tests__/wallet-ledger-service.test.ts` | `corepack pnpm --filter @lottery/application test -- wallet-ledger-service` |
+| `reserve not released` after cancellation | `packages/application` reserve/release transition rules | `packages/application/src/services/wallet-ledger-service.ts`, `packages/domain/src/ledger.ts` | `corepack pnpm --filter @lottery/application test -- wallet-ledger-service` |
+| movement row has `missing reference` (`n/a`) | `packages/domain` reference invariant + web read formatting | `packages/domain/src/ledger.ts`, `apps/web/src/lib/ledger/wallet-view.ts` | `Select-String -Path packages/domain/src/ledger.ts -Pattern "requires requestId|hasLedgerReference"; Select-String -Path apps/web/src/lib/ledger/wallet-view.ts -Pattern "formatLedgerReference"` |
+
+## Additional Troubleshooting Notes
 
 - If wallet tables are empty, inspect seed parsing in `apps/web/src/lib/ledger/ledger-runtime.ts`.
 - If a seeded wallet is missing, check `LOTTERY_LEDGER_ENTRIES_JSON` for malformed entries.
-- If movement references show `n/a`, inspect ledger entry references and requestId requirements in `packages/domain/src/ledger.ts`.

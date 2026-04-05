@@ -28,11 +28,11 @@ docs/
 
 - `apps/web`
   - Next.js runtime shell with Phase 2 access and role-guard routes.
-  - Current entrypoints: `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/lottery/[lotteryCode]/page.tsx`, `src/app/admin/page.tsx`, `src/app/denied/page.tsx`, `src/app/debug/access-lab/page.tsx`, `src/app/debug/registry-lab/page.tsx`, `src/middleware.ts`.
+  - Current entrypoints: `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/lottery/[lotteryCode]/page.tsx`, `src/app/admin/page.tsx`, `src/app/denied/page.tsx`, `src/app/debug/access-lab/page.tsx`, `src/app/debug/registry-lab/page.tsx`, `src/app/debug/wallet-lab/page.tsx`, `src/middleware.ts`.
   - Access helpers: `src/lib/access/access-runtime.ts`, `src/lib/access/entry-flow.ts`, `src/lib/access/session-cookie.ts`, `src/lib/access/cookie-names.ts`, `src/lib/access/lottery-catalog.ts`, `src/lib/access/lab-scenarios.ts`, `src/lib/access/role-guard.ts`.
   - Registry helpers: `src/lib/registry/registry-runtime.ts`, `src/lib/registry/admin-registry.ts`.
   - Draw helpers: `src/lib/draw/draw-runtime.ts`.
-  - Ledger helpers: `src/lib/ledger/ledger-runtime.ts`.
+  - Ledger helpers: `src/lib/ledger/ledger-runtime.ts`, `src/lib/ledger/wallet-view.ts`.
   - Dynamic form helpers: `src/lib/lottery-form/render-lottery-form-fields.tsx`.
   - Build wiring: `next.config.ts` (workspace package transpile + extension alias for NodeNext imports).
 - `apps/terminal-worker`
@@ -63,7 +63,8 @@ docs/
 - `docs/modules/boundary-catalog.md` defines ownership and anti-ownership rules.
 - `docs/runbooks/` carries repeatable operator and local verification procedures.
 - `docs/runbooks/registry-and-draw-verification.md` is the Phase 3 verification contour for admin registry controls + draw freshness gating.
-- `.planning/STATE.md` and `.planning/phases/03-lottery-registry-and-draw-pipeline/.continue-here.md` are current session continuity anchors.
+- `docs/runbooks/wallet-verification.md` is the Phase 4 wallet snapshot/movement and ledger troubleshooting checklist.
+- `.planning/STATE.md` and `.planning/phases/04-internal-ledger-and-wallet-views/.continue-here.md` are current session continuity anchors.
 
 ## Extension Paths
 

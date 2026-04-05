@@ -307,6 +307,115 @@ describe("WalletLedgerService", () => {
     const entries = await service.listEntries("seed-user");
     expect(entries.map((entry) => entry.entryId)).toEqual(["entry-c", "entry-a", "entry-b"]);
   });
+
+  it("keeps successful reserve/debit lifecycle append-only with expected final wallet snapshot", async () => {
+    const service = createService();
+
+    await service.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 120_000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit-success-flow",
+      reference: {
+        requestId: "seed-credit-success-flow"
+      }
+    });
+
+    const afterCredit = await service.listEntries("seed-user");
+    expect(afterCredit).toHaveLength(1);
+
+    await service.reserveFunds({
+      userId: "seed-user",
+      requestId: "req-success",
+      amountMinor: 45_000,
+      currency: "RUB",
+      idempotencyKey: "req-success-reserve",
+      createdAt: "2026-04-05T10:01:00.000Z"
+    });
+
+    const afterReserve = await service.listEntries("seed-user");
+    expect(afterReserve).toHaveLength(2);
+    expect(afterReserve[0]?.entryId).toBe(afterCredit[0]?.entryId);
+
+    const debit = await service.debitReservedFunds({
+      userId: "seed-user",
+      requestId: "req-success",
+      amountMinor: 45_000,
+      currency: "RUB",
+      idempotencyKey: "req-success-debit",
+      createdAt: "2026-04-05T10:02:00.000Z"
+    });
+
+    const finalTimeline = await service.listEntries("seed-user");
+    expect(finalTimeline).toHaveLength(3);
+    expect(finalTimeline.map((entry) => entry.operation)).toEqual(["credit", "reserve", "debit"]);
+    expect(finalTimeline.map((entry) => entry.reference.requestId)).toEqual([
+      "seed-credit-success-flow",
+      "req-success",
+      "req-success"
+    ]);
+    expect(debit.snapshot).toEqual({
+      userId: "seed-user",
+      availableMinor: 75_000,
+      reservedMinor: 0,
+      currency: "RUB"
+    });
+  });
+
+  it("keeps cancelled reserve/release lifecycle append-only and restores available funds", async () => {
+    const service = createService();
+
+    await service.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 90_000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit-cancel-flow",
+      reference: {
+        requestId: "seed-credit-cancel-flow"
+      }
+    });
+
+    const reserve = await service.reserveFunds({
+      userId: "seed-user",
+      requestId: "req-cancel",
+      amountMinor: 30_000,
+      currency: "RUB",
+      idempotencyKey: "req-cancel-reserve",
+      createdAt: "2026-04-05T10:01:00.000Z"
+    });
+    expect(reserve.snapshot).toEqual({
+      userId: "seed-user",
+      availableMinor: 60_000,
+      reservedMinor: 30_000,
+      currency: "RUB"
+    });
+
+    const release = await service.releaseReservedFunds({
+      userId: "seed-user",
+      requestId: "req-cancel",
+      amountMinor: 30_000,
+      currency: "RUB",
+      idempotencyKey: "req-cancel-release",
+      createdAt: "2026-04-05T10:02:00.000Z"
+    });
+    expect(release.snapshot).toEqual({
+      userId: "seed-user",
+      availableMinor: 90_000,
+      reservedMinor: 0,
+      currency: "RUB"
+    });
+
+    const timeline = await service.listEntries("seed-user");
+    expect(timeline).toHaveLength(3);
+    expect(timeline.map((entry) => entry.operation)).toEqual(["credit", "reserve", "release"]);
+    expect(timeline.map((entry) => entry.idempotencyKey)).toEqual([
+      "seed-user-credit-cancel-flow",
+      "req-cancel-reserve",
+      "req-cancel-release"
+    ]);
+  });
 });
 
 function createService(input?: {
