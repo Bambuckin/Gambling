@@ -1,6 +1,6 @@
 # Lottery Terminal Operations System
 
-Status: Phase 1 in progress (`01-01` baseline locked).
+Status: Phase 1 in progress (`01-01` and `01-02` complete).
 
 This repository is designed so a new session can continue from files on disk only.
 
@@ -38,12 +38,12 @@ Root workspace config files:
 
 ## Root Scripts
 
-- `pnpm dev:web`
-- `pnpm dev:worker`
-- `pnpm lint`
-- `pnpm typecheck`
-- `pnpm test`
-- `pnpm smoke`
+- `corepack pnpm dev:web`
+- `corepack pnpm dev:worker`
+- `corepack pnpm lint`
+- `corepack pnpm typecheck`
+- `corepack pnpm test`
+- `corepack pnpm smoke`
 
 ## Working Rules
 
@@ -67,4 +67,4 @@ Root workspace config files:
 
 ## Immediate Next Step
 
-After completing `01-01`, execute `.planning/phases/01-foundation-contracts/01-02-PLAN.md`.
+Execute `.planning/phases/01-foundation-contracts/01-03-PLAN.md`.
