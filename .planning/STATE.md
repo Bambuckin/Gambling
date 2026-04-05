@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed plan 09-03 and advancing to 09-04
-last_updated: "2026-04-06T00:42:00.000Z"
-last_activity: 2026-04-06 -- Phase 9 plan 09-03 complete
+status: complete
+stopped_at: Completed Phase 9 and release-readiness closure
+last_updated: "2026-04-06T00:55:00.000Z"
+last_activity: 2026-04-06 -- Phase 9 complete
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 39
-  completed_plans: 38
-  percent: 97
+  completed_plans: 39
+  percent: 100
 ---
 
 # Project State
@@ -21,22 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Each confirmed purchase should move predictably from the web interface to the single main terminal with correct reserve and debit behavior, clear status, and full event traceability.  
-**Current focus:** Phase 9 - Hardening, Extension Docs, and Release Readiness (execution in progress)
+**Current focus:** Phase 9 complete - v1.0 hardening, extension docs, and release readiness baseline finished.
 
 ## Current Position
 
 Phase: 9
-Plan: 04 of 04
-Status: Executing
-Last activity: 2026-04-06 -- Phase 9 plan 09-03 complete
+Plan: Complete
+Status: Complete
+Last activity: 2026-04-06 -- Phase 9 complete
 
-Progress: [#########-] 97% (38/39 plan summaries)
+Progress: [##########] 100% (39/39 plan summaries)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 38
+- Total plans completed: 39
 - Average duration: 23 min
 - Total execution time: 4.44 hours
 
@@ -52,7 +52,7 @@ Progress: [#########-] 97% (38/39 plan summaries)
 | 6 | 5 | 50 min | 10 min |
 | 7 | 4 | 70 min | 18 min |
 | 8 | 4 | - | - |
-| 9 | 3 | 40 min | 13 min |
+| 9 | 4 | 55 min | 14 min |
 
 **Recent Trend:**
 
@@ -134,12 +134,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- Workspace `corepack pnpm typecheck` currently fails in `packages/domain/src/__tests__/purchase-draft.test.ts` because optional numeric field props are emitted as explicit `undefined` under `exactOptionalPropertyTypes`.
+- No active blockers after `corepack pnpm release:check` pass.
 
 ## Session Continuity
 
 Last session: 2026-04-05T18:03:00.000Z
-Stopped at: Completed plan 09-03 and advancing to 09-04
+Stopped at: Completed Phase 9 and release-readiness closure
 Resume file: .planning/phases/09-hardening-extension-docs-and-release-readiness/.continue-here.md
 
 Repository baseline: `main`, git operational.

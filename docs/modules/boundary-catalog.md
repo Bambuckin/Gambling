@@ -111,6 +111,7 @@ Architecture map companion:
 - `docs/runbooks/ticket-persistence-verification.md` is the manual checklist for success-outcome ticket persistence and boundary troubleshooting.
 - `docs/runbooks/regression-recipes.md` (Phase 9) is the critical cross-module regression path before release readiness sign-off.
 - `docs/runbooks/lottery-handler-change.md` is the rollout/rollback checklist for handler binding updates.
+- `corepack pnpm release:check` runs the final release gate defined in `scripts/release-readiness-check.ps1`.
 
 ## Dependency Direction Policy
 

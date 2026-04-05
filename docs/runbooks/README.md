@@ -15,5 +15,6 @@ Current runbooks:
 - `ticket-persistence-verification.md` - Phase 7 ticket persistence, verification outcomes, and winnings visibility checks
 - `admin-operations-console.md` - admin console triage for queue pressure, terminal state, and problematic requests
 - `lottery-handler-change.md` - operator rollout/rollback checklist for lottery handler binding changes
+- `release-readiness.md` - final release gate and go/no-go checklist (`corepack pnpm release:check`)
 
 When a phase introduces new operational or verification behavior, update runbooks in the same step.

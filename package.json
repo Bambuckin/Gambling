@@ -13,7 +13,8 @@
     "lint": "corepack pnpm -r --if-present lint",
     "typecheck": "corepack pnpm -r --if-present typecheck",
     "test": "corepack pnpm -r --if-present test",
-    "smoke": "corepack pnpm --filter @lottery/test-kit smoke"
+    "smoke": "corepack pnpm --filter @lottery/test-kit smoke",
+    "release:check": "powershell -ExecutionPolicy Bypass -File scripts/release-readiness-check.ps1"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",

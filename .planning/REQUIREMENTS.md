@@ -170,9 +170,9 @@
 | AUDT-01 | Phase 8 | Complete |
 | AUDT-02 | Phase 8 | Complete |
 | AUDT-03 | Phase 8 | Complete |
-| DOCS-01 | Phase 1 | Complete |
-| DOCS-02 | Phase 1 | Complete |
-| DOCS-03 | Phase 1 | Complete |
+| DOCS-01 | Phase 9 | Complete |
+| DOCS-02 | Phase 9 | Complete |
+| DOCS-03 | Phase 9 | Complete |
 
 **Coverage:**
 - v1 requirements: 49 total
@@ -181,4 +181,4 @@
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-05 after 08-03 completion (structured operations audit and alert coverage)*
+*Last updated: 2026-04-06 after 09-04 completion (hardening docs, extension runbooks, and release readiness gate)*
