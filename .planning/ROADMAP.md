@@ -210,7 +210,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Foundation Contracts | 4/4 | Complete | 2026-04-05 |
 | 2. Access and Unified Shell | 5/5 | Complete   | 2026-04-05 |
 | 3. Lottery Registry and Draw Pipeline | 4/4 | Complete    | 2026-04-05 |
-| 4. Internal Ledger and Wallet Views | 0/4 | Not started | - |
+| 4. Internal Ledger and Wallet Views | 0/4 | Planned    |  |
 | 5. Purchase Request Orchestration | 0/5 | Not started | - |
 | 6. Main Terminal Execution Engine | 0/5 | Not started | - |
 | 7. Ticket Verification and Winnings | 0/4 | Not started | - |
