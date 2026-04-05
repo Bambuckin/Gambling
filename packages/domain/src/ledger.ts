@@ -75,6 +75,10 @@ export function normalizeLedgerEntry(entry: LedgerEntry): LedgerEntry {
     throw new LedgerValidationError(`entry "${entryId}" must include at least one request/ticket reference`);
   }
 
+  if (requiresRequestReference(entry.operation) && !reference.requestId) {
+    throw new LedgerValidationError(`entry "${entryId}" operation "${entry.operation}" requires requestId reference`);
+  }
+
   const createdAt = normalizeIsoTimestamp(entry.createdAt, `entry "${entryId}" createdAt`);
 
   return {
@@ -103,6 +107,10 @@ export function normalizeLedgerReference(reference: LedgerReference): LedgerRefe
 
 export function hasLedgerReference(reference: LedgerReference): boolean {
   return Boolean(reference.requestId || reference.ticketId);
+}
+
+export function requiresRequestReference(operation: LedgerOperationType): boolean {
+  return operation === "reserve" || operation === "debit" || operation === "release";
 }
 
 export function resolveLedgerMovementDelta(operation: LedgerOperationType, amountMinor: number): LedgerMovementDelta {

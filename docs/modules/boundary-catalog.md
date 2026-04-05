@@ -40,7 +40,7 @@ Use it before changing code across `apps/*` and `packages/*`.
 10. Dynamic form field rendering in `apps/web/src/lib/lottery-form/*` consumes domain metadata only; it must not embed registry mutation logic.
 11. Draw freshness checks (`missing|stale|fresh`) are resolved in application service and consumed by web UI for purchase gating; route actions must not reimplement freshness math.
 12. Admin registry controls may mutate visibility and order only through `apps/web/src/lib/registry/admin-registry.ts` and `LotteryRegistryService`.
-13. Wallet balances shown in web routes are read through `WalletLedgerService`; reserve/debit/release mutation logic stays in application layer.
+13. Wallet balances shown in web routes are read through `WalletLedgerService`; reserve/debit/release mutation logic and idempotency guards stay in application layer.
 
 ## Integration Points (Disallowed)
 

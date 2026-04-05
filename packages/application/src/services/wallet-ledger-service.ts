@@ -32,6 +32,18 @@ export interface WalletLedgerRecordInput {
   readonly createdAt?: string;
 }
 
+export interface WalletLedgerRequestCommandInput {
+  readonly userId: string;
+  readonly requestId: string;
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly idempotencyKey: string;
+  readonly ticketId?: string;
+  readonly drawId?: string;
+  readonly entryId?: string;
+  readonly createdAt?: string;
+}
+
 export interface WalletLedgerRecordResult {
   readonly entry: LedgerEntry;
   readonly snapshot: BalanceSnapshot;
@@ -78,6 +90,45 @@ export class WalletLedgerService {
       userId: normalizedUserId,
       currency: normalizedCurrency,
       entries
+    });
+  }
+
+  async reserveFunds(input: WalletLedgerRequestCommandInput): Promise<WalletLedgerRecordResult> {
+    return this.recordEntry({
+      userId: input.userId,
+      operation: "reserve",
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      idempotencyKey: input.idempotencyKey,
+      reference: buildRequestReference(input),
+      ...(input.entryId ? { entryId: input.entryId } : {}),
+      ...(input.createdAt ? { createdAt: input.createdAt } : {})
+    });
+  }
+
+  async debitReservedFunds(input: WalletLedgerRequestCommandInput): Promise<WalletLedgerRecordResult> {
+    return this.recordEntry({
+      userId: input.userId,
+      operation: "debit",
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      idempotencyKey: input.idempotencyKey,
+      reference: buildRequestReference(input),
+      ...(input.entryId ? { entryId: input.entryId } : {}),
+      ...(input.createdAt ? { createdAt: input.createdAt } : {})
+    });
+  }
+
+  async releaseReservedFunds(input: WalletLedgerRequestCommandInput): Promise<WalletLedgerRecordResult> {
+    return this.recordEntry({
+      userId: input.userId,
+      operation: "release",
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      idempotencyKey: input.idempotencyKey,
+      reference: buildRequestReference(input),
+      ...(input.entryId ? { entryId: input.entryId } : {}),
+      ...(input.createdAt ? { createdAt: input.createdAt } : {})
     });
   }
 
@@ -187,4 +238,20 @@ class RandomLedgerEntryFactory implements WalletLedgerEntryFactory {
   nextEntryId(): string {
     return `ledger_${Math.random().toString(36).slice(2, 12)}`;
   }
+}
+
+function buildRequestReference(input: WalletLedgerRequestCommandInput): LedgerReference {
+  const requestId = input.requestId.trim();
+  if (!requestId) {
+    throw new WalletLedgerValidationError("requestId is required for reserve/debit/release operations");
+  }
+
+  const ticketId = input.ticketId?.trim();
+  const drawId = input.drawId?.trim();
+
+  return {
+    requestId,
+    ...(ticketId ? { ticketId } : {}),
+    ...(drawId ? { drawId } : {})
+  };
 }

@@ -168,6 +168,24 @@ describe("ledger domain", () => {
     expect(action).toThrow(LedgerValidationError);
     expect(action).toThrow("must include at least one request/ticket reference");
   });
+
+  it("requires requestId for reserve/debit/release operations", () => {
+    const action = () =>
+      normalizeLedgerEntry(
+        createEntry({
+          entryId: "entry-reserve-no-request",
+          operation: "reserve",
+          amountMinor: 100,
+          idempotencyKey: "idem-reserve-no-request",
+          reference: {
+            ticketId: "ticket-only"
+          }
+        })
+      );
+
+    expect(action).toThrow(LedgerValidationError);
+    expect(action).toThrow("requires requestId reference");
+  });
 });
 
 function createEntry(overrides: Partial<LedgerEntry>): LedgerEntry {

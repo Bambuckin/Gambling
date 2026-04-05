@@ -89,6 +89,152 @@ describe("WalletLedgerService", () => {
     expect(entries).toHaveLength(2);
   });
 
+  it("exposes reserve/debit/release commands with expected balance transitions", async () => {
+    const service = createService();
+
+    await service.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 100_000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit",
+      reference: {
+        requestId: "seed-credit"
+      }
+    });
+
+    const reserve = await service.reserveFunds({
+      userId: "seed-user",
+      requestId: "req-10",
+      amountMinor: 30_000,
+      currency: "RUB",
+      idempotencyKey: "req-10-reserve"
+    });
+    expect(reserve.snapshot).toEqual({
+      userId: "seed-user",
+      availableMinor: 70_000,
+      reservedMinor: 30_000,
+      currency: "RUB"
+    });
+
+    const debit = await service.debitReservedFunds({
+      userId: "seed-user",
+      requestId: "req-10",
+      amountMinor: 20_000,
+      currency: "RUB",
+      idempotencyKey: "req-10-debit"
+    });
+    expect(debit.snapshot).toEqual({
+      userId: "seed-user",
+      availableMinor: 70_000,
+      reservedMinor: 10_000,
+      currency: "RUB"
+    });
+
+    const release = await service.releaseReservedFunds({
+      userId: "seed-user",
+      requestId: "req-10",
+      amountMinor: 10_000,
+      currency: "RUB",
+      idempotencyKey: "req-10-release"
+    });
+    expect(release.snapshot).toEqual({
+      userId: "seed-user",
+      availableMinor: 80_000,
+      reservedMinor: 0,
+      currency: "RUB"
+    });
+  });
+
+  it("keeps reserve/debit/release retries idempotent by key", async () => {
+    const service = createService();
+
+    await service.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 100_000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit",
+      reference: {
+        requestId: "seed-credit"
+      }
+    });
+
+    const reserveFirst = await service.reserveFunds({
+      userId: "seed-user",
+      requestId: "req-20",
+      amountMinor: 25_000,
+      currency: "RUB",
+      idempotencyKey: "req-20-reserve"
+    });
+    const reserveReplay = await service.reserveFunds({
+      userId: "seed-user",
+      requestId: "req-20",
+      amountMinor: 25_000,
+      currency: "RUB",
+      idempotencyKey: "req-20-reserve"
+    });
+    expect(reserveFirst.replayed).toBe(false);
+    expect(reserveReplay.replayed).toBe(true);
+
+    const debitFirst = await service.debitReservedFunds({
+      userId: "seed-user",
+      requestId: "req-20",
+      amountMinor: 15_000,
+      currency: "RUB",
+      idempotencyKey: "req-20-debit"
+    });
+    const debitReplay = await service.debitReservedFunds({
+      userId: "seed-user",
+      requestId: "req-20",
+      amountMinor: 15_000,
+      currency: "RUB",
+      idempotencyKey: "req-20-debit"
+    });
+    expect(debitFirst.replayed).toBe(false);
+    expect(debitReplay.replayed).toBe(true);
+
+    const releaseFirst = await service.releaseReservedFunds({
+      userId: "seed-user",
+      requestId: "req-20",
+      amountMinor: 10_000,
+      currency: "RUB",
+      idempotencyKey: "req-20-release"
+    });
+    const releaseReplay = await service.releaseReservedFunds({
+      userId: "seed-user",
+      requestId: "req-20",
+      amountMinor: 10_000,
+      currency: "RUB",
+      idempotencyKey: "req-20-release"
+    });
+    expect(releaseFirst.replayed).toBe(false);
+    expect(releaseReplay.replayed).toBe(true);
+
+    const entries = await service.listEntries("seed-user");
+    expect(entries.map((entry) => entry.idempotencyKey)).toEqual([
+      "seed-user-credit",
+      "req-20-reserve",
+      "req-20-debit",
+      "req-20-release"
+    ]);
+  });
+
+  it("requires requestId for reserve/debit/release commands", async () => {
+    const service = createService();
+
+    const reserveAction = service.reserveFunds({
+      userId: "seed-user",
+      requestId: " ",
+      amountMinor: 1000,
+      currency: "RUB",
+      idempotencyKey: "bad-reserve"
+    });
+
+    await expect(reserveAction).rejects.toBeInstanceOf(WalletLedgerValidationError);
+    await expect(reserveAction).rejects.toThrow("requestId is required");
+  });
+
   it("rejects idempotency conflicts with different payload", async () => {
     const service = createService();
 
