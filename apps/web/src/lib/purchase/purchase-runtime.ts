@@ -1,5 +1,6 @@
 import {
   PurchaseOrchestrationService,
+  PurchaseRequestQueryService,
   PurchaseRequestService,
   SystemTimeSource
 } from "@lottery/application";
@@ -11,6 +12,7 @@ const queueStore = new InMemoryPurchaseQueueStore();
 
 let cachedRequestService: PurchaseRequestService | null = null;
 let cachedOrchestrationService: PurchaseOrchestrationService | null = null;
+let cachedQueryService: PurchaseRequestQueryService | null = null;
 
 export function getPurchaseRequestService(): PurchaseRequestService {
   if (!cachedRequestService) {
@@ -34,4 +36,15 @@ export function getPurchaseOrchestrationService(): PurchaseOrchestrationService 
   }
 
   return cachedOrchestrationService;
+}
+
+export function getPurchaseRequestQueryService(): PurchaseRequestQueryService {
+  if (!cachedQueryService) {
+    cachedQueryService = new PurchaseRequestQueryService({
+      requestStore,
+      queueStore
+    });
+  }
+
+  return cachedQueryService;
 }

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 05-04 and advanced to 05-05
-last_updated: "2026-04-05T20:24:00.000Z"
+status: planning
+stopped_at: Completed Phase 5 and ready to plan Phase 6
+last_updated: "2026-04-05T20:41:00.000Z"
 last_activity: 2026-04-05
 progress:
   total_phases: 9
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 22
-  completed_plans: 21
-  percent: 95
+  completed_plans: 22
+  percent: 100
 ---
 
 # Project State
@@ -21,22 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Each confirmed purchase should move predictably from the web interface to the single main terminal with correct reserve and debit behavior, clear status, and full event traceability.  
-**Current focus:** Phase 5 — Purchase Request Orchestration
+**Current focus:** Phase 6 - Main Terminal Execution Engine
 
 ## Current Position
 
-Phase: 5 (Purchase Request Orchestration) — EXECUTING
-Plan: 5 of 5
-Status: Executing Phase 5
-Last activity: 2026-04-05 -- 05-04 complete, proceeding to 05-05
+Phase: 6 (Main Terminal Execution Engine) - PLANNING
+Plan: Not started
+Status: Ready to plan Phase 6
+Last activity: 2026-04-05 -- Phase 5 completed
 
-Progress: [██████████] 95% (21/22 plan summaries)
+Progress: [██████████] 100% (22/22 plan summaries)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 17
+- Total plans completed: 22
 - Average duration: 23 min
 - Total execution time: 4.44 hours
 
@@ -48,7 +48,7 @@ Progress: [██████████] 95% (21/22 plan summaries)
 | 2 | 5 | 128 min | 26 min |
 | 3 | 4 | - | - |
 | 4 | 4 | 71 min | 18 min |
-| 5 | 0 | 0 min | 0 min |
+| 5 | 5 | - | - |
 | 6 | 0 | 0 min | 0 min |
 | 7 | 0 | 0 min | 0 min |
 | 8 | 0 | 0 min | 0 min |
@@ -71,6 +71,7 @@ Progress: [██████████] 95% (21/22 plan summaries)
 | Phase 5 P2 | 16min | 3 tasks | 12 files |
 | Phase 5 P3 | 11min | 3 tasks | 10 files |
 | Phase 5 P4 | 10min | 3 tasks | 8 files |
+| Phase 5 P5 | 14min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,7 @@ Recent decisions affecting current work:
 - [Phase 5]: Purchase requests are now persisted as immutable awaiting_confirmation snapshots through PurchaseRequestService. — Confirmation and persistence moved behind a store-backed service boundary, preventing route-level lifecycle drift and enabling replay-safe request creation.
 - [Phase 5]: Confirmed requests now reserve funds and enter queued state via PurchaseOrchestrationService. — Queue insertion and reserve side effects are now coordinated in one service boundary with replay-safe request keys, preventing duplicate reserve records and route-level drift.
 - [Phase 5]: Queued request cancellation now transitions to reserve_released and removes queue item through orchestration service. — Cancellation and financial rollback are now coupled in one boundary, ensuring queued items cannot continue to execution after reserve release.
+- [Phase 5]: Purchase request status/attempt/final-result view now reads through PurchaseRequestQueryService with dedicated Purchase Lab verification contour. — Read projections for user and debug surfaces are now centralized in application service, reducing route-level projection drift and giving a stable verification surface.
 
 ### Pending Todos
 
@@ -124,12 +126,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- No active blockers for executing 05-05.
+- No active blockers for planning Phase 6.
 
 ## Session Continuity
 
-Last session: 2026-04-05T20:24:00.000Z
-Stopped at: Completed 05-04 and advanced to 05-05
+Last session: 2026-04-05T20:41:00.000Z
+Stopped at: Completed Phase 5 and ready to plan Phase 6
 Resume file: .planning/phases/05-purchase-request-orchestration/.continue-here.md
 
 Repository baseline: `main`, git operational.

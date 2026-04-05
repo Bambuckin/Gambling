@@ -18,7 +18,11 @@ import { LotteryFormFields } from "../../../lib/lottery-form/render-lottery-form
 import { getDrawRefreshService } from "../../../lib/draw/draw-runtime";
 import { LEDGER_DEFAULT_CURRENCY, getWalletLedgerService } from "../../../lib/ledger/ledger-runtime";
 import { buildWalletMovementRows } from "../../../lib/ledger/wallet-view";
-import { getPurchaseOrchestrationService, getPurchaseRequestService } from "../../../lib/purchase/purchase-runtime";
+import {
+  getPurchaseOrchestrationService,
+  getPurchaseRequestQueryService,
+  getPurchaseRequestService
+} from "../../../lib/purchase/purchase-runtime";
 
 type LotteryPageProps = {
   readonly params: Promise<{
@@ -57,9 +61,8 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
   const walletEntries = await walletLedgerService.listEntries(access.identity.identityId);
   const walletMovements = buildWalletMovementRows(walletEntries, { limit: 10 });
   const confirmationDraft = decodeConfirmationToken(quoteToken, lottery.lotteryCode);
-  const purchaseRequests = (await getPurchaseRequestService().listByUser(access.identity.identityId))
-    .filter((request) => request.snapshot.lotteryCode === lottery.lotteryCode)
-    .sort((left, right) => right.snapshot.createdAt.localeCompare(left.snapshot.createdAt));
+  const purchaseRequests = (await getPurchaseRequestQueryService().listUserRequests(access.identity.identityId))
+    .filter((request) => request.lotteryCode === lottery.lotteryCode);
 
   return (
     <section>
@@ -184,26 +187,30 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
               <th>Request</th>
               <th>State</th>
               <th>Draw</th>
+              <th>Attempts</th>
               <th>Cost (minor)</th>
               <th>Created at</th>
+              <th>Final result</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody>
             {purchaseRequests.map((request) => (
-              <tr key={request.snapshot.requestId}>
-                <td>{request.snapshot.requestId}</td>
-                <td>{request.state}</td>
-                <td>{request.snapshot.drawId}</td>
+              <tr key={request.requestId}>
+                <td>{request.requestId}</td>
+                <td>{request.status}</td>
+                <td>{request.drawId}</td>
+                <td>{request.attemptCount}</td>
                 <td>
-                  {request.snapshot.costMinor} {request.snapshot.currency}
+                  {request.costMinor} {request.currency}
                 </td>
-                <td>{request.snapshot.createdAt}</td>
+                <td>{request.createdAt}</td>
+                <td>{request.finalResult ?? "n/a"}</td>
                 <td>
-                  {isRequestCancelableStatus(request.state) ? (
+                  {isRequestCancelableStatus(request.status) ? (
                     <form action={cancelPurchaseRequestAction}>
                       <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
-                      <input type="hidden" name="requestId" value={request.snapshot.requestId} />
+                      <input type="hidden" name="requestId" value={request.requestId} />
                       <button type="submit">Cancel Request</button>
                     </form>
                   ) : (
