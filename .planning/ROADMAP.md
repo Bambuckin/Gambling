@@ -40,7 +40,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01: Create repository skeleton, workspace conventions, and baseline bootstrap.
 - [x] 01-02: Scaffold runtime apps and shared packages, then wire workspace tooling.
-- [ ] 01-03: Define core domain contracts, application ports, fake adapters, and state-machine checks.
+- [x] 01-03: Define core domain contracts, application ports, fake adapters, and state-machine checks.
 - [ ] 01-04: Finalize module/runbook docs and refresh repository entrypoints.
 
 ### Phase 2: Access and Unified Shell
@@ -206,7 +206,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Contracts | 2/4 | In Progress | - |
+| 1. Foundation Contracts | 3/4 | In Progress | - |
 | 2. Access and Unified Shell | 0/4 | Not started | - |
 | 3. Lottery Registry and Draw Pipeline | 0/4 | Not started | - |
 | 4. Internal Ledger and Wallet Views | 0/4 | Not started | - |
