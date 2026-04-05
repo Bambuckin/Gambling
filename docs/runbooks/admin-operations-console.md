@@ -1,14 +1,17 @@
 # Admin Operations Console
 
-Use this runbook when `/admin` shows queue pressure, retrying/error requests, or stale terminal execution.
+Use this runbook when `/admin` shows queue pressure, retrying/error requests, stale terminal execution, or critical alerts.
 
 ## Current Scope
 
-`/admin` now includes:
+`/admin` includes:
 - lottery registry controls (enable/disable/reorder);
 - queue controls (reprioritize queued request, enqueue existing request as admin-priority);
 - terminal status and queue pressure snapshot;
-- problem request dashboard (`retrying`, `error`, `stale executing`).
+- problem request dashboard (`retrying`, `error`, `stale executing`);
+- operations alerts (`terminal`, `queue`, `finance`).
+
+`/debug/admin-ops-lab` is the read-only verification contour for queue, terminal, alert, and operations audit projections.
 
 ## Triage Flow
 
@@ -21,21 +24,39 @@ Use this runbook when `/admin` shows queue pressure, retrying/error requests, or
    - `request id`, `anomaly`, `attempts`;
    - `user`, `lottery`, `draw`;
    - `last error`.
-4. Inspect **Queue Snapshot**:
+4. Inspect **Operations Alerts**:
+   - severity and category;
+   - title and references.
+5. Inspect **Queue Snapshot**:
    - confirm active executing request is expected;
-   - check whether admin-priority items are taking precedence in queued rows.
-5. Apply one safe action at a time:
-   - `Set Admin Priority` for an urgent queued request;
-   - `Set Regular Priority` to release emergency priority after incident;
-   - `Enqueue As Admin Priority` for a confirmed request that must jump ahead.
-6. Re-open `/admin` and verify:
-   - queue order and priority are updated;
-   - terminal state and failure counters move in expected direction.
+   - check admin-priority ordering against urgent requests.
+6. Apply one safe action at a time:
+   - `Set Admin Priority` for urgent queued request;
+   - `Set Regular Priority` after urgency is resolved;
+   - `Enqueue As Admin Priority` for confirmed request that must jump ahead.
+7. Re-open `/admin` and verify:
+   - queue order/priority changed as expected;
+   - terminal status and alert list moved in expected direction.
+8. Open `/debug/admin-ops-lab` and verify read-only projections:
+   - queue rows match `/admin`;
+   - active alerts match `/admin`;
+   - recent operations audit event exists for the latest admin queue action.
+
+## Verification Checklist (Phase 8)
+
+1. Promote one queued request to `admin-priority` on `/admin`.
+2. Confirm `/admin` shows `status=ok` and updated priority.
+3. Open `/debug/admin-ops-lab` and verify:
+   - request priority is `admin-priority`;
+   - latest audit event action is `queue_priority_changed`.
+4. Seed or reproduce one retry/error path and verify:
+   - request appears in **Problem Requests**;
+   - queue/terminal alert appears in `/admin` and `/debug/admin-ops-lab`.
 
 ## Verification Commands
 
 ```powershell
-corepack pnpm --filter @lottery/application test -- admin-operations-query-service
+corepack pnpm --filter @lottery/application test -- admin-queue-service admin-operations-query-service operations-audit-service operations-alert-service
 corepack pnpm --filter @lottery/web typecheck
 corepack pnpm --filter @lottery/web build
 ```

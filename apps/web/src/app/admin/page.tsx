@@ -270,6 +270,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps): Promi
         <Link href="/debug/registry-lab">Open Registry Lab</Link>
       </p>
       <p>
+        <Link href="/debug/admin-ops-lab">Open Admin Ops Lab</Link>
+      </p>
+      <p>
         <Link href="/lottery/demo-lottery">Open Demo Lottery</Link>
       </p>
       <p>

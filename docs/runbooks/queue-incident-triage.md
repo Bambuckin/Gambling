@@ -77,7 +77,29 @@ State interpretation:
 - `degraded` - no active execution, but latest request chain includes error(s)
 - `offline` - three or more consecutive error outcomes
 
-## Step 6: Incident capture template
+## Step 6: Validate admin observability projections
+
+Inspect:
+
+- `apps/web/src/app/admin/page.tsx`
+- `apps/web/src/app/debug/admin-ops-lab/page.tsx`
+- `apps/web/src/lib/observability/operations-runtime.ts`
+- `packages/application/src/services/operations-alert-service.ts`
+
+Checks:
+
+1. `/admin` shows queue and terminal anomalies as alert rows.
+2. `/debug/admin-ops-lab` mirrors queue/terminal/alert data without mutation controls.
+3. Latest queue-priority action appears in operations audit events.
+
+Run:
+
+```powershell
+corepack pnpm --filter @lottery/application test -- admin-operations-query-service operations-alert-service operations-audit-service
+corepack pnpm --filter @lottery/web build
+```
+
+## Step 7: Incident capture template
 
 Record:
 

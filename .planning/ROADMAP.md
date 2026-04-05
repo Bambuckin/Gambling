@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Purchase Request Orchestration** - Построить подтверждение покупки, создание заявки, очередь и пользовательские статусы. (completed 2026-04-05)
 - [x] **Phase 6: Main Terminal Execution Engine** - Подключить последовательное исполнение на терминале, retry и нормализацию результата. (completed 2026-04-05)
 - [x] **Phase 7: Ticket Verification and Winnings** - Добавить хранение билетов, сверку после розыгрыша и начисление выигрыша. (completed 2026-04-05)
-- [ ] **Phase 8: Admin Operations and Observability** - Дать администратору полный операционный контур: очередь, ошибки, лотереи, терминал, алерты.
+- [x] **Phase 8: Admin Operations and Observability** - Дать администратору полный операционный контур: очередь, ошибки, лотереи, терминал, алерты. (completed 2026-04-05)
 - [ ] **Phase 9: Hardening, Extension Docs, and Release Readiness** - Закрыть документацию, расширяемость, регрессионные проверки и готовность к изменению системы.
 
 ## Phase Details
@@ -179,7 +179,7 @@ Plans:
 - [x] 08-01: Build admin queue and priority request management screens.
 - [x] 08-02: Build lottery controls, terminal status, and problem request dashboards.
 - [x] 08-03: Implement structured audit/event logging and alert aggregation.
-- [ ] 08-04: Add admin verification paths and operational troubleshooting notes.
+- [x] 08-04: Add admin verification paths and operational troubleshooting notes.
 
 ### Phase 9: Hardening, Extension Docs, and Release Readiness
 **Goal**: Make the system easier to change by finalizing living documentation, extension guides, and regression safety nets across modules.
@@ -214,5 +214,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Purchase Request Orchestration | 5/5 | Complete    | 2026-04-05 |
 | 6. Main Terminal Execution Engine | 5/5 | Complete    | 2026-04-05 |
 | 7. Ticket Verification and Winnings | 4/4 | Complete | 2026-04-05 |
-| 8. Admin Operations and Observability | 3/4 | In progress | - |
+| 8. Admin Operations and Observability | 4/4 | Complete    | 2026-04-05 |
 | 9. Hardening, Extension Docs, and Release Readiness | 0/4 | Not started | - |
+
