@@ -1,0 +1,18 @@
+{
+  "name": "lottery-terminal-operations-system",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "description": "Foundation workspace for lottery terminal operations system.",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @lottery/web dev",
+    "dev:worker": "pnpm --filter @lottery/terminal-worker dev",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "smoke": "pnpm --filter @lottery/test-kit smoke"
+  }
+}
