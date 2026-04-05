@@ -7,7 +7,7 @@
 
 ### Platform
 
-- [ ] **PLAT-01**: System boots as a shared web platform with separate modules for access, lottery registry, draw data, balance, purchase orchestration, terminal integration, admin, and audit.
+- [x] **PLAT-01**: System boots as a shared web platform with separate modules for access, lottery registry, draw data, balance, purchase orchestration, terminal integration, admin, and audit.
 - [ ] **PLAT-02**: Core module contracts allow stubs or mocks to replace concrete adapters during phased development and testing.
 - [ ] **PLAT-03**: Each delivered phase can be verified locally through smoke or integration checks without requiring the full production terminal.
 
@@ -83,7 +83,7 @@
 
 ### Documentation and Extension
 
-- [ ] **DOCS-01**: Repository includes living architecture, module responsibility, and data-flow documentation aligned with implemented modules.
+- [x] **DOCS-01**: Repository includes living architecture, module responsibility, and data-flow documentation aligned with implemented modules.
 - [ ] **DOCS-02**: Each module has local verification guidance covering unit, integration, or smoke checks for partial delivery.
 - [ ] **DOCS-03**: Adding or changing a lottery handler is documented through clear extension points and operator runbooks.
 
@@ -124,7 +124,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PLAT-01 | Phase 1 | Pending |
+| PLAT-01 | Phase 1 | Complete |
 | PLAT-02 | Phase 1 | Pending |
 | PLAT-03 | Phase 1 | Pending |
 | AUTH-01 | Phase 2 | Pending |
@@ -170,7 +170,7 @@
 | AUDT-01 | Phase 8 | Pending |
 | AUDT-02 | Phase 8 | Pending |
 | AUDT-03 | Phase 8 | Pending |
-| DOCS-01 | Phase 9 | Pending |
+| DOCS-01 | Phase 9 | Complete |
 | DOCS-02 | Phase 9 | Pending |
 | DOCS-03 | Phase 9 | Pending |
 

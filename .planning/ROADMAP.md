@@ -38,7 +38,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 4 plans
 
 Plans:
-- [ ] 01-01: Create repository skeleton, workspace conventions, and baseline bootstrap.
+- [x] 01-01: Create repository skeleton, workspace conventions, and baseline bootstrap.
 - [ ] 01-02: Define core domain models, state machines, and shared contracts.
 - [ ] 01-03: Add stub adapters for terminal, queue, and lottery handlers to support partial development.
 - [ ] 01-04: Document architecture decisions and wire smoke checks into local verification.
@@ -206,7 +206,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Contracts | 0/4 | Not started | - |
+| 1. Foundation Contracts | 1/4 | In Progress | - |
 | 2. Access and Unified Shell | 0/4 | Not started | - |
 | 3. Lottery Registry and Draw Pipeline | 0/4 | Not started | - |
 | 4. Internal Ledger and Wallet Views | 0/4 | Not started | - |
