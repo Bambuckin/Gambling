@@ -8,7 +8,7 @@ export interface PurchaseQueueItem {
   readonly attemptCount: number;
   readonly priority: PurchaseQueuePriority;
   readonly enqueuedAt: string;
-  readonly status: "queued";
+  readonly status: "queued" | "executing";
 }
 
 export interface PurchaseQueueStore {

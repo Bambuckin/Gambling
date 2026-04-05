@@ -136,7 +136,7 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 06-01: Implement durable queue worker and exclusive terminal execution lock.
+- [x] 06-01: Implement durable queue worker and exclusive terminal execution lock.
 - [ ] 06-02: Add handler registry and deterministic terminal adapter boundary.
 - [ ] 06-03: Capture raw terminal outputs and normalize execution outcomes.
 - [ ] 06-04: Implement retry policy, failure classification, and final error handling.
@@ -212,7 +212,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Lottery Registry and Draw Pipeline | 4/4 | Complete    | 2026-04-05 |
 | 4. Internal Ledger and Wallet Views | 4/4 | Complete | 2026-04-05 |
 | 5. Purchase Request Orchestration | 5/5 | Complete    | 2026-04-05 |
-| 6. Main Terminal Execution Engine | 0/5 | Not started | - |
+| 6. Main Terminal Execution Engine | 1/5 | In Progress|  |
 | 7. Ticket Verification and Winnings | 0/4 | Not started | - |
 | 8. Admin Operations and Observability | 0/4 | Not started | - |
 | 9. Hardening, Extension Docs, and Release Readiness | 0/4 | Not started | - |

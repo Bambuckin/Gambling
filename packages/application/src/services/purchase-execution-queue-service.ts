@@ -1,0 +1,123 @@
+import { appendPurchaseRequestTransition, rankQueueForExecution, type PurchaseRequestRecord } from "@lottery/domain";
+import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
+import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
+import type { TerminalExecutionLock } from "../ports/terminal-execution-lock.js";
+import type { TimeSource } from "../ports/time-source.js";
+
+export interface PurchaseExecutionQueueServiceDependencies {
+  readonly requestStore: PurchaseRequestStore;
+  readonly queueStore: PurchaseQueueStore;
+  readonly executionLock: TerminalExecutionLock;
+  readonly timeSource: TimeSource;
+}
+
+export interface ReserveNextQueuedRequestInput {
+  readonly workerId: string;
+}
+
+export interface ReserveNextQueuedRequestResult {
+  readonly workerId: string;
+  readonly request: PurchaseRequestRecord;
+  readonly queueItem: PurchaseQueueItem;
+}
+
+export class PurchaseExecutionQueueService {
+  private readonly requestStore: PurchaseRequestStore;
+  private readonly queueStore: PurchaseQueueStore;
+  private readonly executionLock: TerminalExecutionLock;
+  private readonly timeSource: TimeSource;
+
+  constructor(dependencies: PurchaseExecutionQueueServiceDependencies) {
+    this.requestStore = dependencies.requestStore;
+    this.queueStore = dependencies.queueStore;
+    this.executionLock = dependencies.executionLock;
+    this.timeSource = dependencies.timeSource;
+  }
+
+  async reserveNextQueuedRequest(input: ReserveNextQueuedRequestInput): Promise<ReserveNextQueuedRequestResult | null> {
+    const workerId = normalizeWorkerId(input.workerId);
+    const acquired = await this.executionLock.acquire(workerId);
+    if (!acquired) {
+      return null;
+    }
+
+    let keepLock = false;
+    try {
+      const queueItems = await this.queueStore.listQueueItems();
+      if (queueItems.some((item) => item.status === "executing")) {
+        return null;
+      }
+
+      const rankedCandidates = rankQueueForExecution(
+        queueItems.filter((item) => item.status === "queued").map((item) => ({
+          requestId: item.requestId,
+          priority: item.priority,
+          enqueuedAt: item.enqueuedAt
+        }))
+      );
+      if (rankedCandidates.length === 0) {
+        return null;
+      }
+
+      const queueByRequestId = new Map(queueItems.map((item) => [item.requestId, item]));
+      const nowIso = this.timeSource.nowIso();
+
+      for (const candidate of rankedCandidates) {
+        const queueItem = queueByRequestId.get(candidate.requestId);
+        if (!queueItem || queueItem.status !== "queued") {
+          continue;
+        }
+
+        const request = await this.requestStore.getRequestById(queueItem.requestId);
+        if (!request) {
+          await this.queueStore.removeQueueItem(queueItem.requestId);
+          continue;
+        }
+
+        if (request.state !== "queued" && request.state !== "retrying") {
+          continue;
+        }
+
+        const nextRequest = appendPurchaseRequestTransition(request, "executing", {
+          eventId: `${request.snapshot.requestId}:executing:${queueItem.attemptCount + 1}`,
+          occurredAt: nowIso,
+          note: `terminal execution reserved by ${workerId}`
+        });
+        const nextQueueItem: PurchaseQueueItem = {
+          ...queueItem,
+          attemptCount: queueItem.attemptCount + 1,
+          status: "executing"
+        };
+
+        await this.requestStore.saveRequest(nextRequest);
+        await this.queueStore.saveQueueItem(nextQueueItem);
+
+        keepLock = true;
+        return {
+          workerId,
+          request: nextRequest,
+          queueItem: nextQueueItem
+        };
+      }
+
+      return null;
+    } finally {
+      if (!keepLock) {
+        await this.executionLock.release(workerId);
+      }
+    }
+  }
+
+  async releaseExecutionLock(input: ReserveNextQueuedRequestInput): Promise<void> {
+    const workerId = normalizeWorkerId(input.workerId);
+    await this.executionLock.release(workerId);
+  }
+}
+
+function normalizeWorkerId(workerId: string): string {
+  const normalized = workerId.trim();
+  if (!normalized) {
+    throw new Error("workerId is required");
+  }
+  return normalized;
+}
