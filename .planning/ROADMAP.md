@@ -54,13 +54,14 @@ Plans:
   2. User and administrator see role-appropriate navigation and are blocked from unauthorized actions.
   3. Session survives normal page navigation and refresh until logout or expiry.
   4. Login, logout, and denied access events are visible in logs.
-**Plans**: 4 plans
+**Plans**: 5 plans
 
 Plans:
 - [x] 02-01: Implement access domain, identity storage, and session lifecycle.
 - [x] 02-02: Build unified shell routes, lottery entry flow, and post-login redirection.
 - [ ] 02-03: Add role guards for UI and server boundaries.
 - [ ] 02-04: Add access-related logs and verification scenarios.
+- [ ] 02-05: Add test UI harness for post-implementation access verification.
 
 ### Phase 3: Lottery Registry and Draw Pipeline
 **Goal**: Make lotteries configurable entities with per-lottery forms, visibility controls, and scheduled draw data freshness.
@@ -207,7 +208,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Contracts | 4/4 | Complete | 2026-04-05 |
-| 2. Access and Unified Shell | 2/4 | In Progress | - |
+| 2. Access and Unified Shell | 2/5 | In Progress | - |
 | 3. Lottery Registry and Draw Pipeline | 0/4 | Not started | - |
 | 4. Internal Ledger and Wallet Views | 0/4 | Not started | - |
 | 5. Purchase Request Orchestration | 0/5 | Not started | - |
