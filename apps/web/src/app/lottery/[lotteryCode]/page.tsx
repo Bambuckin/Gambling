@@ -6,7 +6,12 @@ import {
   PurchaseOrchestrationServiceError,
   PurchaseRequestServiceError
 } from "@lottery/application";
-import type { DrawAvailabilityState, PurchaseDraftPayload, PurchaseDraftPayloadValue } from "@lottery/domain";
+import type {
+  DrawAvailabilityState,
+  PurchaseDraftPayload,
+  PurchaseDraftPayloadValue,
+  RequestState
+} from "@lottery/domain";
 import { requireLotteryAccess, submitLogout } from "../../../lib/access/entry-flow";
 import { getLotteryRegistryService } from "../../../lib/registry/registry-runtime";
 import { LotteryFormFields } from "../../../lib/lottery-form/render-lottery-form-fields";
@@ -52,6 +57,9 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
   const walletEntries = await walletLedgerService.listEntries(access.identity.identityId);
   const walletMovements = buildWalletMovementRows(walletEntries, { limit: 10 });
   const confirmationDraft = decodeConfirmationToken(quoteToken, lottery.lotteryCode);
+  const purchaseRequests = (await getPurchaseRequestService().listByUser(access.identity.identityId))
+    .filter((request) => request.snapshot.lotteryCode === lottery.lotteryCode)
+    .sort((left, right) => right.snapshot.createdAt.localeCompare(left.snapshot.createdAt));
 
   return (
     <section>
@@ -165,6 +173,48 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
           </p>
         </section>
       ) : null}
+
+      <h2>Purchase Requests</h2>
+      {purchaseRequests.length === 0 ? (
+        <p>No purchase requests yet.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Request</th>
+              <th>State</th>
+              <th>Draw</th>
+              <th>Cost (minor)</th>
+              <th>Created at</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {purchaseRequests.map((request) => (
+              <tr key={request.snapshot.requestId}>
+                <td>{request.snapshot.requestId}</td>
+                <td>{request.state}</td>
+                <td>{request.snapshot.drawId}</td>
+                <td>
+                  {request.snapshot.costMinor} {request.snapshot.currency}
+                </td>
+                <td>{request.snapshot.createdAt}</td>
+                <td>
+                  {isRequestCancelableStatus(request.state) ? (
+                    <form action={cancelPurchaseRequestAction}>
+                      <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
+                      <input type="hidden" name="requestId" value={request.snapshot.requestId} />
+                      <button type="submit">Cancel Request</button>
+                    </form>
+                  ) : (
+                    "Not cancelable"
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <form action={handleLogoutAction}>
         <button type="submit">Logout</button>
@@ -314,6 +364,49 @@ async function confirmPurchaseRequestAction(formData: FormData): Promise<void> {
   }
 }
 
+async function cancelPurchaseRequestAction(formData: FormData): Promise<void> {
+  "use server";
+
+  const requestedLotteryCode = String(formData.get("lotteryCode") ?? "");
+  const requestId = String(formData.get("requestId") ?? "");
+  const access = await requireLotteryAccess(requestedLotteryCode);
+  const registryService = getLotteryRegistryService();
+  const lottery = await registryService.getLotteryByCode(access.lotteryCode);
+  if (!lottery) {
+    return redirect(`/lottery/${access.lotteryCode}?draft=error&message=Lottery+not+found`);
+  }
+
+  if (!requestId.trim()) {
+    return redirect(
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Request id is required for cancellation.")}`
+    );
+  }
+
+  try {
+    const canceled = await getPurchaseOrchestrationService().cancelQueuedRequest({
+      requestId,
+      userId: access.identity.identityId
+    });
+    const message = canceled.replayed
+      ? `Request ${canceled.request.snapshot.requestId} was already canceled.`
+      : `Request ${canceled.request.snapshot.requestId} canceled with state ${canceled.request.state}.`;
+
+    return redirect(
+      `/lottery/${lottery.lotteryCode}?draft=canceled&message=${encodeURIComponent(message)}`
+    );
+  } catch (error) {
+    if (error instanceof PurchaseOrchestrationServiceError) {
+      return redirect(
+        `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(error.message)}`
+      );
+    }
+
+    return redirect(
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Failed to cancel request.")}`
+    );
+  }
+}
+
 interface PurchaseConfirmationToken {
   readonly requestId: string;
   readonly lotteryCode: string;
@@ -391,6 +484,10 @@ function sanitizeConfirmationPayload(input: unknown): PurchaseDraftPayload | nul
   }
 
   return output;
+}
+
+function isRequestCancelableStatus(state: RequestState): boolean {
+  return state === "queued" || state === "retrying";
 }
 
 function readSingleParam(value: string | string[] | undefined): string | null {

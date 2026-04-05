@@ -12,6 +12,7 @@ export const REQUEST_STATES = [
 ] as const;
 
 export type RequestState = (typeof REQUEST_STATES)[number];
+export const CANCELABLE_REQUEST_STATES = ["queued", "retrying"] as const;
 
 export type RequestTransitionMap = Record<RequestState, readonly RequestState[]>;
 
@@ -59,4 +60,22 @@ export function applyRequestStateTransition(from: RequestState, to: RequestState
   }
 
   return to;
+}
+
+export function canCancelRequestState(state: RequestState): TransitionCheckResult {
+  if (CANCELABLE_REQUEST_STATES.includes(state as (typeof CANCELABLE_REQUEST_STATES)[number])) {
+    return { allowed: true };
+  }
+
+  return {
+    allowed: false,
+    reason: `request in state ${state} cannot be canceled`
+  };
+}
+
+export function assertCancelableRequestState(state: RequestState): void {
+  const check = canCancelRequestState(state);
+  if (!check.allowed) {
+    throw new Error(check.reason ?? "request cannot be canceled");
+  }
 }

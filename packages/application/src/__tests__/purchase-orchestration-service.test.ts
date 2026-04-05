@@ -155,6 +155,109 @@ describe("PurchaseOrchestrationService", () => {
       code: "request_state_invalid"
     });
   });
+
+  it("cancels queued request, releases reserve, and removes queue item", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([
+      createAwaitingRequest({
+        requestId: "req-303",
+        userId: "seed-user",
+        amountMinor: 250
+      })
+    ]);
+    const queueStore = new InMemoryPurchaseQueueStore();
+    const walletLedgerService = createWalletLedgerService();
+    await walletLedgerService.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 1000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit",
+      reference: {
+        requestId: "seed-credit"
+      }
+    });
+    const service = createService({
+      requestStore,
+      queueStore,
+      walletLedgerService
+    });
+
+    await service.confirmAndQueueRequest({
+      requestId: "req-303",
+      userId: "seed-user"
+    });
+    const cancelResult = await service.cancelQueuedRequest({
+      requestId: "req-303",
+      userId: "seed-user"
+    });
+
+    expect(cancelResult.replayed).toBe(false);
+    expect(cancelResult.request.state).toBe("reserve_released");
+    expect(cancelResult.request.journal.map((entry) => entry.toState)).toEqual([
+      "awaiting_confirmation",
+      "confirmed",
+      "queued",
+      "canceled",
+      "reserve_released"
+    ]);
+
+    const queueItems = await queueStore.listQueueItems();
+    expect(queueItems).toHaveLength(0);
+
+    const walletEntries = await walletLedgerService.listEntries("seed-user");
+    expect(walletEntries.map((entry) => entry.operation)).toEqual(["credit", "reserve", "release"]);
+    expect(walletEntries[2]?.idempotencyKey).toBe("req-303:cancel-release");
+  });
+
+  it("returns replayed when cancel is called after reserve is already released", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([
+      createAwaitingRequest({
+        requestId: "req-304",
+        userId: "seed-user",
+        amountMinor: 100
+      })
+    ]);
+    const queueStore = new InMemoryPurchaseQueueStore();
+    const walletLedgerService = createWalletLedgerService();
+    await walletLedgerService.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 1000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit",
+      reference: {
+        requestId: "seed-credit"
+      }
+    });
+    const service = createService({
+      requestStore,
+      queueStore,
+      walletLedgerService
+    });
+
+    await service.confirmAndQueueRequest({
+      requestId: "req-304",
+      userId: "seed-user"
+    });
+    await service.cancelQueuedRequest({
+      requestId: "req-304",
+      userId: "seed-user"
+    });
+    const replay = await service.cancelQueuedRequest({
+      requestId: "req-304",
+      userId: "seed-user"
+    });
+
+    expect(replay.replayed).toBe(true);
+    expect(replay.request.state).toBe("reserve_released");
+
+    const walletEntries = await walletLedgerService.listEntries("seed-user");
+    expect(walletEntries.map((entry) => entry.idempotencyKey)).toEqual([
+      "seed-user-credit",
+      "req-304:reserve",
+      "req-304:cancel-release"
+    ]);
+  });
 });
 
 function createService(input: {
@@ -242,6 +345,10 @@ class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
   async saveQueueItem(item: PurchaseQueueItem): Promise<void> {
     const filtered = this.items.filter((entry) => entry.requestId !== item.requestId);
     this.items = [...filtered, { ...item }];
+  }
+
+  async removeQueueItem(requestId: string): Promise<void> {
+    this.items = this.items.filter((entry) => entry.requestId !== requestId);
   }
 }
 

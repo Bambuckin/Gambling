@@ -15,4 +15,5 @@ export interface PurchaseQueueStore {
   listQueueItems(): Promise<readonly PurchaseQueueItem[]>;
   getQueueItemByRequestId(requestId: string): Promise<PurchaseQueueItem | null>;
   saveQueueItem(item: PurchaseQueueItem): Promise<void>;
+  removeQueueItem(requestId: string): Promise<void>;
 }

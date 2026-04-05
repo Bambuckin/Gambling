@@ -44,7 +44,7 @@ Use it before changing code across `apps/*` and `packages/*`.
 14. `apps/web/src/app/debug/wallet-lab/page.tsx` is verification-only and may read ledger snapshots/history, but must not perform ledger mutations.
 15. Purchase draft validation and pricing in lottery routes must call `PurchaseDraftService`; route files must not reimplement field rule or quote math.
 16. Immutable purchase request snapshot creation in lottery routes must call `PurchaseRequestService`; route files must not persist request records directly.
-17. Reserve + queue insertion for confirmed requests must call `PurchaseOrchestrationService`; route files must not mutate ledger or queue stores directly.
+17. Reserve + queue insertion and queued-request cancellation (with reserve release) must call `PurchaseOrchestrationService`; route files must not mutate ledger or queue stores directly.
 
 ## Integration Points (Disallowed)
 

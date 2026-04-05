@@ -1,4 +1,5 @@
 import {
+  assertCancelableRequestState,
   appendPurchaseRequestTransition,
   type PurchaseRequestRecord
 } from "@lottery/domain";
@@ -23,6 +24,16 @@ export interface ConfirmAndQueueInput {
 export interface ConfirmAndQueueResult {
   readonly request: PurchaseRequestRecord;
   readonly queueItem: PurchaseQueueItem;
+  readonly replayed: boolean;
+}
+
+export interface CancelQueuedRequestInput {
+  readonly requestId: string;
+  readonly userId: string;
+}
+
+export interface CancelQueuedRequestResult {
+  readonly request: PurchaseRequestRecord;
   readonly replayed: boolean;
 }
 
@@ -152,6 +163,107 @@ export class PurchaseOrchestrationService {
       request: nextRecord,
       queueItem: queueItemToSave,
       replayed: existing.state === "queued" && queuedItem !== null
+    };
+  }
+
+  async cancelQueuedRequest(input: CancelQueuedRequestInput): Promise<CancelQueuedRequestResult> {
+    const requestId = input.requestId.trim();
+    const userId = input.userId.trim();
+    if (!requestId) {
+      throw new PurchaseOrchestrationServiceError("requestId is required", {
+        code: "request_not_found"
+      });
+    }
+    if (!userId) {
+      throw new PurchaseOrchestrationServiceError("userId is required", {
+        code: "request_user_mismatch"
+      });
+    }
+
+    const existing = await this.requestStore.getRequestById(requestId);
+    if (!existing) {
+      throw new PurchaseOrchestrationServiceError(`request "${requestId}" not found`, {
+        code: "request_not_found"
+      });
+    }
+
+    if (existing.snapshot.userId !== userId) {
+      throw new PurchaseOrchestrationServiceError(`request "${requestId}" does not belong to user "${userId}"`, {
+        code: "request_user_mismatch"
+      });
+    }
+
+    if (existing.state === "reserve_released") {
+      await this.queueStore.removeQueueItem(requestId);
+      return {
+        request: existing,
+        replayed: true
+      };
+    }
+
+    let nextRecord = cloneRecord(existing);
+    const nowIso = this.timeSource.nowIso();
+
+    if (nextRecord.state === "canceled") {
+      await this.walletLedgerService.releaseReservedFunds({
+        userId: nextRecord.snapshot.userId,
+        requestId: nextRecord.snapshot.requestId,
+        amountMinor: nextRecord.snapshot.costMinor,
+        currency: nextRecord.snapshot.currency,
+        drawId: nextRecord.snapshot.drawId,
+        idempotencyKey: `${nextRecord.snapshot.requestId}:cancel-release`
+      });
+      nextRecord = appendPurchaseRequestTransition(nextRecord, "reserve_released", {
+        eventId: `${requestId}:reserve_released`,
+        occurredAt: nowIso,
+        note: "reserve released after cancellation"
+      });
+      await this.requestStore.saveRequest(nextRecord);
+      await this.queueStore.removeQueueItem(requestId);
+      return {
+        request: nextRecord,
+        replayed: false
+      };
+    }
+
+    try {
+      assertCancelableRequestState(nextRecord.state);
+    } catch (error) {
+      throw new PurchaseOrchestrationServiceError(
+        `request "${requestId}" cannot be canceled from state "${nextRecord.state}"`,
+        {
+          code: "request_state_invalid"
+        }
+      );
+    }
+
+    nextRecord = appendPurchaseRequestTransition(nextRecord, "canceled", {
+      eventId: `${requestId}:canceled`,
+      occurredAt: nowIso,
+      note: "request canceled before terminal execution"
+    });
+
+    await this.walletLedgerService.releaseReservedFunds({
+      userId: nextRecord.snapshot.userId,
+      requestId: nextRecord.snapshot.requestId,
+      amountMinor: nextRecord.snapshot.costMinor,
+      currency: nextRecord.snapshot.currency,
+      drawId: nextRecord.snapshot.drawId,
+      idempotencyKey: `${nextRecord.snapshot.requestId}:cancel-release`
+    });
+
+    nextRecord = appendPurchaseRequestTransition(nextRecord, "reserve_released", {
+      eventId: `${requestId}:reserve_released`,
+      occurredAt: nowIso,
+      note: "reserve released after cancellation"
+    });
+
+    await this.requestStore.saveRequest(nextRecord);
+    await this.queueStore.removeQueueItem(requestId);
+
+    return {
+      request: nextRecord,
+      replayed: false
     };
   }
 }

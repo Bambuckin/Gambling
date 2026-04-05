@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { RequestState } from "../request-state.js";
-import { applyRequestStateTransition, canTransitionRequestState } from "../request-state.js";
+import {
+  applyRequestStateTransition,
+  assertCancelableRequestState,
+  canCancelRequestState,
+  canTransitionRequestState
+} from "../request-state.js";
 
 describe("request state machine", () => {
   it("allows a happy path from creation to success", () => {
@@ -28,5 +33,14 @@ describe("request state machine", () => {
 
     const successToExecuting = canTransitionRequestState("success", "executing");
     expect(successToExecuting.allowed).toBe(false);
+  });
+
+  it("allows cancellation only for queued and retrying states", () => {
+    expect(canCancelRequestState("queued").allowed).toBe(true);
+    expect(canCancelRequestState("retrying").allowed).toBe(true);
+    expect(canCancelRequestState("executing").allowed).toBe(false);
+    expect(() => assertCancelableRequestState("success")).toThrow(
+      "request in state success cannot be canceled"
+    );
   });
 });

@@ -23,6 +23,11 @@ export class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
     const filtered = this.items.filter((entry) => entry.requestId !== item.requestId);
     this.items = [...filtered, cloneItem(item)];
   }
+
+  async removeQueueItem(requestId: string): Promise<void> {
+    const normalized = requestId.trim();
+    this.items = this.items.filter((entry) => entry.requestId !== normalized);
+  }
 }
 
 function compareQueueItems(left: PurchaseQueueItem, right: PurchaseQueueItem): number {

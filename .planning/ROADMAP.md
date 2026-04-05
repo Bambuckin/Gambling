@@ -118,7 +118,7 @@ Plans:
 - [x] 05-01: Implement lottery-specific validation and pricing pipeline.
 - [x] 05-02: Build confirmation dialog and immutable request snapshot creation.
 - [x] 05-03: Connect request creation to ledger reserve and queue insertion.
-- [ ] 05-04: Add cancelability rules and request state machine transitions.
+- [x] 05-04: Add cancelability rules and request state machine transitions.
 - [ ] 05-05: Build user request history/status views and verification coverage.
 
 ### Phase 6: Main Terminal Execution Engine
@@ -211,7 +211,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. Access and Unified Shell | 5/5 | Complete   | 2026-04-05 |
 | 3. Lottery Registry and Draw Pipeline | 4/4 | Complete    | 2026-04-05 |
 | 4. Internal Ledger and Wallet Views | 4/4 | Complete | 2026-04-05 |
-| 5. Purchase Request Orchestration | 3/5 | In Progress|  |
+| 5. Purchase Request Orchestration | 4/5 | In Progress|  |
 | 6. Main Terminal Execution Engine | 0/5 | Not started | - |
 | 7. Ticket Verification and Winnings | 0/4 | Not started | - |
 | 8. Admin Operations and Observability | 0/4 | Not started | - |
