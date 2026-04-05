@@ -2,6 +2,7 @@ import {
   PurchaseExecutionQueueService,
   SystemTimeSource,
   TerminalExecutionAttemptService,
+  TerminalRetryService,
   type TerminalExecutionResult
 } from "@lottery/application";
 import {
@@ -31,6 +32,9 @@ const attemptService = new TerminalExecutionAttemptService({
   requestStore,
   queueStore
 });
+const retryService = new TerminalRetryService({
+  maxAttempts: 3
+});
 const handlerRuntime = new TerminalHandlerRuntime();
 
 let state: WorkerBootState = "booting";
@@ -38,7 +42,7 @@ let isPolling = false;
 
 function logBootMessage(): void {
   console.log(`[terminal-worker] ${bootTimestamp} - queue reservation host started`);
-  console.log("[terminal-worker] deterministic handler resolution and attempt journaling are enabled");
+  console.log("[terminal-worker] handler resolution, attempt journaling, and retry policy are enabled");
 }
 
 async function pollQueueForExecution(): Promise<void> {
@@ -84,12 +88,20 @@ async function pollQueueForExecution(): Promise<void> {
           attempt: reservation.queueItem.attemptCount
         })
     );
+    const retryAwareResult: TerminalExecutionResult = {
+      ...terminalResult,
+      nextState: retryService.resolveNextState({
+        attempt: reservation.queueItem.attemptCount,
+        candidateState: terminalResult.nextState,
+        rawOutput: terminalResult.rawOutput
+      })
+    };
 
     const attemptRecord = await attemptService.recordAttemptResult({
       requestId: reservation.request.snapshot.requestId,
       attempt: reservation.queueItem.attemptCount,
       startedAt,
-      result: terminalResult
+      result: retryAwareResult
     });
 
     console.log(

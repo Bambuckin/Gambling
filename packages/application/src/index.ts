@@ -23,3 +23,4 @@ export * from "./services/purchase-request-query-service.js";
 export * from "./services/purchase-execution-queue-service.js";
 export * from "./services/terminal-handler-resolver-service.js";
 export * from "./services/terminal-execution-attempt-service.js";
+export * from "./services/terminal-retry-service.js";
