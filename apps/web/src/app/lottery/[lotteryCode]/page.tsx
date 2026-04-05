@@ -5,6 +5,7 @@ import { requireLotteryAccess, submitLogout } from "../../../lib/access/entry-fl
 import { getLotteryRegistryService } from "../../../lib/registry/registry-runtime";
 import { LotteryFormFields } from "../../../lib/lottery-form/render-lottery-form-fields";
 import { getDrawRefreshService } from "../../../lib/draw/draw-runtime";
+import { LEDGER_DEFAULT_CURRENCY, getWalletLedgerService } from "../../../lib/ledger/ledger-runtime";
 
 type LotteryPageProps = {
   readonly params: Promise<{
@@ -36,13 +37,18 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
 
   const drawState = await getDrawRefreshService().getDrawState(lottery.lotteryCode);
   const purchaseBlockedReason = describePurchaseBlockReason(drawState);
-  const previewBalanceMinor = resolvePreviewBalanceMinor(access.identity.identityId);
+  const walletLedgerService = getWalletLedgerService();
+  const walletSnapshot = await walletLedgerService.getWalletSnapshot(access.identity.identityId, LEDGER_DEFAULT_CURRENCY);
+  const walletEntries = await walletLedgerService.listEntries(access.identity.identityId);
 
   return (
     <section>
       <h1>Lottery: {lottery.title}</h1>
       <p>Lottery code: {lottery.lotteryCode}</p>
-      <p>Current balance (preview, minor): {previewBalanceMinor}</p>
+      <p>Wallet currency: {walletSnapshot.currency}</p>
+      <p>Wallet available (minor): {walletSnapshot.availableMinor}</p>
+      <p>Wallet reserved (minor): {walletSnapshot.reservedMinor}</p>
+      <p>Wallet movement entries: {walletEntries.length}</p>
       <p>Session active for: {access.identity.displayName}</p>
       <p>Role: {access.identity.role}</p>
       <p>Session id: {access.session.sessionId}</p>
@@ -134,12 +140,4 @@ function describePurchaseBlockReason(drawState: DrawAvailabilityState): string |
   }
 
   return null;
-}
-
-function resolvePreviewBalanceMinor(identityId: string): number {
-  let hash = 0;
-  for (let index = 0; index < identityId.length; index += 1) {
-    hash = (hash + identityId.charCodeAt(index)) % 100000;
-  }
-  return 100000 + hash;
 }

@@ -7,6 +7,8 @@ export * from "./ports/password-verifier.js";
 export * from "./ports/access-audit-log.js";
 export * from "./ports/lottery-registry-store.js";
 export * from "./ports/draw-store.js";
+export * from "./ports/ledger-store.js";
 export * from "./services/access-service.js";
 export * from "./services/lottery-registry-service.js";
 export * from "./services/draw-refresh-service.js";
+export * from "./services/wallet-ledger-service.js";
