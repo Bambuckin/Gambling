@@ -1,6 +1,6 @@
 # Lottery Terminal Operations System
 
-Status: Phase 1 in progress (`01-01` and `01-02` complete).
+Status: Phase 1 in progress (`01-01`, `01-02`, and `01-03` complete; `01-04` active).
 
 This repository is designed so a new session can continue from files on disk only.
 
@@ -13,8 +13,14 @@ This repository is designed so a new session can continue from files on disk onl
 5. `docs/adr/ADR-001-stack-and-repo-shape.md`
 6. `.planning/phases/01-foundation-contracts/01-CONTEXT.md`
 7. `.planning/phases/01-foundation-contracts/01-RESEARCH.md`
-8. `.planning/phases/01-foundation-contracts/01-01-PLAN.md` through `01-04-PLAN.md`
-9. `.planning/phases/01-foundation-contracts/.continue-here.md`
+8. `docs/modules/boundary-catalog.md`
+9. `docs/modules/lottery-handler-extension.md`
+10. `docs/runbooks/local-bootstrap.md`
+11. `docs/runbooks/fake-terminal-smoke.md`
+12. `docs/runbooks/queue-incident-triage.md`
+13. `.planning/codebase/STRUCTURE.md`
+14. `.planning/phases/01-foundation-contracts/01-01-PLAN.md` through `01-04-PLAN.md`
+15. `.planning/phases/01-foundation-contracts/.continue-here.md`
 
 ## Locked Baseline (ADR-001)
 
@@ -56,8 +62,11 @@ Root workspace config files:
 ## Documentation Map
 
 - `docs/adr/` - architectural decisions and constraints
-- `docs/modules/` - module responsibilities and extension notes
-- `docs/runbooks/` - operator and maintenance procedures
+- `docs/modules/boundary-catalog.md` - concrete ownership and anti-ownership map
+- `docs/modules/lottery-handler-extension.md` - deterministic workflow for adding/changing lottery handlers
+- `docs/runbooks/local-bootstrap.md` - local environment bootstrap before continuing work
+- `docs/runbooks/fake-terminal-smoke.md` - smoke verification path without production terminal
+- `docs/runbooks/queue-incident-triage.md` - queue/terminal triage baseline at current phase
 - `.planning/` - roadmap, plans, summaries, and state continuity
 
 ## Environment Note
@@ -67,4 +76,4 @@ Root workspace config files:
 
 ## Immediate Next Step
 
-Execute `.planning/phases/01-foundation-contracts/01-03-PLAN.md`.
+Complete `.planning/phases/01-foundation-contracts/01-04-PLAN.md`.
