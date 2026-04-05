@@ -6,6 +6,8 @@ Current runbooks:
 
 - `local-bootstrap.md` - verify git/planning baseline before implementation resumes
 - `fake-terminal-smoke.md` - smoke checks without production terminal access
+- `module-verification-matrix.md` - per-module local verification commands and triage map
+- `regression-recipes.md` - critical cross-module regression recipes before release
 - `registry-and-draw-verification.md` - registry controls and draw freshness checks
 - `wallet-verification.md` - balance snapshot/history verification
 - `purchase-request-verification.md` - Phase 5 purchase request lifecycle checks
