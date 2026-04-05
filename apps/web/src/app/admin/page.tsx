@@ -2,10 +2,11 @@ import type { ReactElement } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { DrawAvailabilityState } from "@lottery/domain";
-import type { LotteryOrderDirection } from "@lottery/application";
+import type { LotteryOrderDirection, PurchaseQueuePriority } from "@lottery/application";
 import { requireAdminAccess, submitLogout } from "../../lib/access/entry-flow";
 import { getDrawRefreshService } from "../../lib/draw/draw-runtime";
 import { listAdminRegistryEntries, moveAdminLottery, setAdminLotteryEnabled } from "../../lib/registry/admin-registry";
+import { getAdminQueueService } from "../../lib/purchase/purchase-runtime";
 
 type AdminPageProps = {
   readonly searchParams: Promise<{
@@ -17,9 +18,12 @@ type AdminPageProps = {
 export default async function AdminPage({ searchParams }: AdminPageProps): Promise<ReactElement> {
   const access = await requireAdminAccess("/admin");
   const entries = await listAdminRegistryEntries();
-  const drawStates = await Promise.all(
-    entries.map(async (entry) => [entry.lotteryCode, await getDrawRefreshService().getDrawState(entry.lotteryCode)] as const)
-  );
+  const [drawStates, queueSnapshot] = await Promise.all([
+    Promise.all(
+      entries.map(async (entry) => [entry.lotteryCode, await getDrawRefreshService().getDrawState(entry.lotteryCode)] as const)
+    ),
+    getAdminQueueService().getQueueSnapshot()
+  ]);
   const drawStateByLotteryCode = new Map<string, DrawAvailabilityState>(drawStates);
   const resolvedSearchParams = await searchParams;
   const status = readSingleParam(resolvedSearchParams.status);
@@ -34,6 +38,75 @@ export default async function AdminPage({ searchParams }: AdminPageProps): Promi
       <p>Session id: {access.session.sessionId}</p>
       <p>Total lotteries: {entries.length}</p>
       {status && statusMessage ? <p>Action [{status}]: {statusMessage}</p> : null}
+
+      <h2>Queue Operations</h2>
+      <p>Queue depth: {queueSnapshot.queueDepth}</p>
+      <p>Queued items: {queueSnapshot.queuedCount}</p>
+      <p>Executing items: {queueSnapshot.executingCount}</p>
+      <p>Admin-priority queued: {queueSnapshot.adminPriorityQueuedCount}</p>
+      <p>Regular queued: {queueSnapshot.regularQueuedCount}</p>
+      <p>Active execution request: {queueSnapshot.activeExecutionRequestId ?? "none"}</p>
+
+      <form action={enqueueAsAdminPriorityAction}>
+        <label htmlFor="priority-request-id">Queue existing request as admin-priority</label>
+        <input id="priority-request-id" name="requestId" type="text" placeholder="req-..." required />
+        <button type="submit">Enqueue As Admin Priority</button>
+      </form>
+
+      <h3>Queue Snapshot</h3>
+      {queueSnapshot.rows.length === 0 ? (
+        <p>Queue is empty.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Request</th>
+              <th>User</th>
+              <th>Lottery</th>
+              <th>Status</th>
+              <th>Request state</th>
+              <th>Priority</th>
+              <th>Execution order</th>
+              <th>Attempts</th>
+              <th>Enqueued at</th>
+              <th>Controls</th>
+            </tr>
+          </thead>
+          <tbody>
+            {queueSnapshot.rows.map((row) => {
+              const nextPriority: PurchaseQueuePriority =
+                row.priority === "admin-priority" ? "regular" : "admin-priority";
+
+              return (
+                <tr key={row.requestId}>
+                  <td>{row.requestId}</td>
+                  <td>{row.userId}</td>
+                  <td>{row.lotteryCode}</td>
+                  <td>{row.status}</td>
+                  <td>{row.requestState}</td>
+                  <td>{row.priority}</td>
+                  <td>{row.executionOrder ?? "active"}</td>
+                  <td>{row.attemptCount}</td>
+                  <td>{row.enqueuedAt}</td>
+                  <td>
+                    {row.status === "queued" ? (
+                      <form action={setQueuePriorityAction}>
+                        <input type="hidden" name="requestId" value={row.requestId} />
+                        <input type="hidden" name="priority" value={nextPriority} />
+                        <button type="submit">
+                          {nextPriority === "admin-priority" ? "Set Admin Priority" : "Set Regular Priority"}
+                        </button>
+                      </form>
+                    ) : (
+                      "Executing item is locked"
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
 
       <table>
         <thead>
@@ -146,6 +219,49 @@ async function moveLotteryAction(formData: FormData): Promise<void> {
   }
 }
 
+async function setQueuePriorityAction(formData: FormData): Promise<void> {
+  "use server";
+
+  await requireAdminAccess("/admin");
+
+  try {
+    const requestId = readRequiredFormValue(formData, "requestId");
+    const priority = readPriorityFormValue(formData.get("priority"));
+    const queueItem = await getAdminQueueService().setQueuePriority({
+      requestId,
+      priority
+    });
+    return redirect(
+      `/admin?status=ok&message=${encodeURIComponent(`request ${queueItem.requestId} priority -> ${queueItem.priority}`)}`
+    );
+  } catch (error) {
+    return redirect(
+      `/admin?status=error&message=${encodeURIComponent(resolveErrorMessage(error, "Failed to set queue priority"))}`
+    );
+  }
+}
+
+async function enqueueAsAdminPriorityAction(formData: FormData): Promise<void> {
+  "use server";
+
+  await requireAdminAccess("/admin");
+
+  try {
+    const requestId = readRequiredFormValue(formData, "requestId");
+    const queued = await getAdminQueueService().enqueueAsAdminPriority({
+      requestId
+    });
+    const message = queued.replayed
+      ? `request ${queued.request.snapshot.requestId} already queued; priority is ${queued.queueItem.priority}`
+      : `request ${queued.request.snapshot.requestId} queued as ${queued.queueItem.priority}`;
+    return redirect(`/admin?status=ok&message=${encodeURIComponent(message)}`);
+  } catch (error) {
+    return redirect(
+      `/admin?status=error&message=${encodeURIComponent(resolveErrorMessage(error, "Failed to queue admin priority request"))}`
+    );
+  }
+}
+
 async function logoutFromAdminAction(): Promise<void> {
   "use server";
 
@@ -193,6 +309,15 @@ function readDirectionFormValue(value: FormDataEntryValue | null): LotteryOrderD
   }
 
   throw new Error("Invalid reorder direction");
+}
+
+function readPriorityFormValue(value: FormDataEntryValue | null): PurchaseQueuePriority {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "regular" || normalized === "admin-priority") {
+    return normalized;
+  }
+
+  throw new Error("Invalid queue priority value");
 }
 
 function resolveErrorMessage(error: unknown, fallback: string): string {

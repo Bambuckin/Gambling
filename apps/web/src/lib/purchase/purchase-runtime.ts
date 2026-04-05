@@ -1,4 +1,5 @@
 import {
+  AdminQueueService,
   PurchaseOrchestrationService,
   PurchaseRequestQueryService,
   PurchaseRequestService,
@@ -14,6 +15,7 @@ const ticketStore = new InMemoryTicketStore();
 let cachedRequestService: PurchaseRequestService | null = null;
 let cachedOrchestrationService: PurchaseOrchestrationService | null = null;
 let cachedQueryService: PurchaseRequestQueryService | null = null;
+let cachedAdminQueueService: AdminQueueService | null = null;
 
 export function getPurchaseRequestService(): PurchaseRequestService {
   if (!cachedRequestService) {
@@ -48,6 +50,18 @@ export function getPurchaseRequestQueryService(): PurchaseRequestQueryService {
   }
 
   return cachedQueryService;
+}
+
+export function getAdminQueueService(): AdminQueueService {
+  if (!cachedAdminQueueService) {
+    cachedAdminQueueService = new AdminQueueService({
+      requestStore,
+      queueStore,
+      purchaseOrchestrationService: getPurchaseOrchestrationService()
+    });
+  }
+
+  return cachedAdminQueueService;
 }
 
 export function getPurchaseRuntimeStores(): {

@@ -21,6 +21,7 @@ export * from "./services/wallet-ledger-service.js";
 export * from "./services/purchase-draft-service.js";
 export * from "./services/purchase-request-service.js";
 export * from "./services/purchase-orchestration-service.js";
+export * from "./services/admin-queue-service.js";
 export * from "./services/purchase-request-query-service.js";
 export * from "./services/ticket-query-service.js";
 export * from "./services/purchase-execution-queue-service.js";

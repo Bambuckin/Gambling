@@ -156,6 +156,135 @@ describe("PurchaseOrchestrationService", () => {
     });
   });
 
+  it("queues awaiting request as admin-priority through admin enqueue path", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([
+      createAwaitingRequest({
+        requestId: "req-302a",
+        userId: "seed-user",
+        amountMinor: 120
+      })
+    ]);
+    const queueStore = new InMemoryPurchaseQueueStore();
+    const walletLedgerService = createWalletLedgerService();
+    await walletLedgerService.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 1000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit",
+      reference: {
+        requestId: "seed-credit"
+      }
+    });
+
+    const service = createService({
+      requestStore,
+      queueStore,
+      walletLedgerService
+    });
+
+    const result = await service.confirmAndQueueAsAdminPriority({
+      requestId: "req-302a"
+    });
+
+    expect(result.replayed).toBe(false);
+    expect(result.queueItem.priority).toBe("admin-priority");
+    expect(result.request.state).toBe("queued");
+  });
+
+  it("reprioritizes queued request from regular to admin-priority", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([
+      createAwaitingRequest({
+        requestId: "req-302b",
+        userId: "seed-user",
+        amountMinor: 140
+      })
+    ]);
+    const queueStore = new InMemoryPurchaseQueueStore();
+    const walletLedgerService = createWalletLedgerService();
+    await walletLedgerService.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 1000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit",
+      reference: {
+        requestId: "seed-credit"
+      }
+    });
+
+    const service = createService({
+      requestStore,
+      queueStore,
+      walletLedgerService
+    });
+
+    await service.confirmAndQueueRequest({
+      requestId: "req-302b",
+      userId: "seed-user"
+    });
+    const reprioritized = await service.reprioritizeQueuedRequest({
+      requestId: "req-302b",
+      priority: "admin-priority"
+    });
+
+    expect(reprioritized.priority).toBe("admin-priority");
+    expect(reprioritized.status).toBe("queued");
+  });
+
+  it("rejects reprioritizing non-queued item", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([
+      createAwaitingRequest({
+        requestId: "req-302c",
+        userId: "seed-user",
+        amountMinor: 160
+      })
+    ]);
+    const queueStore = new InMemoryPurchaseQueueStore();
+    const walletLedgerService = createWalletLedgerService();
+    await walletLedgerService.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 1000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit",
+      reference: {
+        requestId: "seed-credit"
+      }
+    });
+
+    const service = createService({
+      requestStore,
+      queueStore,
+      walletLedgerService
+    });
+
+    await service.confirmAndQueueRequest({
+      requestId: "req-302c",
+      userId: "seed-user"
+    });
+    await queueStore.saveQueueItem({
+      requestId: "req-302c",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-100",
+      attemptCount: 1,
+      priority: "regular",
+      enqueuedAt: "2026-04-05T20:10:00.000Z",
+      status: "executing"
+    });
+
+    const action = service.reprioritizeQueuedRequest({
+      requestId: "req-302c",
+      priority: "admin-priority"
+    });
+
+    await expect(action).rejects.toBeInstanceOf(PurchaseOrchestrationServiceError);
+    await expect(action).rejects.toMatchObject({
+      code: "request_state_invalid"
+    });
+  });
+
   it("cancels queued request, releases reserve, and removes queue item", async () => {
     const requestStore = new InMemoryPurchaseRequestStore([
       createAwaitingRequest({

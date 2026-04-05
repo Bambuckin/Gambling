@@ -37,6 +37,15 @@ export interface CancelQueuedRequestResult {
   readonly replayed: boolean;
 }
 
+export interface ReprioritizeQueuedRequestInput {
+  readonly requestId: string;
+  readonly priority: PurchaseQueuePriority;
+}
+
+export interface ConfirmAndQueueAsAdminPriorityInput {
+  readonly requestId: string;
+}
+
 export type PurchaseOrchestrationErrorCode =
   | "request_not_found"
   | "request_user_mismatch"
@@ -164,6 +173,79 @@ export class PurchaseOrchestrationService {
       queueItem: queueItemToSave,
       replayed: existing.state === "queued" && queuedItem !== null
     };
+  }
+
+  async confirmAndQueueAsAdminPriority(input: ConfirmAndQueueAsAdminPriorityInput): Promise<ConfirmAndQueueResult> {
+    const requestId = input.requestId.trim();
+    if (!requestId) {
+      throw new PurchaseOrchestrationServiceError("requestId is required", {
+        code: "request_not_found"
+      });
+    }
+
+    const existing = await this.requestStore.getRequestById(requestId);
+    if (!existing) {
+      throw new PurchaseOrchestrationServiceError(`request "${requestId}" not found`, {
+        code: "request_not_found"
+      });
+    }
+
+    const result = await this.confirmAndQueueRequest({
+      requestId,
+      userId: existing.snapshot.userId,
+      priority: "admin-priority"
+    });
+
+    if (result.queueItem.priority === "admin-priority" || result.queueItem.status !== "queued") {
+      return result;
+    }
+
+    const reprioritizedQueueItem = await this.reprioritizeQueuedRequest({
+      requestId,
+      priority: "admin-priority"
+    });
+
+    return {
+      ...result,
+      queueItem: reprioritizedQueueItem
+    };
+  }
+
+  async reprioritizeQueuedRequest(input: ReprioritizeQueuedRequestInput): Promise<PurchaseQueueItem> {
+    const requestId = input.requestId.trim();
+    if (!requestId) {
+      throw new PurchaseOrchestrationServiceError("requestId is required", {
+        code: "request_not_found"
+      });
+    }
+
+    const queueItem = await this.queueStore.getQueueItemByRequestId(requestId);
+    if (!queueItem) {
+      throw new PurchaseOrchestrationServiceError(`queued request "${requestId}" not found`, {
+        code: "request_not_found"
+      });
+    }
+
+    if (queueItem.status !== "queued") {
+      throw new PurchaseOrchestrationServiceError(
+        `request "${requestId}" cannot be reprioritized from queue status "${queueItem.status}"`,
+        {
+          code: "request_state_invalid"
+        }
+      );
+    }
+
+    if (queueItem.priority === input.priority) {
+      return queueItem;
+    }
+
+    const nextQueueItem: PurchaseQueueItem = {
+      ...queueItem,
+      priority: input.priority
+    };
+
+    await this.queueStore.saveQueueItem(nextQueueItem);
+    return nextQueueItem;
   }
 
   async cancelQueuedRequest(input: CancelQueuedRequestInput): Promise<CancelQueuedRequestResult> {
