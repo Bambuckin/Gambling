@@ -1,4 +1,5 @@
 import {
+  AdminOperationsQueryService,
   AdminQueueService,
   PurchaseOrchestrationService,
   PurchaseRequestQueryService,
@@ -16,6 +17,7 @@ let cachedRequestService: PurchaseRequestService | null = null;
 let cachedOrchestrationService: PurchaseOrchestrationService | null = null;
 let cachedQueryService: PurchaseRequestQueryService | null = null;
 let cachedAdminQueueService: AdminQueueService | null = null;
+let cachedAdminOperationsQueryService: AdminOperationsQueryService | null = null;
 
 export function getPurchaseRequestService(): PurchaseRequestService {
   if (!cachedRequestService) {
@@ -62,6 +64,18 @@ export function getAdminQueueService(): AdminQueueService {
   }
 
   return cachedAdminQueueService;
+}
+
+export function getAdminOperationsQueryService(): AdminOperationsQueryService {
+  if (!cachedAdminOperationsQueryService) {
+    cachedAdminOperationsQueryService = new AdminOperationsQueryService({
+      requestStore,
+      queueStore,
+      timeSource: new SystemTimeSource()
+    });
+  }
+
+  return cachedAdminOperationsQueryService;
 }
 
 export function getPurchaseRuntimeStores(): {

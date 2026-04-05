@@ -6,7 +6,7 @@ import type { LotteryOrderDirection, PurchaseQueuePriority } from "@lottery/appl
 import { requireAdminAccess, submitLogout } from "../../lib/access/entry-flow";
 import { getDrawRefreshService } from "../../lib/draw/draw-runtime";
 import { listAdminRegistryEntries, moveAdminLottery, setAdminLotteryEnabled } from "../../lib/registry/admin-registry";
-import { getAdminQueueService } from "../../lib/purchase/purchase-runtime";
+import { getAdminOperationsQueryService, getAdminQueueService } from "../../lib/purchase/purchase-runtime";
 
 type AdminPageProps = {
   readonly searchParams: Promise<{
@@ -18,11 +18,12 @@ type AdminPageProps = {
 export default async function AdminPage({ searchParams }: AdminPageProps): Promise<ReactElement> {
   const access = await requireAdminAccess("/admin");
   const entries = await listAdminRegistryEntries();
-  const [drawStates, queueSnapshot] = await Promise.all([
+  const [drawStates, queueSnapshot, operationsSnapshot] = await Promise.all([
     Promise.all(
       entries.map(async (entry) => [entry.lotteryCode, await getDrawRefreshService().getDrawState(entry.lotteryCode)] as const)
     ),
-    getAdminQueueService().getQueueSnapshot()
+    getAdminQueueService().getQueueSnapshot(),
+    getAdminOperationsQueryService().getSnapshot()
   ]);
   const drawStateByLotteryCode = new Map<string, DrawAvailabilityState>(drawStates);
   const resolvedSearchParams = await searchParams;
@@ -40,11 +41,38 @@ export default async function AdminPage({ searchParams }: AdminPageProps): Promi
       {status && statusMessage ? <p>Action [{status}]: {statusMessage}</p> : null}
 
       <h2>Queue Operations</h2>
-      <p>Queue depth: {queueSnapshot.queueDepth}</p>
-      <p>Queued items: {queueSnapshot.queuedCount}</p>
-      <p>Executing items: {queueSnapshot.executingCount}</p>
-      <p>Admin-priority queued: {queueSnapshot.adminPriorityQueuedCount}</p>
-      <p>Regular queued: {queueSnapshot.regularQueuedCount}</p>
+      <h3>Terminal Status</h3>
+      <table>
+        <tbody>
+          <tr>
+            <th>State</th>
+            <td>{operationsSnapshot.terminal.state}</td>
+          </tr>
+          <tr>
+            <th>Active request</th>
+            <td>{operationsSnapshot.terminal.activeRequestId ?? "none"}</td>
+          </tr>
+          <tr>
+            <th>Consecutive failures</th>
+            <td>{operationsSnapshot.terminal.consecutiveFailures}</td>
+          </tr>
+          <tr>
+            <th>Last error at</th>
+            <td>{operationsSnapshot.terminal.lastErrorAt ?? "none"}</td>
+          </tr>
+          <tr>
+            <th>Checked at</th>
+            <td>{operationsSnapshot.terminal.checkedAt}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Queue Pressure</h3>
+      <p>Queue depth: {operationsSnapshot.queue.queueDepth}</p>
+      <p>Queued items: {operationsSnapshot.queue.queuedCount}</p>
+      <p>Executing items: {operationsSnapshot.queue.executingCount}</p>
+      <p>Admin-priority queued: {operationsSnapshot.queue.adminPriorityQueuedCount}</p>
+      <p>Regular queued: {operationsSnapshot.queue.regularQueuedCount}</p>
       <p>Active execution request: {queueSnapshot.activeExecutionRequestId ?? "none"}</p>
 
       <form action={enqueueAsAdminPriorityAction}>
@@ -104,6 +132,46 @@ export default async function AdminPage({ searchParams }: AdminPageProps): Promi
                 </tr>
               );
             })}
+          </tbody>
+        </table>
+      )}
+
+      <h3>Problem Requests</h3>
+      {operationsSnapshot.problemRequests.length === 0 ? (
+        <p>No retrying, error, or stale executing requests detected.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Request</th>
+              <th>Anomaly</th>
+              <th>Status</th>
+              <th>Queue status</th>
+              <th>Queue priority</th>
+              <th>Attempts</th>
+              <th>User</th>
+              <th>Lottery</th>
+              <th>Draw</th>
+              <th>Last error</th>
+              <th>Updated at</th>
+            </tr>
+          </thead>
+          <tbody>
+            {operationsSnapshot.problemRequests.map((problem) => (
+              <tr key={problem.requestId}>
+                <td>{problem.requestId}</td>
+                <td>{formatAnomalyHint(problem.anomalyHint)}</td>
+                <td>{problem.status}</td>
+                <td>{problem.queueStatus}</td>
+                <td>{problem.queuePriority ?? "none"}</td>
+                <td>{problem.attemptCount}</td>
+                <td>{problem.userId}</td>
+                <td>{problem.lotteryCode}</td>
+                <td>{problem.drawId}</td>
+                <td>{problem.lastError ?? "none"}</td>
+                <td>{problem.updatedAt}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       )}
@@ -326,4 +394,12 @@ function resolveErrorMessage(error: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+function formatAnomalyHint(hint: "retrying" | "error" | "stale-executing"): string {
+  if (hint === "stale-executing") {
+    return "stale executing";
+  }
+
+  return hint;
 }

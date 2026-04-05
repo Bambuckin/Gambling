@@ -177,7 +177,7 @@ Plans:
 
 Plans:
 - [x] 08-01: Build admin queue and priority request management screens.
-- [ ] 08-02: Build lottery controls, terminal status, and problem request dashboards.
+- [x] 08-02: Build lottery controls, terminal status, and problem request dashboards.
 - [ ] 08-03: Implement structured audit/event logging and alert aggregation.
 - [ ] 08-04: Add admin verification paths and operational troubleshooting notes.
 
@@ -214,5 +214,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Purchase Request Orchestration | 5/5 | Complete    | 2026-04-05 |
 | 6. Main Terminal Execution Engine | 5/5 | Complete    | 2026-04-05 |
 | 7. Ticket Verification and Winnings | 4/4 | Complete | 2026-04-05 |
-| 8. Admin Operations and Observability | 1/4 | In progress | - |
+| 8. Admin Operations and Observability | 2/4 | In progress | - |
 | 9. Hardening, Extension Docs, and Release Readiness | 0/4 | Not started | - |

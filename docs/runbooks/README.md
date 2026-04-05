@@ -11,5 +11,6 @@ Current runbooks:
 - `purchase-request-verification.md` - Phase 5 purchase request lifecycle checks
 - `queue-incident-triage.md` - queue/terminal incident investigation flow
 - `ticket-persistence-verification.md` - Phase 7 ticket persistence, verification outcomes, and winnings visibility checks
+- `admin-operations-console.md` - admin console triage for queue pressure, terminal state, and problematic requests
 
 When a phase introduces new operational or verification behavior, update runbooks in the same step.

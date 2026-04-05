@@ -72,7 +72,7 @@
 
 - [x] **ADMIN-01**: Administrator can view queue contents, including priority flag, queue order, and current executing request.
 - [x] **ADMIN-02**: Administrator can create priority requests that enter the queue above regular requests without interrupting active execution.
-- [ ] **ADMIN-03**: Administrator can view failed or problematic requests with last error, attempt count, and related lottery/user.
+- [x] **ADMIN-03**: Administrator can view failed or problematic requests with last error, attempt count, and related lottery/user.
 - [ ] **ADMIN-04**: Administrative interface shows lottery controls, terminal status, audit summaries, and financial exception events.
 
 ### Audit and Alerts
@@ -165,7 +165,7 @@
 | BAL-04 | Phase 7 | Complete |
 | ADMIN-01 | Phase 8 | Complete |
 | ADMIN-02 | Phase 8 | Complete |
-| ADMIN-03 | Phase 8 | Pending |
+| ADMIN-03 | Phase 8 | Complete |
 | ADMIN-04 | Phase 8 | Pending |
 | AUDT-01 | Phase 8 | Pending |
 | AUDT-02 | Phase 8 | Pending |
@@ -181,4 +181,4 @@
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-05 after 08-01 completion (admin queue and priority operations baseline)*
+*Last updated: 2026-04-05 after 08-02 completion (terminal/problem dashboard visibility)*
