@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Completed Phase 8 and advancing to Phase 9 planning
-last_updated: "2026-04-05T18:13:44.116Z"
-last_activity: 2026-04-05
+status: executing
+stopped_at: Completed plan 09-01 and advancing to 09-02
+last_updated: "2026-04-06T00:18:00.000Z"
+last_activity: 2026-04-06 -- Phase 9 plan 09-01 complete
 progress:
   total_phases: 9
   completed_phases: 8
-  total_plans: 35
-  completed_plans: 35
-  percent: 100
+  total_plans: 39
+  completed_plans: 36
+  percent: 92
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Each confirmed purchase should move predictably from the web interface to the single main terminal with correct reserve and debit behavior, clear status, and full event traceability.  
-**Current focus:** Phase 9 — Hardening, Extension Docs, and Release Readiness (planning)
+**Current focus:** Phase 9 - Hardening, Extension Docs, and Release Readiness (execution in progress)
 
 ## Current Position
 
 Phase: 9
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-04-05
+Plan: 02 of 04
+Status: Executing
+Last activity: 2026-04-06 -- Phase 9 plan 09-01 complete
 
-Progress: [##########] 100% (31/31 plan summaries)
+Progress: [#########-] 92% (36/39 plan summaries)
 
 ## Performance Metrics
 
@@ -52,7 +52,7 @@ Progress: [##########] 100% (31/31 plan summaries)
 | 6 | 5 | 50 min | 10 min |
 | 7 | 4 | 70 min | 18 min |
 | 8 | 4 | - | - |
-| 9 | 0 | 0 min | 0 min |
+| 9 | 1 | 18 min | 18 min |
 
 **Recent Trend:**
 
@@ -134,13 +134,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- No active blockers for Phase 9 planning.
+- Workspace `corepack pnpm typecheck` currently fails in `packages/domain/src/__tests__/purchase-draft.test.ts` because optional numeric field props are emitted as explicit `undefined` under `exactOptionalPropertyTypes`.
 
 ## Session Continuity
 
 Last session: 2026-04-05T18:03:00.000Z
-Stopped at: Completed Phase 8 and advancing to Phase 9 planning
-Resume file: .planning/phases/07-ticket-verification-and-winnings/.continue-here.md
+Stopped at: Completed plan 09-01 and advancing to 09-02
+Resume file: .planning/phases/09-hardening-extension-docs-and-release-readiness/.continue-here.md
 
 Repository baseline: `main`, git operational.
-

@@ -3,6 +3,10 @@
 This catalog is the source of truth for ownership in the current scaffold.
 Use it before changing code across `apps/*` and `packages/*`.
 
+Architecture map companion:
+- `ARCHITECTURE.md`
+- `docs/modules/system-architecture.md`
+
 ## Global Boundary Rules
 
 - `apps/web` and `apps/terminal-worker` are runtime entrypoints, not business-rule owners.
@@ -103,6 +107,7 @@ Use it before changing code across `apps/*` and `packages/*`.
 - `docs/runbooks/wallet-verification.md` is the manual checklist for wallet snapshot, movement history, and wallet debug contour checks.
 - `docs/runbooks/purchase-request-verification.md` is the manual checklist for quote confirmation, queue status, and cancellation behavior.
 - `docs/runbooks/ticket-persistence-verification.md` is the manual checklist for success-outcome ticket persistence and boundary troubleshooting.
+- `docs/runbooks/regression-recipes.md` (Phase 9) is the critical cross-module regression path before release readiness sign-off.
 
 ## Dependency Direction Policy
 

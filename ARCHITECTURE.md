@@ -2,38 +2,66 @@
 
 ## System Shape
 
-The system is a modular LAN web platform with one execution terminal. Business decisions stay in platform services; browser automation stays behind lottery-specific terminal adapters.
+Lottery Terminal Operations System is a LAN-first modular platform with two runtime apps and shared packages:
 
-## Core Modules
+- `apps/web`: operator and user web interface, server actions, middleware, and read-only debug contours.
+- `apps/terminal-worker`: the single active execution host for queue consumption and ticket verification.
+- `packages/*`: domain contracts, use-case services, infrastructure adapters, deterministic lottery handlers, and smoke helpers.
 
-1. Access and sessions
-2. Lottery registry and form metadata
-3. Draw data ingestion and freshness
-4. Balance ledger and wallet history
-5. Purchase orchestration and request state machine
-6. Queue and single-terminal execution worker
-7. Ticket persistence and post-draw verification
-8. Admin operations and observability
-9. Audit/event logging
+The main safety rule is preserved across all modules: at any time only one request may be actively executed on the main terminal.
+
+## Module Topology
+
+### Runtime entrypoints
+
+1. `apps/web` - login/session routing, lottery pages, admin console, verification pages.
+2. `apps/terminal-worker` - queue reservation loop, lock lifecycle, terminal handler execution, verification jobs.
+
+### Shared packages
+
+1. `packages/domain` - pure state and type contracts (requests, ledger, registry, ticket lifecycle).
+2. `packages/application` - use-case services and ports for access, registry/draw, purchase, queue/terminal, ticket verification, audit/alerts.
+3. `packages/infrastructure` - in-memory adapter implementations for ports.
+4. `packages/lottery-handlers` - deterministic purchase/result handler contracts and registry.
+5. `packages/test-kit` - fake terminal and handler adapters for smoke coverage.
+
+Detailed ownership and import constraints live in `docs/modules/boundary-catalog.md`.
 
 ## Boundary Rules
 
-- UI never owns terminal automation logic.
-- Ledger is lottery-agnostic and linked only by request/ticket references.
-- Registry is the source of truth for lottery visibility, ordering, schemas, and handler bindings.
-- Terminal adapters execute predefined handlers by lottery code; no runtime-generated execution logic from user input.
-- Every module must be testable in isolation with stubs or mocks.
+- Web routes compose services; they do not own queue, ledger, or terminal business rules.
+- Terminal worker owns polling/execution cadence but delegates state transitions to application services.
+- Ledger mutations are idempotent and always linked to request or ticket references.
+- Registry metadata is the source of truth for lottery visibility, forms, and handler bindings.
+- Terminal execution uses predefined handlers by lottery code; runtime-generated execution logic from user payload is forbidden.
 
-## Primary Flows
+## Primary Data Flows
 
-### Purchase
+### Purchase Flow
 
-`UI -> Access -> Registry/Draws -> Purchase Orchestrator -> Ledger Reserve -> Queue -> Terminal Worker -> Result Parser -> Ledger Finalize -> Audit -> UI/Admin`
+1. User selects lottery and authenticates via `AccessService`.
+2. Lottery page resolves registry metadata and draw freshness through `LotteryRegistryService` and `DrawRefreshService`.
+3. Purchase payload is validated and quoted by `PurchaseDraftService`.
+4. Confirmation snapshot is persisted by `PurchaseRequestService`.
+5. Reserve + queue insertion is executed by `PurchaseOrchestrationService`.
+6. `apps/terminal-worker` reserves next request through `PurchaseExecutionQueueService` with execution lock.
+7. Handler result is persisted via `TerminalExecutionAttemptService`; retry policy is applied by `TerminalRetryService`.
+8. Final status, ticket persistence, and ledger finalize/release are reflected for user/admin projections.
 
-### Ticket Result
+### Ticket Verification And Winnings Flow
 
-`Scheduler/Admin Trigger -> Terminal Worker -> Ticket Result Processor -> Ledger Credit -> Audit -> UI/Admin`
+1. Pending verified tickets are queued by `TicketVerificationQueueService`.
+2. Worker resolves result handler and executes deterministic verify call.
+3. Result is normalized by `TicketVerificationResultService`.
+4. Winning credit is applied through `WalletLedgerService.creditWinnings`.
+5. Ticket/result and audit projections become visible in user/admin surfaces.
+
+## Documentation Anchors
+
+- `docs/modules/system-architecture.md` - module map and expanded flow handoff.
+- `docs/modules/boundary-catalog.md` - source-of-truth ownership and disallowed integrations.
+- `docs/runbooks/` - module verification, regression, and operator procedures.
 
 ## Delivery Rule
 
-Implementation proceeds in vertical phases so each module slice can be run and verified partially before the full system exists.
+Phases are shipped as vertical slices with runnable checks per phase. Every boundary change must update docs and verification notes in the same change set.

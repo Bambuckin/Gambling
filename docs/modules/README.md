@@ -1,21 +1,29 @@
 # Module Boundaries
 
-Planned core modules:
+This folder is the navigation entrypoint for implemented module ownership.
+Use these docs before touching cross-module logic.
 
-1. Access and sessions
-2. Lottery registry
-3. Draw data pipeline
-4. Balance ledger
-5. Purchase orchestration
-6. Queue and terminal execution
-7. Ticket verification
-8. Admin operations
-9. Audit and alerts
+## Core References
+
+- `docs/modules/system-architecture.md` - runtime and package data-flow map.
+- `docs/modules/boundary-catalog.md` - authoritative ownership matrix and integration rules.
+- `docs/modules/lottery-handler-extension.md` - handler extension/change workflow.
+
+## Implemented Module Inventory
+
+### Runtime apps
+
+1. `apps/web`: user/admin surfaces, route composition, role-aware access, debug verification pages.
+2. `apps/terminal-worker`: queue reservation, execution lock coordination, handler execution, verification queue processing.
+
+### Shared packages
+
+1. `packages/domain`: pure domain contracts and state rules.
+2. `packages/application`: use-case services and typed ports.
+3. `packages/infrastructure`: adapter implementations (currently in-memory).
+4. `packages/lottery-handlers`: deterministic purchase/result handlers and registry bindings.
+5. `packages/test-kit`: fake adapters for smoke/local validation.
 
 ## Boundary Rule
 
-If a change touches more than one module, the integration point must be documented here or in an ADR before the change spreads.
-
-## Phase 1 Expectation
-
-Phase 1 should replace this provisional list with concrete package/app/module ownership and contract references.
+If a change crosses module boundaries, update `docs/modules/boundary-catalog.md` (and ADR if architectural).

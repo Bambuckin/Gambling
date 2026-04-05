@@ -5,32 +5,35 @@ Documentation in this repository is part of execution, not a post-factum attachm
 ## Core Sections
 
 - `docs/adr/` - architecture, stack, and repository-shape decisions.
-- `docs/modules/` - stable module boundaries, contracts, and ownership.
-- `docs/runbooks/` - operational procedures, bootstrap, and incident handling.
+- `docs/modules/` - implemented architecture map, boundaries, contracts, extension guidance.
+- `docs/runbooks/` - verification and operational procedures from local bootstrap to release checks.
 
-## Current Foundation Reference
+## Architecture And Modules
 
 - `docs/adr/ADR-000-project-principles.md` - immutable project principles.
 - `docs/adr/ADR-001-stack-and-repo-shape.md` - selected workspace baseline.
-
-ADR-001 defines the workspace layout used by Phase 1:
-
-- `apps/web`
-- `apps/terminal-worker`
-- `packages/domain`
-- `packages/application`
-- `packages/infrastructure`
-- `packages/lottery-handlers`
-- `packages/test-kit`
+- `ARCHITECTURE.md` - current system shape, module topology, and core data flows.
+- `docs/modules/system-architecture.md` - expanded runtime/package flow map.
+- `docs/modules/boundary-catalog.md` - source-of-truth module ownership and allowed/disallowed integration points.
+- `docs/modules/lottery-handler-extension.md` - deterministic workflow for adding/changing lottery handlers.
 
 ## Session Independence Rule
 
 A future session must be able to continue from repository files alone.  
 If a decision affects future implementation, write it to `docs/` or `.planning/` immediately.
 
-## Entry Links for Continuation
+## Runbooks
+
+- `docs/runbooks/local-bootstrap.md` - local environment and baseline checks.
+- `docs/runbooks/fake-terminal-smoke.md` - smoke validation without production terminal.
+- `docs/runbooks/purchase-request-verification.md` - purchase lifecycle and queue status checks.
+- `docs/runbooks/queue-incident-triage.md` - queue/terminal incident triage.
+- `docs/runbooks/admin-operations-console.md` - admin operations and observability checks.
+- `docs/runbooks/ticket-persistence-verification.md` - ticket persistence and winnings verification.
+
+## Continuation Entry Points
 
 1. `.planning/STATE.md`
 2. `.planning/ROADMAP.md`
-3. `.planning/phases/01-foundation-contracts/.continue-here.md`
-4. `docs/adr/ADR-001-stack-and-repo-shape.md`
+3. `.planning/phases/*/.continue-here.md`
+4. `docs/modules/boundary-catalog.md`
