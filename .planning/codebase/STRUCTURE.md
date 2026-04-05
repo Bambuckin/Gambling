@@ -31,6 +31,7 @@ docs/
   - Current entrypoints: `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/login/page.tsx`, `src/app/lottery/[lotteryCode]/page.tsx`, `src/app/admin/page.tsx`, `src/app/denied/page.tsx`, `src/app/debug/access-lab/page.tsx`, `src/app/debug/registry-lab/page.tsx`, `src/middleware.ts`.
   - Access helpers: `src/lib/access/access-runtime.ts`, `src/lib/access/entry-flow.ts`, `src/lib/access/session-cookie.ts`, `src/lib/access/cookie-names.ts`, `src/lib/access/lottery-catalog.ts`, `src/lib/access/lab-scenarios.ts`, `src/lib/access/role-guard.ts`.
   - Registry helpers: `src/lib/registry/registry-runtime.ts`.
+  - Dynamic form helpers: `src/lib/lottery-form/render-lottery-form-fields.tsx`.
   - Build wiring: `next.config.ts` (workspace package transpile + extension alias for NodeNext imports).
 - `apps/terminal-worker`
   - Worker process host for queue + terminal execution flows.
@@ -40,7 +41,7 @@ docs/
 
 - `packages/domain`
   - Shared contracts and state transitions.
-  - Key files: `request-state.ts`, `ledger.ts`, `lottery-registry.ts`, `draw.ts`, `ticket.ts`, `access.ts`, `access-audit.ts`.
+  - Key files: `request-state.ts`, `ledger.ts`, `lottery-registry.ts` (includes dynamic form metadata contracts), `draw.ts`, `ticket.ts`, `access.ts`, `access-audit.ts`.
 - `packages/application`
   - Use-case ports between orchestration and adapters.
   - Key files: `ports/terminal-executor.ts`, `ports/queue.ts`, `ports/time-source.ts`, `ports/identity-store.ts`, `ports/session-store.ts`, `ports/password-verifier.ts`, `ports/access-audit-log.ts`, `ports/lottery-registry-store.ts`, `services/access-service.ts`, `services/lottery-registry-service.ts`.

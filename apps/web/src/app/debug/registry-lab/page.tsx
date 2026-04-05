@@ -20,6 +20,7 @@ export default async function RegistryLabPage(): Promise<ReactElement> {
             <th>Enabled</th>
             <th>Display order</th>
             <th>Form schema</th>
+            <th>Field count</th>
             <th>Pricing</th>
             <th>Purchase handler</th>
             <th>Result handler</th>
@@ -33,6 +34,7 @@ export default async function RegistryLabPage(): Promise<ReactElement> {
               <td>{entry.enabled ? "yes" : "no"}</td>
               <td>{entry.displayOrder}</td>
               <td>{entry.formSchemaVersion}</td>
+              <td>{entry.formFields.length}</td>
               <td>
                 {entry.pricing.strategy} / {entry.pricing.baseAmountMinor}
               </td>

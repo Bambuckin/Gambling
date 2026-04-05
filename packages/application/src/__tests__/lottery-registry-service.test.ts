@@ -83,6 +83,18 @@ function createEntry(overrides: Partial<LotteryRegistryUpsertInput>): LotteryReg
     enabled: overrides.enabled ?? true,
     displayOrder: overrides.displayOrder ?? 1,
     formSchemaVersion: overrides.formSchemaVersion ?? "v1",
+    formFields: overrides.formFields ?? [
+      {
+        fieldKey: "bet_count",
+        label: "Bet Count",
+        type: "number",
+        required: true,
+        min: 1,
+        max: 20,
+        step: 1,
+        defaultValue: 1
+      }
+    ],
     pricing: overrides.pricing ?? {
       strategy: "fixed",
       baseAmountMinor: 100

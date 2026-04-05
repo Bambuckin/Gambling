@@ -10,12 +10,33 @@ export interface LotteryPricingRule {
   readonly baseAmountMinor: number;
 }
 
+export type LotteryFormFieldType = "text" | "number" | "select";
+
+export interface LotteryFormFieldOption {
+  readonly value: string;
+  readonly label: string;
+}
+
+export interface LotteryFormFieldDefinition {
+  readonly fieldKey: string;
+  readonly label: string;
+  readonly type: LotteryFormFieldType;
+  readonly required: boolean;
+  readonly placeholder?: string;
+  readonly min?: number;
+  readonly max?: number;
+  readonly step?: number;
+  readonly defaultValue?: string | number;
+  readonly options?: readonly LotteryFormFieldOption[];
+}
+
 export interface LotteryRegistryEntry {
   readonly lotteryCode: string;
   readonly title: string;
   readonly enabled: boolean;
   readonly displayOrder: number;
   readonly formSchemaVersion: string;
+  readonly formFields: readonly LotteryFormFieldDefinition[];
   readonly pricing: LotteryPricingRule;
   readonly handlers: LotteryHandlerBinding;
 }
@@ -26,6 +47,10 @@ export function normalizeLotteryCode(input: string): string {
 
 export function hasHandlerBindings(entry: LotteryRegistryEntry): boolean {
   return entry.handlers.purchaseHandler.trim().length > 0 && entry.handlers.resultHandler.trim().length > 0;
+}
+
+export function hasFormFieldDefinitions(entry: LotteryRegistryEntry): boolean {
+  return entry.formFields.length > 0;
 }
 
 export function compareRegistryEntriesByOrder(a: LotteryRegistryEntry, b: LotteryRegistryEntry): number {

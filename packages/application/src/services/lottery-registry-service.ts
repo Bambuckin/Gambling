@@ -1,6 +1,8 @@
 import {
+  type LotteryFormFieldDefinition,
   type LotteryPricingRule,
   type LotteryRegistryEntry,
+  hasFormFieldDefinitions,
   hasHandlerBindings,
   normalizeLotteryCode,
   sortRegistryEntries
@@ -17,6 +19,7 @@ export interface LotteryRegistryUpsertInput {
   readonly enabled: boolean;
   readonly displayOrder: number;
   readonly formSchemaVersion: string;
+  readonly formFields: readonly LotteryFormFieldDefinition[];
   readonly pricing: LotteryPricingRule;
   readonly handlers: {
     readonly purchaseHandler: string;
@@ -80,6 +83,7 @@ export class LotteryRegistryService {
       enabled,
       displayOrder: current.displayOrder,
       formSchemaVersion: current.formSchemaVersion,
+      formFields: current.formFields,
       pricing: current.pricing,
       handlers: current.handlers
     });
@@ -123,6 +127,8 @@ function sanitizeRegistryEntry(input: LotteryRegistryUpsertInput | LotteryRegist
     throw new LotteryRegistryValidationError(`lottery "${lotteryCode}" formSchemaVersion is required`);
   }
 
+  const formFields = sanitizeFormFields(input.formFields, lotteryCode);
+
   const pricingStrategy = input.pricing.strategy;
   const pricingBaseAmountMinor = Math.trunc(input.pricing.baseAmountMinor);
   if (pricingBaseAmountMinor < 0) {
@@ -137,6 +143,7 @@ function sanitizeRegistryEntry(input: LotteryRegistryUpsertInput | LotteryRegist
     enabled: input.enabled,
     displayOrder,
     formSchemaVersion,
+    formFields,
     pricing: {
       strategy: pricingStrategy,
       baseAmountMinor: pricingBaseAmountMinor
@@ -149,6 +156,10 @@ function sanitizeRegistryEntry(input: LotteryRegistryUpsertInput | LotteryRegist
 
   if (!hasHandlerBindings(nextEntry)) {
     throw new LotteryRegistryValidationError(`lottery "${lotteryCode}" handler references are required`);
+  }
+
+  if (!hasFormFieldDefinitions(nextEntry)) {
+    throw new LotteryRegistryValidationError(`lottery "${lotteryCode}" requires at least one form field`);
   }
 
   return nextEntry;
@@ -165,4 +176,71 @@ function assertUniqueCodes(entries: readonly LotteryRegistryEntry[]): void {
 
     seen.add(code);
   }
+}
+
+function sanitizeFormFields(
+  fields: readonly LotteryFormFieldDefinition[] | undefined,
+  lotteryCode: string
+): LotteryFormFieldDefinition[] {
+  if (!fields || fields.length === 0) {
+    throw new LotteryRegistryValidationError(`lottery "${lotteryCode}" requires formFields`);
+  }
+
+  const seenFieldKeys = new Set<string>();
+  const sanitizedFields = fields.map((field, index) => {
+    const fieldKey = field.fieldKey.trim();
+    if (!fieldKey) {
+      throw new LotteryRegistryValidationError(`lottery "${lotteryCode}" form field #${index + 1} fieldKey is required`);
+    }
+
+    if (!/^[a-z][a-z0-9_]{1,40}$/i.test(fieldKey)) {
+      throw new LotteryRegistryValidationError(
+        `lottery "${lotteryCode}" form field "${fieldKey}" has invalid fieldKey format`
+      );
+    }
+
+    if (seenFieldKeys.has(fieldKey)) {
+      throw new LotteryRegistryValidationError(
+        `lottery "${lotteryCode}" has duplicate form field key "${fieldKey}"`
+      );
+    }
+    seenFieldKeys.add(fieldKey);
+
+    const label = field.label.trim();
+    if (!label) {
+      throw new LotteryRegistryValidationError(
+        `lottery "${lotteryCode}" form field "${fieldKey}" label is required`
+      );
+    }
+
+    if (field.type === "select") {
+      const options = (field.options ?? [])
+        .map((option) => ({
+          value: option.value.trim(),
+          label: option.label.trim()
+        }))
+        .filter((option) => option.value.length > 0 && option.label.length > 0);
+
+      if (options.length === 0) {
+        throw new LotteryRegistryValidationError(
+          `lottery "${lotteryCode}" select field "${fieldKey}" requires options`
+        );
+      }
+
+      return {
+        ...field,
+        fieldKey,
+        label,
+        options
+      };
+    }
+
+    return {
+      ...field,
+      fieldKey,
+      label
+    };
+  });
+
+  return sanitizedFields;
 }
