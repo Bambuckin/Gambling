@@ -8,11 +8,15 @@
     "node": ">=20.11.0"
   },
   "scripts": {
-    "dev:web": "pnpm --filter @lottery/web dev",
-    "dev:worker": "pnpm --filter @lottery/terminal-worker dev",
-    "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
-    "smoke": "pnpm --filter @lottery/test-kit smoke"
+    "dev:web": "corepack pnpm --filter @lottery/web dev",
+    "dev:worker": "corepack pnpm --filter @lottery/terminal-worker dev",
+    "lint": "corepack pnpm -r --if-present lint",
+    "typecheck": "corepack pnpm -r --if-present typecheck",
+    "test": "corepack pnpm -r --if-present test",
+    "smoke": "corepack pnpm --filter @lottery/test-kit smoke"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "typescript": "^5.8.3"
   }
 }

@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/domain" },
+    { "path": "./packages/application" },
+    { "path": "./packages/infrastructure" },
+    { "path": "./packages/lottery-handlers" },
+    { "path": "./packages/test-kit" },
+    { "path": "./apps/terminal-worker" },
+    { "path": "./apps/web" }
+  ]
+}

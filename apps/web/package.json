@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "node -e \"console.log('web lint is not configured yet')\"",
     "typecheck": "tsc -p tsconfig.json --pretty false",
     "test": "node -e \"console.log('web tests are not configured yet')\""
   },

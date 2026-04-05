@@ -4,6 +4,15 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "moduleDetection": "force",
+    "baseUrl": ".",
+    "paths": {
+      "@lottery/domain": ["packages/domain/src/index.ts"],
+      "@lottery/application": ["packages/application/src/index.ts"],
+      "@lottery/infrastructure": ["packages/infrastructure/src/index.ts"],
+      "@lottery/lottery-handlers": ["packages/lottery-handlers/src/index.ts"],
+      "@lottery/test-kit": ["packages/test-kit/src/index.ts"]
+    },
     "lib": ["ES2022"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -17,8 +26,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "noEmit": true,
-    "types": ["node"]
+    "noEmit": true
   },
   "exclude": ["node_modules", "dist", "build", ".next", "coverage"]
 }
