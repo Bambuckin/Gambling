@@ -1,8 +1,10 @@
 import type { ReactElement } from "react";
 import { redirect } from "next/navigation";
+import type { DrawAvailabilityState } from "@lottery/domain";
 import { requireLotteryAccess, submitLogout } from "../../../lib/access/entry-flow";
 import { getLotteryRegistryService } from "../../../lib/registry/registry-runtime";
 import { LotteryFormFields } from "../../../lib/lottery-form/render-lottery-form-fields";
+import { getDrawRefreshService } from "../../../lib/draw/draw-runtime";
 
 type LotteryPageProps = {
   readonly params: Promise<{
@@ -32,26 +34,40 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
     );
   }
 
+  const drawState = await getDrawRefreshService().getDrawState(lottery.lotteryCode);
+  const purchaseBlockedReason = describePurchaseBlockReason(drawState);
+  const previewBalanceMinor = resolvePreviewBalanceMinor(access.identity.identityId);
+
   return (
     <section>
       <h1>Lottery: {lottery.title}</h1>
       <p>Lottery code: {lottery.lotteryCode}</p>
+      <p>Current balance (preview, minor): {previewBalanceMinor}</p>
       <p>Session active for: {access.identity.displayName}</p>
       <p>Role: {access.identity.role}</p>
       <p>Session id: {access.session.sessionId}</p>
       <p>Session expires at: {access.session.expiresAt}</p>
+      <p>Current draw status: {drawState.status}</p>
+      <p>Current draw id: {drawState.snapshot?.drawId ?? "none"}</p>
+      <p>Current draw at: {drawState.snapshot?.drawAt ?? "none"}</p>
+      <p>Draw fetched at: {drawState.snapshot?.fetchedAt ?? "none"}</p>
+      <p>Draw freshness: {drawState.freshness?.isFresh ? "fresh" : drawState.status === "missing" ? "missing" : "stale"}</p>
+      <p>Draw stale since: {drawState.freshness?.staleSince ?? "n/a"}</p>
       <p>Form schema version: {lottery.formSchemaVersion}</p>
       <p>Pricing strategy: {lottery.pricing.strategy}</p>
       <p>Base amount (minor): {lottery.pricing.baseAmountMinor}</p>
       <p>Purchase handler: {lottery.handlers.purchaseHandler}</p>
       <p>Result handler: {lottery.handlers.resultHandler}</p>
+      {purchaseBlockedReason ? <p>Purchase blocked: {purchaseBlockedReason}</p> : <p>Purchase controls are active.</p>}
 
       {draftStatus && draftMessage ? <p>Draft [{draftStatus}]: {draftMessage}</p> : null}
 
       <form action={submitPurchaseDraftAction}>
         <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
         <LotteryFormFields fields={lottery.formFields} />
-        <button type="submit">Prepare Purchase Draft</button>
+        <button type="submit" disabled={Boolean(purchaseBlockedReason)}>
+          Prepare Purchase Draft
+        </button>
       </form>
 
       <form action={handleLogoutAction}>
@@ -77,6 +93,12 @@ async function submitPurchaseDraftAction(formData: FormData): Promise<void> {
   if (!lottery) {
     return redirect(`/lottery/${access.lotteryCode}?draft=error&message=Lottery+not+found`);
   }
+  const drawState = await getDrawRefreshService().getDrawState(lottery.lotteryCode);
+  const purchaseBlockedReason = describePurchaseBlockReason(drawState);
+  if (purchaseBlockedReason) {
+    const blockedMessage = encodeURIComponent(`Purchase blocked: ${purchaseBlockedReason}.`);
+    return redirect(`/lottery/${lottery.lotteryCode}?draft=error&message=${blockedMessage}`);
+  }
 
   const completedFields = lottery.formFields.reduce((count, field) => {
     const value = String(formData.get(field.fieldKey) ?? "").trim();
@@ -98,4 +120,26 @@ function readSingleParam(value: string | string[] | undefined): string | null {
     return value[0] ?? null;
   }
   return null;
+}
+
+function describePurchaseBlockReason(drawState: DrawAvailabilityState): string | null {
+  if (drawState.status === "missing") {
+    return "draw data is missing";
+  }
+
+  if (drawState.status === "stale") {
+    return drawState.freshness?.staleSince
+      ? `draw data is stale since ${drawState.freshness.staleSince}`
+      : "draw data is stale";
+  }
+
+  return null;
+}
+
+function resolvePreviewBalanceMinor(identityId: string): number {
+  let hash = 0;
+  for (let index = 0; index < identityId.length; index += 1) {
+    hash = (hash + identityId.charCodeAt(index)) % 100000;
+  }
+  return 100000 + hash;
 }

@@ -79,7 +79,7 @@ Plans:
 Plans:
 - [x] 03-01: Implement lottery registry storage, ordering, visibility, and handler references.
 - [x] 03-02: Build dynamic lottery form rendering from registry metadata.
-- [ ] 03-03: Implement draw refresh ingestion and freshness model.
+- [x] 03-03: Implement draw refresh ingestion and freshness model.
 - [ ] 03-04: Add admin controls and verification coverage for registry/draw behavior.
 
 ### Phase 4: Internal Ledger and Wallet Views
@@ -209,7 +209,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Foundation Contracts | 4/4 | Complete | 2026-04-05 |
 | 2. Access and Unified Shell | 5/5 | Complete   | 2026-04-05 |
-| 3. Lottery Registry and Draw Pipeline | 2/4 | In Progress|  |
+| 3. Lottery Registry and Draw Pipeline | 3/4 | In Progress|  |
 | 4. Internal Ledger and Wallet Views | 0/4 | Not started | - |
 | 5. Purchase Request Orchestration | 0/5 | Not started | - |
 | 6. Main Terminal Execution Engine | 0/5 | Not started | - |
