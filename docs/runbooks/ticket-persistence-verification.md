@@ -41,6 +41,20 @@ Verify that persisted ticket fields include:
 - `purchaseStatus=purchased`
 - `verificationStatus=pending`
 
+## Step 3: Validate verification-job auto-queue wiring
+
+Run:
+
+```powershell
+corepack pnpm --filter @lottery/application test -- ticket-verification-queue-service
+corepack pnpm --filter @lottery/terminal-worker typecheck
+```
+
+Expected outcome:
+- pending purchased tickets are enqueued once into verification jobs;
+- reserving a job transitions it to `verifying` and prevents double-reservation;
+- worker build includes verification queue polling path.
+
 ## Troubleshooting Matrix
 
 | Symptom | Likely boundary | Inspect first | Investigation command |
@@ -49,6 +63,7 @@ Verify that persisted ticket fields include:
 | Duplicate tickets for one request | `TicketStore` idempotency or request key logic | `ticket-persistence-service.ts`, `ticket-store.ts` | `corepack pnpm --filter @lottery/application test -- ticket-persistence-service` |
 | Ticket has missing linkage fields | Domain creation contract drift | `packages/domain/src/ticket.ts` | `corepack pnpm --filter @lottery/domain test -- ticket` |
 | Worker build breaks after ticket persistence wiring | Worker/runtime integration boundary | `apps/terminal-worker/src/main.ts` | `corepack pnpm --filter @lottery/terminal-worker typecheck` |
+| Verification jobs are not created for pending tickets | Verification queue orchestration boundary | `ticket-verification-queue-service.ts`, `ticket-verification-job-store.ts` | `corepack pnpm --filter @lottery/application test -- ticket-verification-queue-service` |
 
 ## Additional Notes
 

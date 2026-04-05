@@ -8,12 +8,19 @@ import {
   type LotteryPurchaseHandlerBinding,
   type LotteryPurchaseHandlerContract,
   type LotteryPurchaseContext,
-  type LotteryPurchaseResult
+  type LotteryPurchaseResult,
+  type LotteryResultCheck
 } from "@lottery/lottery-handlers";
 
 export interface ResolvedPurchaseHandler {
   readonly binding: TerminalHandlerBinding;
   readonly handler: LotteryPurchaseHandlerContract;
+}
+
+export interface VerifyTicketResultInput {
+  readonly lotteryCode: string;
+  readonly externalTicketReference: string;
+  readonly drawId: string;
 }
 
 export class TerminalHandlerRuntime {
@@ -37,6 +44,26 @@ export class TerminalHandlerRuntime {
     return {
       binding,
       handler: resolvedBinding.handler
+    };
+  }
+
+  async verifyTicketResult(input: VerifyTicketResultInput): Promise<LotteryResultCheck> {
+    const resolved = await this.resolvePurchaseHandler(input.lotteryCode);
+    const reference = input.externalTicketReference.trim();
+    const normalizedReference = reference.toLowerCase();
+
+    const status: LotteryResultCheck["status"] = normalizedReference.includes("error")
+      ? "error"
+      : normalizedReference.includes("pending")
+        ? "pending"
+        : normalizedReference.includes("win")
+          ? "win"
+          : "lose";
+
+    return {
+      status,
+      winningAmountMinor: status === "win" ? 500 : 0,
+      rawTerminalOutput: `[demo-result-handler] lottery=${resolved.binding.lotteryCode} draw=${input.drawId} ref=${reference} status=${status}`
     };
   }
 }

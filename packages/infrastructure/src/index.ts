@@ -9,3 +9,4 @@ export * from "./purchase/in-memory-purchase-request-store.js";
 export * from "./purchase/in-memory-purchase-queue-store.js";
 export * from "./purchase/in-memory-terminal-execution-lock.js";
 export * from "./purchase/in-memory-ticket-store.js";
+export * from "./purchase/in-memory-ticket-verification-job-store.js";

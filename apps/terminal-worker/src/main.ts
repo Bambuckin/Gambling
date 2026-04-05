@@ -4,13 +4,15 @@ import {
   TerminalExecutionAttemptService,
   TerminalRetryService,
   TicketPersistenceService,
+  TicketVerificationQueueService,
   type TerminalExecutionResult
 } from "@lottery/application";
 import {
   InMemoryPurchaseQueueStore,
   InMemoryPurchaseRequestStore,
   InMemoryTerminalExecutionLock,
-  InMemoryTicketStore
+  InMemoryTicketStore,
+  InMemoryTicketVerificationJobStore
 } from "@lottery/infrastructure";
 import { TerminalHandlerRuntime } from "./lib/terminal-handler-runtime.js";
 
@@ -24,6 +26,7 @@ const requestStore = new InMemoryPurchaseRequestStore();
 const queueStore = new InMemoryPurchaseQueueStore();
 const executionLock = new InMemoryTerminalExecutionLock();
 const ticketStore = new InMemoryTicketStore();
+const verificationJobStore = new InMemoryTicketVerificationJobStore();
 
 const queueService = new PurchaseExecutionQueueService({
   requestStore,
@@ -40,6 +43,11 @@ const attemptService = new TerminalExecutionAttemptService({
 });
 const retryService = new TerminalRetryService({
   maxAttempts: 3
+});
+const verificationQueueService = new TicketVerificationQueueService({
+  ticketStore,
+  jobStore: verificationJobStore,
+  timeSource
 });
 const handlerRuntime = new TerminalHandlerRuntime();
 
@@ -62,6 +70,7 @@ async function pollQueueForExecution(): Promise<void> {
       workerId: WORKER_ID
     });
     if (!reservation) {
+      await processTicketVerificationQueue();
       return;
     }
 
@@ -113,6 +122,8 @@ async function pollQueueForExecution(): Promise<void> {
     console.log(
       `[terminal-worker] attempt recorded request=${attemptRecord.request.snapshot.requestId} outcome=${attemptRecord.request.state}${attemptRecord.ticket ? ` ticket=${attemptRecord.ticket.ticketId}` : ""}`
     );
+
+    await processTicketVerificationQueue();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[terminal-worker] reservation error: ${message}`);
@@ -122,6 +133,46 @@ async function pollQueueForExecution(): Promise<void> {
     });
     isPolling = false;
   }
+}
+
+async function processTicketVerificationQueue(): Promise<void> {
+  const enqueueResult = await verificationQueueService.enqueuePendingVerificationTickets();
+  if (enqueueResult.enqueuedCount > 0) {
+    console.log(
+      `[terminal-worker] verification jobs enqueued pending=${enqueueResult.pendingCount} enqueued=${enqueueResult.enqueuedCount}`
+    );
+  }
+
+  const verificationJob = await verificationQueueService.reserveNextVerificationJob({
+    workerId: WORKER_ID
+  });
+  if (!verificationJob) {
+    return;
+  }
+
+  const result = await handlerRuntime.verifyTicketResult({
+    lotteryCode: verificationJob.lotteryCode,
+    drawId: verificationJob.drawId,
+    externalTicketReference: verificationJob.externalReference
+  });
+
+  if (result.status === "error") {
+    await verificationQueueService.markVerificationJobError(verificationJob.jobId, {
+      error: "terminal verification error",
+      rawTerminalOutput: result.rawTerminalOutput
+    });
+    console.warn(
+      `[terminal-worker] verification job failed job=${verificationJob.jobId} status=${result.status}`
+    );
+    return;
+  }
+
+  await verificationQueueService.markVerificationJobDone(verificationJob.jobId, {
+    rawTerminalOutput: result.rawTerminalOutput
+  });
+  console.log(
+    `[terminal-worker] verification job done job=${verificationJob.jobId} status=${result.status}`
+  );
 }
 
 function startWorker(): void {

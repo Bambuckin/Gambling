@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { createPurchasedTicketRecord, TicketValidationError } from "../ticket.js";
+import {
+  completeTicketVerificationJob,
+  createPurchasedTicketRecord,
+  createTicketVerificationJob,
+  failTicketVerificationJob,
+  isTicketPendingVerification,
+  reserveTicketVerificationJob,
+  TicketValidationError
+} from "../ticket.js";
 
 describe("createPurchasedTicketRecord", () => {
   it("creates purchased ticket with pending verification defaults", () => {
@@ -63,6 +71,95 @@ describe("createPurchasedTicketRecord", () => {
         lotteryCode: "demo-lottery",
         drawId: "draw-903",
         purchasedAt: "not-iso"
+      })
+    ).toThrow(TicketValidationError);
+  });
+});
+
+describe("ticket verification jobs", () => {
+  it("marks purchased+pending ticket as verification-eligible", () => {
+    const pendingTicket = createPurchasedTicketRecord({
+      ticketId: "req-910:ticket",
+      requestId: "req-910",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-910",
+      purchasedAt: "2026-04-05T23:05:00.000Z",
+      externalReference: "demo-ext-910"
+    });
+
+    expect(isTicketPendingVerification(pendingTicket)).toBe(true);
+    expect(
+      isTicketPendingVerification({
+        ...pendingTicket,
+        verificationStatus: "verified"
+      })
+    ).toBe(false);
+  });
+
+  it("creates verification job, reserves it, and completes it", () => {
+    const queuedJob = createTicketVerificationJob({
+      ticketId: "req-911:ticket",
+      requestId: "req-911",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-911",
+      externalReference: "demo-ext-911",
+      enqueuedAt: "2026-04-05T23:06:00.000Z"
+    });
+
+    expect(queuedJob.status).toBe("queued");
+    expect(queuedJob.attemptCount).toBe(0);
+
+    const reservedJob = reserveTicketVerificationJob(queuedJob, "2026-04-05T23:06:10.000Z");
+    expect(reservedJob.status).toBe("verifying");
+    expect(reservedJob.attemptCount).toBe(1);
+
+    const completedJob = completeTicketVerificationJob(reservedJob, {
+      updatedAt: "2026-04-05T23:06:20.000Z",
+      rawTerminalOutput: "[result] lose"
+    });
+
+    expect(completedJob.status).toBe("done");
+    expect(completedJob.lastTerminalOutput).toContain("lose");
+    expect(completedJob.lastError).toBeNull();
+  });
+
+  it("marks reserved job as error", () => {
+    const queuedJob = createTicketVerificationJob({
+      ticketId: "req-912:ticket",
+      requestId: "req-912",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-912",
+      externalReference: "demo-ext-912",
+      enqueuedAt: "2026-04-05T23:07:00.000Z"
+    });
+    const reservedJob = reserveTicketVerificationJob(queuedJob, "2026-04-05T23:07:10.000Z");
+
+    const failedJob = failTicketVerificationJob(reservedJob, {
+      updatedAt: "2026-04-05T23:07:15.000Z",
+      error: "terminal timeout",
+      rawTerminalOutput: "[result] timeout"
+    });
+
+    expect(failedJob.status).toBe("error");
+    expect(failedJob.lastError).toContain("timeout");
+    expect(failedJob.lastTerminalOutput).toContain("timeout");
+  });
+
+  it("rejects invalid verification-job transitions", () => {
+    const queuedJob = createTicketVerificationJob({
+      ticketId: "req-913:ticket",
+      requestId: "req-913",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-913",
+      externalReference: "demo-ext-913",
+      enqueuedAt: "2026-04-05T23:08:00.000Z"
+    });
+
+    expect(() =>
+      completeTicketVerificationJob(queuedJob, {
+        updatedAt: "2026-04-05T23:08:10.000Z",
+        rawTerminalOutput: "n/a"
       })
     ).toThrow(TicketValidationError);
   });

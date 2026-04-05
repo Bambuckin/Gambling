@@ -1,8 +1,10 @@
 export const TICKET_PURCHASE_STATES = ["purchased"] as const;
 export const TICKET_VERIFICATION_STATES = ["pending", "verified", "failed"] as const;
+export const TICKET_VERIFICATION_JOB_STATES = ["queued", "verifying", "done", "error"] as const;
 
 export type TicketPurchaseState = (typeof TICKET_PURCHASE_STATES)[number];
 export type TicketVerificationState = (typeof TICKET_VERIFICATION_STATES)[number];
+export type TicketVerificationJobState = (typeof TICKET_VERIFICATION_JOB_STATES)[number];
 
 export interface TicketRecord {
   readonly ticketId: string;
@@ -27,6 +29,30 @@ export interface CreatePurchasedTicketRecordInput {
   readonly drawId: string;
   readonly purchasedAt: string;
   readonly externalReference?: string | null;
+}
+
+export interface TicketVerificationJob {
+  readonly jobId: string;
+  readonly ticketId: string;
+  readonly requestId: string;
+  readonly lotteryCode: string;
+  readonly drawId: string;
+  readonly externalReference: string;
+  readonly enqueuedAt: string;
+  readonly updatedAt: string;
+  readonly status: TicketVerificationJobState;
+  readonly attemptCount: number;
+  readonly lastTerminalOutput: string | null;
+  readonly lastError: string | null;
+}
+
+export interface CreateTicketVerificationJobInput {
+  readonly ticketId: string;
+  readonly requestId: string;
+  readonly lotteryCode: string;
+  readonly drawId: string;
+  readonly externalReference: string;
+  readonly enqueuedAt: string;
 }
 
 export class TicketValidationError extends Error {
@@ -60,6 +86,88 @@ export function createPurchasedTicketRecord(input: CreatePurchasedTicketRecordIn
     verificationRawOutput: null,
     winningAmountMinor: null,
     verifiedAt: null
+  };
+}
+
+export function isTicketPendingVerification(ticket: TicketRecord): boolean {
+  return ticket.purchaseStatus === "purchased" && ticket.verificationStatus === "pending";
+}
+
+export function createTicketVerificationJob(input: CreateTicketVerificationJobInput): TicketVerificationJob {
+  const ticketId = requireNonEmpty(input.ticketId, "ticketId");
+  const requestId = requireNonEmpty(input.requestId, "requestId");
+  const lotteryCode = requireNonEmpty(input.lotteryCode, "lotteryCode").toLowerCase();
+  const drawId = requireNonEmpty(input.drawId, "drawId");
+  const externalReference = requireNonEmpty(input.externalReference, "externalReference");
+  const enqueuedAt = requireValidIso(input.enqueuedAt, "enqueuedAt");
+
+  return {
+    jobId: `${ticketId}:verify`,
+    ticketId,
+    requestId,
+    lotteryCode,
+    drawId,
+    externalReference,
+    enqueuedAt,
+    updatedAt: enqueuedAt,
+    status: "queued",
+    attemptCount: 0,
+    lastTerminalOutput: null,
+    lastError: null
+  };
+}
+
+export function reserveTicketVerificationJob(job: TicketVerificationJob, updatedAt: string): TicketVerificationJob {
+  if (job.status !== "queued") {
+    throw new TicketValidationError(`job "${job.jobId}" cannot be reserved from status "${job.status}"`);
+  }
+
+  return {
+    ...job,
+    status: "verifying",
+    attemptCount: job.attemptCount + 1,
+    updatedAt: requireValidIso(updatedAt, "updatedAt")
+  };
+}
+
+export function completeTicketVerificationJob(
+  job: TicketVerificationJob,
+  input: {
+    readonly updatedAt: string;
+    readonly rawTerminalOutput: string;
+  }
+): TicketVerificationJob {
+  if (job.status !== "verifying") {
+    throw new TicketValidationError(`job "${job.jobId}" cannot be completed from status "${job.status}"`);
+  }
+
+  return {
+    ...job,
+    status: "done",
+    updatedAt: requireValidIso(input.updatedAt, "updatedAt"),
+    lastTerminalOutput: input.rawTerminalOutput,
+    lastError: null
+  };
+}
+
+export function failTicketVerificationJob(
+  job: TicketVerificationJob,
+  input: {
+    readonly updatedAt: string;
+    readonly error: string;
+    readonly rawTerminalOutput?: string | null;
+  }
+): TicketVerificationJob {
+  if (job.status !== "verifying") {
+    throw new TicketValidationError(`job "${job.jobId}" cannot be failed from status "${job.status}"`);
+  }
+
+  return {
+    ...job,
+    status: "error",
+    updatedAt: requireValidIso(input.updatedAt, "updatedAt"),
+    lastTerminalOutput: input.rawTerminalOutput ?? null,
+    lastError: requireNonEmpty(input.error, "error")
   };
 }
 
