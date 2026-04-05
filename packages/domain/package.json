@@ -11,6 +11,6 @@
   "scripts": {
     "lint": "node -e \"console.log('domain lint is not configured yet')\"",
     "typecheck": "tsc -p tsconfig.json --pretty false",
-    "test": "node -e \"console.log('domain tests are not configured yet')\""
+    "test": "vitest run src/__tests__/request-state.test.ts"
   }
 }

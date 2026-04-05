@@ -1,3 +1,3 @@
-export * from "./ports/terminal-executor";
-export * from "./ports/queue";
-export * from "./ports/time-source";
+export * from "./ports/terminal-executor.js";
+export * from "./ports/queue.js";
+export * from "./ports/time-source.js";

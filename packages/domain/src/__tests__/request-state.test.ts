@@ -1,0 +1,32 @@
+import { describe, expect, it } from "vitest";
+import type { RequestState } from "../request-state.js";
+import { applyRequestStateTransition, canTransitionRequestState } from "../request-state.js";
+
+describe("request state machine", () => {
+  it("allows a happy path from creation to success", () => {
+    let state: RequestState = "created";
+    state = applyRequestStateTransition(state, "awaiting_confirmation");
+    state = applyRequestStateTransition(state, "confirmed");
+    state = applyRequestStateTransition(state, "queued");
+    state = applyRequestStateTransition(state, "executing");
+    state = applyRequestStateTransition(state, "success");
+
+    expect(state).toBe("success");
+  });
+
+  it("rejects invalid transition from created directly to executing", () => {
+    const check = canTransitionRequestState("created", "executing");
+    expect(check.allowed).toBe(false);
+    expect(() => applyRequestStateTransition("created", "executing")).toThrow(
+      "transition from created to executing is not allowed"
+    );
+  });
+
+  it("covers reserve release after cancellation and prevents double execution", () => {
+    const cancelToRelease = canTransitionRequestState("canceled", "reserve_released");
+    expect(cancelToRelease.allowed).toBe(true);
+
+    const successToExecuting = canTransitionRequestState("success", "executing");
+    expect(successToExecuting.allowed).toBe(false);
+  });
+});

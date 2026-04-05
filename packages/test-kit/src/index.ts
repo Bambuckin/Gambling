@@ -1,2 +1,2 @@
-export * from "./fake-terminal";
-export * from "./fake-lottery-handler";
+export * from "./fake-terminal.js";
+export * from "./fake-lottery-handler.js";
