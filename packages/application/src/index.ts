@@ -1,5 +1,6 @@
 export * from "./ports/terminal-executor.js";
 export * from "./ports/terminal-execution-lock.js";
+export * from "./ports/terminal-handler-registry.js";
 export * from "./ports/queue.js";
 export * from "./ports/time-source.js";
 export * from "./ports/identity-store.js";
@@ -20,3 +21,4 @@ export * from "./services/purchase-request-service.js";
 export * from "./services/purchase-orchestration-service.js";
 export * from "./services/purchase-request-query-service.js";
 export * from "./services/purchase-execution-queue-service.js";
+export * from "./services/terminal-handler-resolver-service.js";

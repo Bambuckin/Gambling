@@ -11,6 +11,9 @@
     "test": "node -e \"console.log('worker tests are not configured yet')\""
   },
   "dependencies": {
+    "@lottery/application": "workspace:*",
+    "@lottery/infrastructure": "workspace:*",
+    "@lottery/lottery-handlers": "workspace:*",
     "pg-boss": "^10.1.6"
   },
   "devDependencies": {

@@ -4,6 +4,7 @@ import {
   InMemoryPurchaseRequestStore,
   InMemoryTerminalExecutionLock
 } from "@lottery/infrastructure";
+import { TerminalHandlerRuntime } from "./lib/terminal-handler-runtime.js";
 
 type WorkerBootState = "booting" | "ready";
 
@@ -17,13 +18,14 @@ const queueService = new PurchaseExecutionQueueService({
   executionLock: new InMemoryTerminalExecutionLock(),
   timeSource: new SystemTimeSource()
 });
+const handlerRuntime = new TerminalHandlerRuntime();
 
 let state: WorkerBootState = "booting";
 let isPolling = false;
 
 function logBootMessage(): void {
   console.log(`[terminal-worker] ${bootTimestamp} - queue reservation host started`);
-  console.log("[terminal-worker] deterministic handler execution is wired in upcoming Phase 6 plans");
+  console.log("[terminal-worker] deterministic handler resolution enabled through runtime registry bindings");
 }
 
 async function pollQueueForExecution(): Promise<void> {
@@ -42,6 +44,11 @@ async function pollQueueForExecution(): Promise<void> {
 
     console.log(
       `[terminal-worker] reserved request=${reservation.request.snapshot.requestId} attempt=${reservation.queueItem.attemptCount}`
+    );
+
+    const resolvedHandler = await handlerRuntime.resolvePurchaseHandler(reservation.request.snapshot.lotteryCode);
+    console.log(
+      `[terminal-worker] resolved handler lottery=${resolvedHandler.binding.lotteryCode} binding=${resolvedHandler.binding.bindingKey}`
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
