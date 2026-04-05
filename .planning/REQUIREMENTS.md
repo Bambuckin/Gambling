@@ -64,7 +64,7 @@
 ### Tickets and Results
 
 - [x] **TICK-01**: Successful purchase stores a ticket record linked to the originating request and chosen draw.
-- [ ] **TICK-02**: After draw availability, the terminal can read ticket results without additional manual steps after verification starts.
+- [x] **TICK-02**: After draw availability, the terminal can read ticket results without additional manual steps after verification starts.
 - [ ] **TICK-03**: Ticket stores purchase status, verification status, terminal result text, and winning amount.
 - [ ] **TICK-04**: User sees updated ticket outcome and balance after verification completes.
 
@@ -159,7 +159,7 @@
 | TERM-05 | Phase 6 | Complete |
 | TERM-06 | Phase 6 | Complete |
 | TICK-01 | Phase 7 | Complete |
-| TICK-02 | Phase 7 | Pending |
+| TICK-02 | Phase 7 | Complete |
 | TICK-03 | Phase 7 | Pending |
 | TICK-04 | Phase 7 | Pending |
 | BAL-04 | Phase 7 | Pending |
@@ -181,4 +181,4 @@
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-05 after 07-01 completion (ticket persistence baseline closed)*
+*Last updated: 2026-04-05 after 07-02 completion (verification trigger flow closed)*
