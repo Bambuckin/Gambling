@@ -156,7 +156,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 07-01: Persist ticket records and connect them to successful purchase outcomes.
+- [x] 07-01: Persist ticket records and connect them to successful purchase outcomes.
 - [ ] 07-02: Implement scheduled or triggered ticket verification flow through the terminal.
 - [ ] 07-03: Normalize verification results and apply winnings to the ledger.
 - [ ] 07-04: Build user-facing ticket result views and verification coverage.
@@ -213,6 +213,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Internal Ledger and Wallet Views | 4/4 | Complete | 2026-04-05 |
 | 5. Purchase Request Orchestration | 5/5 | Complete    | 2026-04-05 |
 | 6. Main Terminal Execution Engine | 5/5 | Complete    | 2026-04-05 |
-| 7. Ticket Verification and Winnings | 0/4 | Not started | - |
+| 7. Ticket Verification and Winnings | 1/4 | In progress | - |
 | 8. Admin Operations and Observability | 0/4 | Not started | - |
 | 9. Hardening, Extension Docs, and Release Readiness | 0/4 | Not started | - |

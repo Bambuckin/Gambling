@@ -2,15 +2,18 @@ import {
   appendPurchaseRequestTransition,
   formatTerminalAttemptJournalNote,
   normalizeTerminalAttempt,
-  type PurchaseRequestRecord
+  type PurchaseRequestRecord,
+  type TicketRecord
 } from "@lottery/domain";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TerminalExecutionResult } from "../ports/terminal-executor.js";
+import type { TicketPersistenceService } from "./ticket-persistence-service.js";
 
 export interface TerminalExecutionAttemptServiceDependencies {
   readonly requestStore: PurchaseRequestStore;
   readonly queueStore: PurchaseQueueStore;
+  readonly ticketPersistenceService?: TicketPersistenceService;
 }
 
 export interface RecordTerminalAttemptInput {
@@ -23,6 +26,7 @@ export interface RecordTerminalAttemptInput {
 export interface RecordTerminalAttemptResult {
   readonly request: PurchaseRequestRecord;
   readonly queueItem: PurchaseQueueItem | null;
+  readonly ticket: TicketRecord | null;
   readonly journalNote: string;
 }
 
@@ -49,10 +53,12 @@ export class TerminalExecutionAttemptServiceError extends Error {
 export class TerminalExecutionAttemptService {
   private readonly requestStore: PurchaseRequestStore;
   private readonly queueStore: PurchaseQueueStore;
+  private readonly ticketPersistenceService: TicketPersistenceService | null;
 
   constructor(dependencies: TerminalExecutionAttemptServiceDependencies) {
     this.requestStore = dependencies.requestStore;
     this.queueStore = dependencies.queueStore;
+    this.ticketPersistenceService = dependencies.ticketPersistenceService ?? null;
   }
 
   async recordAttemptResult(input: RecordTerminalAttemptInput): Promise<RecordTerminalAttemptResult> {
@@ -112,14 +118,26 @@ export class TerminalExecutionAttemptService {
       return {
         request: nextRequest,
         queueItem: nextQueueItem,
+        ticket: null,
         journalNote
       };
     }
 
     await this.queueStore.removeQueueItem(requestId);
+    let ticket: TicketRecord | null = null;
+    if (normalizedAttempt.outcome === "success" && this.ticketPersistenceService) {
+      const persisted = await this.ticketPersistenceService.persistSuccessfulPurchaseTicket({
+        request: nextRequest,
+        purchasedAt: normalizedAttempt.finishedAt,
+        externalReference: input.result.externalTicketReference ?? null
+      });
+      ticket = persisted.ticket;
+    }
+
     return {
       request: nextRequest,
       queueItem: null,
+      ticket,
       journalNote
     };
   }

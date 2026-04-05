@@ -3,12 +3,14 @@ import {
   SystemTimeSource,
   TerminalExecutionAttemptService,
   TerminalRetryService,
+  TicketPersistenceService,
   type TerminalExecutionResult
 } from "@lottery/application";
 import {
   InMemoryPurchaseQueueStore,
   InMemoryPurchaseRequestStore,
-  InMemoryTerminalExecutionLock
+  InMemoryTerminalExecutionLock,
+  InMemoryTicketStore
 } from "@lottery/infrastructure";
 import { TerminalHandlerRuntime } from "./lib/terminal-handler-runtime.js";
 
@@ -21,6 +23,7 @@ const timeSource = new SystemTimeSource();
 const requestStore = new InMemoryPurchaseRequestStore();
 const queueStore = new InMemoryPurchaseQueueStore();
 const executionLock = new InMemoryTerminalExecutionLock();
+const ticketStore = new InMemoryTicketStore();
 
 const queueService = new PurchaseExecutionQueueService({
   requestStore,
@@ -30,7 +33,10 @@ const queueService = new PurchaseExecutionQueueService({
 });
 const attemptService = new TerminalExecutionAttemptService({
   requestStore,
-  queueStore
+  queueStore,
+  ticketPersistenceService: new TicketPersistenceService({
+    ticketStore
+  })
 });
 const retryService = new TerminalRetryService({
   maxAttempts: 3
@@ -105,7 +111,7 @@ async function pollQueueForExecution(): Promise<void> {
     });
 
     console.log(
-      `[terminal-worker] attempt recorded request=${attemptRecord.request.snapshot.requestId} outcome=${attemptRecord.request.state}`
+      `[terminal-worker] attempt recorded request=${attemptRecord.request.snapshot.requestId} outcome=${attemptRecord.request.state}${attemptRecord.ticket ? ` ticket=${attemptRecord.ticket.ticketId}` : ""}`
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -135,7 +141,7 @@ async function executeTerminalAttempt(
   requestId: string,
   attempt: number,
   startedAt: string,
-  run: () => Promise<{ rawTerminalOutput: string }>
+  run: () => Promise<{ rawTerminalOutput: string; externalTicketReference: string }>
 ): Promise<TerminalExecutionResult> {
   try {
     const purchaseResult = await run();
@@ -143,6 +149,7 @@ async function executeTerminalAttempt(
       requestId,
       nextState: classifyTerminalOutcome(purchaseResult.rawTerminalOutput),
       rawOutput: purchaseResult.rawTerminalOutput,
+      externalTicketReference: purchaseResult.externalTicketReference,
       finishedAt: timeSource.nowIso()
     };
   } catch (error) {
@@ -151,6 +158,7 @@ async function executeTerminalAttempt(
       requestId,
       nextState: "error",
       rawOutput: `[terminal-worker-error] attempt=${attempt} startedAt=${startedAt} message=${message}`,
+      externalTicketReference: null,
       finishedAt: timeSource.nowIso()
     };
   }

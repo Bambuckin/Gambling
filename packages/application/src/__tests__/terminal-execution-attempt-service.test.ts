@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { PurchaseRequestRecord } from "@lottery/domain";
+import type { PurchaseRequestRecord, TicketRecord } from "@lottery/domain";
 import {
   appendPurchaseRequestTransition,
   createAwaitingConfirmationRequest
 } from "@lottery/domain";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
+import type { TicketStore } from "../ports/ticket-store.js";
 import type { TerminalExecutionResult } from "../ports/terminal-executor.js";
+import { TicketPersistenceService } from "../services/ticket-persistence-service.js";
 import {
   TerminalExecutionAttemptService,
   TerminalExecutionAttemptServiceError
@@ -22,9 +24,14 @@ describe("TerminalExecutionAttemptService", () => {
         attemptCount: 1
       })
     ]);
+    const ticketStore = new InMemoryTicketStore();
+    const ticketPersistenceService = new TicketPersistenceService({
+      ticketStore
+    });
     const service = new TerminalExecutionAttemptService({
       requestStore,
-      queueStore
+      queueStore,
+      ticketPersistenceService
     });
 
     const result = await service.recordAttemptResult({
@@ -34,14 +41,19 @@ describe("TerminalExecutionAttemptService", () => {
       result: terminalResult({
         requestId: "req-801",
         nextState: "success",
-        rawOutput: "[terminal] success"
+        rawOutput: "[terminal] success",
+        externalTicketReference: "demo-ext-801"
       })
     });
 
     expect(result.request.state).toBe("success");
     expect(result.queueItem).toBeNull();
+    expect(result.ticket).not.toBeNull();
+    expect(result.ticket?.requestId).toBe("req-801");
+    expect(result.ticket?.externalReference).toBe("demo-ext-801");
     expect(result.journalNote).toContain("outcome=success");
     expect(await queueStore.getQueueItemByRequestId("req-801")).toBeNull();
+    expect((await ticketStore.listTickets()).length).toBe(1);
   });
 
   it("records retrying attempt and re-queues item with queued status", async () => {
@@ -53,9 +65,14 @@ describe("TerminalExecutionAttemptService", () => {
         attemptCount: 2
       })
     ]);
+    const ticketStore = new InMemoryTicketStore();
+    const ticketPersistenceService = new TicketPersistenceService({
+      ticketStore
+    });
     const service = new TerminalExecutionAttemptService({
       requestStore,
-      queueStore
+      queueStore,
+      ticketPersistenceService
     });
 
     const result = await service.recordAttemptResult({
@@ -71,8 +88,10 @@ describe("TerminalExecutionAttemptService", () => {
 
     expect(result.request.state).toBe("retrying");
     expect(result.queueItem).not.toBeNull();
+    expect(result.ticket).toBeNull();
     expect(result.queueItem?.status).toBe("queued");
     expect(result.journalNote).toContain("outcome=retrying");
+    expect((await ticketStore.listTickets()).length).toBe(0);
   });
 
   it("rejects non-executing request state", async () => {
@@ -84,9 +103,14 @@ describe("TerminalExecutionAttemptService", () => {
         attemptCount: 1
       })
     ]);
+    const ticketStore = new InMemoryTicketStore();
+    const ticketPersistenceService = new TicketPersistenceService({
+      ticketStore
+    });
     const service = new TerminalExecutionAttemptService({
       requestStore,
-      queueStore
+      queueStore,
+      ticketPersistenceService
     });
 
     const action = service.recordAttemptResult({
@@ -158,11 +182,13 @@ function terminalResult(input: {
   readonly requestId: string;
   readonly nextState: TerminalExecutionResult["nextState"];
   readonly rawOutput: string;
+  readonly externalTicketReference?: string | null;
 }): TerminalExecutionResult {
   return {
     requestId: input.requestId,
     nextState: input.nextState,
     rawOutput: input.rawOutput,
+    externalTicketReference: input.externalTicketReference ?? null,
     finishedAt: "2026-04-05T22:12:30.000Z"
   };
 }
@@ -212,6 +238,24 @@ class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
 
   async removeQueueItem(requestId: string): Promise<void> {
     this.items = this.items.filter((entry) => entry.requestId !== requestId);
+  }
+}
+
+class InMemoryTicketStore implements TicketStore {
+  private tickets: TicketRecord[] = [];
+
+  async listTickets(): Promise<readonly TicketRecord[]> {
+    return this.tickets.map((ticket) => ({ ...ticket }));
+  }
+
+  async getTicketByRequestId(requestId: string): Promise<TicketRecord | null> {
+    const ticket = this.tickets.find((entry) => entry.requestId === requestId) ?? null;
+    return ticket ? { ...ticket } : null;
+  }
+
+  async saveTicket(ticket: TicketRecord): Promise<void> {
+    const filtered = this.tickets.filter((entry) => entry.requestId !== ticket.requestId);
+    this.tickets = [...filtered, { ...ticket }];
   }
 }
 

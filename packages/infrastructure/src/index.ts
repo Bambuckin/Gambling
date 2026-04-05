@@ -8,3 +8,4 @@ export * from "./ledger/in-memory-ledger-store.js";
 export * from "./purchase/in-memory-purchase-request-store.js";
 export * from "./purchase/in-memory-purchase-queue-store.js";
 export * from "./purchase/in-memory-terminal-execution-lock.js";
+export * from "./purchase/in-memory-ticket-store.js";

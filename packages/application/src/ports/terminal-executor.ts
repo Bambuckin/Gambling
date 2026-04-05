@@ -11,6 +11,7 @@ export interface TerminalExecutionResult {
   readonly requestId: string;
   readonly nextState: Extract<RequestState, "success" | "retrying" | "error">;
   readonly rawOutput: string;
+  readonly externalTicketReference?: string | null;
   readonly finishedAt: string;
 }
 
