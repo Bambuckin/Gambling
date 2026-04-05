@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Lottery Registry and Draw Pipeline** - Реализовать реестр лотерей, управление доступностью и поток актуальных тиражей. (completed 2026-04-05)
 - [x] **Phase 4: Internal Ledger and Wallet Views** - Собрать внутренний ledger баланса, резервы и пользовательское отображение движения средств. (completed 2026-04-05)
 - [x] **Phase 5: Purchase Request Orchestration** - Построить подтверждение покупки, создание заявки, очередь и пользовательские статусы. (completed 2026-04-05)
-- [ ] **Phase 6: Main Terminal Execution Engine** - Подключить последовательное исполнение на терминале, retry и нормализацию результата.
+- [x] **Phase 6: Main Terminal Execution Engine** - Подключить последовательное исполнение на терминале, retry и нормализацию результата. (completed 2026-04-05)
 - [ ] **Phase 7: Ticket Verification and Winnings** - Добавить хранение билетов, сверку после розыгрыша и начисление выигрыша.
 - [ ] **Phase 8: Admin Operations and Observability** - Дать администратору полный операционный контур: очередь, ошибки, лотереи, терминал, алерты.
 - [ ] **Phase 9: Hardening, Extension Docs, and Release Readiness** - Закрыть документацию, расширяемость, регрессионные проверки и готовность к изменению системы.
@@ -140,7 +140,7 @@ Plans:
 - [x] 06-02: Add handler registry and deterministic terminal adapter boundary.
 - [x] 06-03: Capture raw terminal outputs and normalize execution outcomes.
 - [x] 06-04: Implement retry policy, failure classification, and final error handling.
-- [ ] 06-05: Expose terminal health/state and add terminal-focused verification scenarios.
+- [x] 06-05: Expose terminal health/state and add terminal-focused verification scenarios.
 
 ### Phase 7: Ticket Verification and Winnings
 **Goal**: Persist purchased tickets, verify them after the draw through the terminal, and apply winnings to balance.
@@ -212,7 +212,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Lottery Registry and Draw Pipeline | 4/4 | Complete    | 2026-04-05 |
 | 4. Internal Ledger and Wallet Views | 4/4 | Complete | 2026-04-05 |
 | 5. Purchase Request Orchestration | 5/5 | Complete    | 2026-04-05 |
-| 6. Main Terminal Execution Engine | 4/5 | In Progress|  |
+| 6. Main Terminal Execution Engine | 5/5 | Complete    | 2026-04-05 |
 | 7. Ticket Verification and Winnings | 0/4 | Not started | - |
 | 8. Admin Operations and Observability | 0/4 | Not started | - |
 | 9. Hardening, Extension Docs, and Release Readiness | 0/4 | Not started | - |

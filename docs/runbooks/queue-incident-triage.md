@@ -4,14 +4,14 @@ Use this when request processing appears stuck, misordered, or repeatedly failin
 
 ## Current Implementation Status
 
-Queue reservation, lock ownership, deterministic handler resolution, and attempt journaling are implemented.
-Retry policy tuning and final failure classification continue in later Phase 6 plans.
+Queue reservation, lock ownership, deterministic handler resolution, attempt journaling, retry policy, and terminal health projection are implemented.
 
 ## Triage Goals
 
 1. Confirm whether the issue is real queue behavior or a contract mismatch.
 2. Identify whether failure originates in request-state logic, queue port contract, or terminal adapter contract.
 3. Capture reproducible attempt metadata for debugging (`startedAt`, `finishedAt`, `rawOutput`, `outcome`).
+4. Confirm terminal state mapping (`idle|busy|degraded|offline`) is consistent with recent execution outcomes.
 
 ## Step 1: Confirm repository health
 
@@ -55,7 +55,29 @@ corepack pnpm --filter @lottery/terminal-worker typecheck
 
 If these checks fail, triage queue incidents after restoring worker execution-path integrity.
 
-## Step 5: Incident capture template
+## Step 5: Validate terminal health state mapping
+
+Inspect:
+
+- `packages/application/src/services/terminal-health-service.ts`
+- `apps/web/src/lib/terminal/terminal-runtime.ts`
+- `apps/web/src/app/debug/terminal-lab/page.tsx`
+
+Run:
+
+```powershell
+corepack pnpm --filter @lottery/application test -- terminal-health-service
+corepack pnpm --filter @lottery/web build
+```
+
+State interpretation:
+
+- `idle` - no active executing request and no recent consecutive errors
+- `busy` - at least one queue item is in `executing` status
+- `degraded` - no active execution, but latest request chain includes error(s)
+- `offline` - three or more consecutive error outcomes
+
+## Step 6: Incident capture template
 
 Record:
 

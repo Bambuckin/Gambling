@@ -48,3 +48,13 @@ export function getPurchaseRequestQueryService(): PurchaseRequestQueryService {
 
   return cachedQueryService;
 }
+
+export function getPurchaseRuntimeStores(): {
+  readonly requestStore: InMemoryPurchaseRequestStore;
+  readonly queueStore: InMemoryPurchaseQueueStore;
+} {
+  return {
+    requestStore,
+    queueStore
+  };
+}

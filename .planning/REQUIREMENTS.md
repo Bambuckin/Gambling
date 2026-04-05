@@ -54,12 +54,12 @@
 
 ### Terminal Execution
 
-- [ ] **TERM-01**: Only one purchase request can be actively executed on the main terminal at a time.
-- [ ] **TERM-02**: Queue processes regular requests sequentially and inserts administrator priority requests ahead of non-started regular requests.
-- [ ] **TERM-03**: Terminal executor selects deterministic prebuilt handler logic by lottery code rather than generating executable code from user input.
-- [ ] **TERM-04**: Each execution attempt stores start time, end time, raw terminal text, normalized outcome, and retry metadata.
-- [ ] **TERM-05**: Terminal worker applies configured retry policy and marks final failure when attempts are exhausted.
-- [ ] **TERM-06**: System exposes terminal state as idle, busy, degraded, or offline to administrators.
+- [x] **TERM-01**: Only one purchase request can be actively executed on the main terminal at a time.
+- [x] **TERM-02**: Queue processes regular requests sequentially and inserts administrator priority requests ahead of non-started regular requests.
+- [x] **TERM-03**: Terminal executor selects deterministic prebuilt handler logic by lottery code rather than generating executable code from user input.
+- [x] **TERM-04**: Each execution attempt stores start time, end time, raw terminal text, normalized outcome, and retry metadata.
+- [x] **TERM-05**: Terminal worker applies configured retry policy and marks final failure when attempts are exhausted.
+- [x] **TERM-06**: System exposes terminal state as idle, busy, degraded, or offline to administrators.
 
 ### Tickets and Results
 
@@ -152,12 +152,12 @@
 | PURC-04 | Phase 5 | Complete |
 | PURC-05 | Phase 5 | Complete |
 | PURC-06 | Phase 5 | Complete |
-| TERM-01 | Phase 6 | Pending |
-| TERM-02 | Phase 6 | Pending |
-| TERM-03 | Phase 6 | Pending |
-| TERM-04 | Phase 6 | Pending |
-| TERM-05 | Phase 6 | Pending |
-| TERM-06 | Phase 6 | Pending |
+| TERM-01 | Phase 6 | Complete |
+| TERM-02 | Phase 6 | Complete |
+| TERM-03 | Phase 6 | Complete |
+| TERM-04 | Phase 6 | Complete |
+| TERM-05 | Phase 6 | Complete |
+| TERM-06 | Phase 6 | Complete |
 | TICK-01 | Phase 7 | Pending |
 | TICK-02 | Phase 7 | Pending |
 | TICK-03 | Phase 7 | Pending |
