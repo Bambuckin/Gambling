@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-04 and closed Phase 4, ready to plan Phase 5
-last_updated: "2026-04-05T14:22:18.061Z"
-last_activity: 2026-04-05 -- Phase 5 planning complete
+stopped_at: Completed 05-01 and advanced to 05-02
+last_updated: "2026-04-05T19:38:00.000Z"
+last_activity: 2026-04-05
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 22
-  completed_plans: 17
-  percent: 77
+  completed_plans: 18
+  percent: 82
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Each confirmed purchase should move predictably from the web interface to the single main terminal with correct reserve and debit behavior, clear status, and full event traceability.  
-**Current focus:** Phase 5 - Purchase Request Orchestration
+**Current focus:** Phase 5 — Purchase Request Orchestration
 
 ## Current Position
 
-Phase: 5 (Purchase Request Orchestration) - PLANNING
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-05 -- Phase 5 planning complete
+Phase: 5 (Purchase Request Orchestration) — EXECUTING
+Plan: 2 of 5
+Status: Executing Phase 5
+Last activity: 2026-04-05 -- 05-01 complete, proceeding to 05-02
 
-Progress: [##########] 100% (17/17 plan summaries)
+Progress: [████████░░] 82% (18/22 plan summaries)
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [##########] 100% (17/17 plan summaries)
 | Phase 4 P02 | 10 min | 3 tasks | 5 files |
 | Phase 4 P03 | 20 min | 3 tasks | 6 files |
 | Phase 4 P04 | 15 min | 3 tasks | 4 files |
+| Phase 5 P1 | 12min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,7 @@ Recent decisions affecting current work:
 - [Phase 3]: Admin registry mutations now flow through LotteryRegistryService boundaries — Admin UI uses helper boundary and service methods for enable/disable/reorder so route files do not own registry business rules
 - [Phase 3]: Phase 3 keeps separate operational and verification UI surfaces — Admin Console owns mutation controls while Registry Lab remains test-only contour for safe manual inspection
 - [Phase 4]: Wallet aggregate now derives from immutable ledger history via WalletLedgerService — Replaces hash-based preview with auditable read path before reserve/debit/release mutation rules.
+- [Phase 5]: Purchase draft validation and fixed pricing quote are centralized in PurchaseDraftService before confirmation. — Route actions now delegate payload checks and quote math to application/domain layers, reducing duplicated rule logic and keeping pricing deterministic.
 
 ### Pending Todos
 
@@ -116,12 +118,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- No active blockers for starting Phase 5 planning.
+- No active blockers for executing 05-02.
 
 ## Session Continuity
 
-Last session: 2026-04-05T13:44:01.041Z
-Stopped at: Completed 04-04 and closed Phase 4, ready to plan Phase 5
-Resume file: .planning/phases/04-internal-ledger-and-wallet-views/.continue-here.md
+Last session: 2026-04-05T19:38:00.000Z
+Stopped at: Completed 05-01 and advanced to 05-02
+Resume file: .planning/phases/05-purchase-request-orchestration/.continue-here.md
 
 Repository baseline: `main`, git operational.

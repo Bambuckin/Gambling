@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { redirect } from "next/navigation";
+import { PurchaseDraftService, PurchaseDraftServiceError } from "@lottery/application";
 import type { DrawAvailabilityState } from "@lottery/domain";
 import { requireLotteryAccess, submitLogout } from "../../../lib/access/entry-flow";
 import { getLotteryRegistryService } from "../../../lib/registry/registry-runtime";
@@ -137,7 +138,8 @@ async function submitPurchaseDraftAction(formData: FormData): Promise<void> {
 
   const requestedLotteryCode = String(formData.get("lotteryCode") ?? "");
   const access = await requireLotteryAccess(requestedLotteryCode);
-  const lottery = await getLotteryRegistryService().getLotteryByCode(access.lotteryCode);
+  const registryService = getLotteryRegistryService();
+  const lottery = await registryService.getLotteryByCode(access.lotteryCode);
   if (!lottery) {
     return redirect(`/lottery/${access.lotteryCode}?draft=error&message=Lottery+not+found`);
   }
@@ -148,16 +150,41 @@ async function submitPurchaseDraftAction(formData: FormData): Promise<void> {
     return redirect(`/lottery/${lottery.lotteryCode}?draft=error&message=${blockedMessage}`);
   }
 
-  const completedFields = lottery.formFields.reduce((count, field) => {
-    const value = String(formData.get(field.fieldKey) ?? "").trim();
-    return value.length > 0 ? count + 1 : count;
-  }, 0);
+  const rawFieldValues: Record<string, string | undefined> = {};
+  for (const field of lottery.formFields) {
+    const value = formData.get(field.fieldKey);
+    rawFieldValues[field.fieldKey] = typeof value === "string" ? value : undefined;
+  }
 
-  const message = encodeURIComponent(
-    `Captured ${completedFields}/${lottery.formFields.length} metadata fields for ${lottery.lotteryCode}.`
-  );
+  const purchaseDraftService = new PurchaseDraftService({
+    registryService
+  });
 
-  return redirect(`/lottery/${lottery.lotteryCode}?draft=ok&message=${message}`);
+  try {
+    const preparedDraft = await purchaseDraftService.prepareDraft({
+      lotteryCode: lottery.lotteryCode,
+      rawFieldValues
+    });
+
+    const message = encodeURIComponent(
+      `Quote ready: ${preparedDraft.costMinor} ${preparedDraft.currency} minor (${preparedDraft.validatedFieldCount}/${preparedDraft.totalFieldCount} fields).`
+    );
+    return redirect(`/lottery/${lottery.lotteryCode}?draft=ok&message=${message}`);
+  } catch (error) {
+    if (error instanceof PurchaseDraftServiceError) {
+      const firstFieldError = error.fieldErrors[0];
+      const message = firstFieldError
+        ? `Invalid "${firstFieldError.fieldKey}": ${firstFieldError.message}.`
+        : error.message;
+      return redirect(
+        `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(message)}`
+      );
+    }
+
+    return redirect(
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Failed to prepare purchase quote.")}`
+    );
+  }
 }
 
 function readSingleParam(value: string | string[] | undefined): string | null {

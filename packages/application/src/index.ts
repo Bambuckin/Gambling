@@ -12,3 +12,4 @@ export * from "./services/access-service.js";
 export * from "./services/lottery-registry-service.js";
 export * from "./services/draw-refresh-service.js";
 export * from "./services/wallet-ledger-service.js";
+export * from "./services/purchase-draft-service.js";

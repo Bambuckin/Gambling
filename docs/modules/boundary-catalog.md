@@ -42,6 +42,7 @@ Use it before changing code across `apps/*` and `packages/*`.
 12. Admin registry controls may mutate visibility and order only through `apps/web/src/lib/registry/admin-registry.ts` and `LotteryRegistryService`.
 13. Wallet balances shown in web routes are read through `WalletLedgerService`; reserve/debit/release mutation logic and idempotency guards stay in application layer.
 14. `apps/web/src/app/debug/wallet-lab/page.tsx` is verification-only and may read ledger snapshots/history, but must not perform ledger mutations.
+15. Purchase draft validation and pricing in lottery routes must call `PurchaseDraftService`; route files must not reimplement field rule or quote math.
 
 ## Integration Points (Disallowed)
 
@@ -57,7 +58,7 @@ Use it before changing code across `apps/*` and `packages/*`.
 
 - `corepack pnpm typecheck` confirms module exports and import boundaries compile.
 - `corepack pnpm test` currently validates request-state + ledger invariants in `@lottery/domain`.
-- `corepack pnpm --filter @lottery/application test` validates access lifecycle, wallet ledger service, lottery registry service, and draw freshness scenarios.
+- `corepack pnpm --filter @lottery/application test` validates access lifecycle, wallet ledger service, lottery registry service, draw freshness scenarios, and purchase draft quote service.
 - `corepack pnpm --filter @lottery/web build` validates role-guarded routes, registry-driven shell, draw freshness gating, and ledger-backed wallet read path wiring.
 - `corepack pnpm smoke` validates test-kit smoke entrypoint without a production terminal.
 - `docs/runbooks/registry-and-draw-verification.md` is the operator checklist for admin registry controls and draw freshness gating.
