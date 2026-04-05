@@ -197,7 +197,7 @@ Plans:
 Plans:
 - [x] 09-01: Reconcile architecture/module docs with the built codebase.
 - [x] 09-02: Write per-module verification guides and partial regression recipes.
-- [ ] 09-03: Document lottery handler extension workflow and operator runbooks.
+- [x] 09-03: Document lottery handler extension workflow and operator runbooks.
 - [ ] 09-04: Add final regression suite and release-readiness checklist.
 
 ## Progress
@@ -215,5 +215,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Main Terminal Execution Engine | 5/5 | Complete    | 2026-04-05 |
 | 7. Ticket Verification and Winnings | 4/4 | Complete | 2026-04-05 |
 | 8. Admin Operations and Observability | 4/4 | Complete    | 2026-04-05 |
-| 9. Hardening, Extension Docs, and Release Readiness | 2/4 | In progress | - |
+| 9. Hardening, Extension Docs, and Release Readiness | 3/4 | In progress | - |
 

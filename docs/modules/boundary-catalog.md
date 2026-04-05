@@ -62,6 +62,7 @@ Architecture map companion:
 28. `/admin` queue mutation actions (priority changes and admin-priority enqueue) must call `AdminQueueService`; route files must never mutate queue stores directly.
 29. `/admin` operational alerts must be projected through `OperationsAlertService`, and admin queue actions must emit events through `OperationsAuditService`.
 30. `apps/web/src/app/debug/admin-ops-lab/page.tsx` is verification-only and may read queue/terminal/alert/audit projections, but must not expose mutation actions.
+31. Lottery handler changes must flow through deterministic bindings in `packages/lottery-handlers/src/registry.ts` and be rolled out using `docs/runbooks/lottery-handler-change.md`.
 
 ## Integration Points (Disallowed)
 
@@ -82,6 +83,7 @@ Architecture map companion:
 15. Crediting winnings directly from worker/runtime without `TicketVerificationResultService` + `WalletLedgerService`.
 16. Adding write actions (recheck, force-verify, manual credit) to `ticket-lab` debug route.
 17. Adding queue priority or enqueue mutation controls to `admin-ops-lab`.
+18. Rebinding lottery handlers directly in runtime route code or worker boot code instead of handler registry contracts.
 
 ## Verification Notes
 
@@ -108,6 +110,7 @@ Architecture map companion:
 - `docs/runbooks/purchase-request-verification.md` is the manual checklist for quote confirmation, queue status, and cancellation behavior.
 - `docs/runbooks/ticket-persistence-verification.md` is the manual checklist for success-outcome ticket persistence and boundary troubleshooting.
 - `docs/runbooks/regression-recipes.md` (Phase 9) is the critical cross-module regression path before release readiness sign-off.
+- `docs/runbooks/lottery-handler-change.md` is the rollout/rollback checklist for handler binding updates.
 
 ## Dependency Direction Policy
 

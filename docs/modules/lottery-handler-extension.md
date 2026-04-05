@@ -1,32 +1,44 @@
 # Lottery Handler Extension Guide
 
-Use this guide when adding a new lottery to the system.
-Do not bypass these contracts with ad-hoc terminal scripts.
+Use this guide for adding or changing lottery handler bindings.
+The target is deterministic behavior from registry metadata to terminal execution.
 
-## Contract Sources
+## Scope And Source Files
 
-- Handler contracts: `packages/lottery-handlers/src/contracts.ts`
-- Registry shape: `packages/domain/src/lottery-registry.ts`
-- Boundary catalog: `docs/modules/boundary-catalog.md`
+- Contracts: `packages/lottery-handlers/src/contracts.ts`
+- Handler registry: `packages/lottery-handlers/src/registry.ts`
+- Package exports: `packages/lottery-handlers/src/index.ts`
+- Lottery metadata contract: `packages/domain/src/lottery-registry.ts`
+- Boundary rules: `docs/modules/boundary-catalog.md`
+- Operator procedure: `docs/runbooks/lottery-handler-change.md`
 
-## What a New Lottery Must Provide
+## Lifecycle Overview
 
-1. A `LotteryPurchaseHandlerContract` implementation.
-2. A `LotteryResultHandlerContract` implementation.
-3. Registry metadata for the lottery code, title, pricing, and handler binding keys.
-4. Local verification path using fake adapters or deterministic stubs.
+1. Design precheck (IDs, compatibility, rollback intent).
+2. Contract implementation (purchase + result handlers).
+3. Registry and export wiring.
+4. Verification (type, tests, smoke, admin visibility checks).
+5. Operator rollout and post-rollout checks.
 
-## Step-by-Step
+## 1) Design Precheck
 
-### 1. Pick stable identifiers
+Before code changes, lock these decisions:
 
-- Choose `lotteryCode` (for example `gosloto-6x45`).
-- Choose explicit `bindingKey` values for purchase and result handlers.
-- Keep keys stable across deploys to preserve replay/debug consistency.
+- `lotteryCode`: stable identifier (`demo-lottery`, `gosloto-6x45`, etc).
+- `purchaseBindingKey` and `resultBindingKey`: immutable keys used by worker resolution.
+- Compatibility strategy:
+  - additive change (new lottery code), or
+  - replacement change (same code with new binding key).
+- Rollback trigger:
+  - explicit condition that forces reverting to previous binding key.
 
-### 2. Implement handler contracts
+Do not proceed without a clear rollback condition.
 
-Create a module under `packages/lottery-handlers/src/` (for example `gosloto-6x45.ts`) that implements:
+## 2) Implement Contracts
+
+Create/update handler module in `packages/lottery-handlers/src/`.
+
+Required contracts:
 
 - `LotteryPurchaseHandlerContract`
 - `LotteryResultHandlerContract`
@@ -34,43 +46,61 @@ Create a module under `packages/lottery-handlers/src/` (for example `gosloto-6x4
 Required fields:
 
 - `contractVersion: "v1"`
-- `lotteryCode: <same code used in registry>`
-- `bindingKey: <stable handler id>`
+- `lotteryCode` matching registry entry
+- stable `bindingKey`
 
 Required methods:
 
-- `purchase(context)` returns `{ externalTicketReference, rawTerminalOutput }`
-- `verify(context)` returns `{ status, winningAmountMinor, rawTerminalOutput }`
+- `purchase(context) => { externalTicketReference, rawTerminalOutput }`
+- `verify(context) => { status, winningAmountMinor, rawTerminalOutput }`
 
-### 3. Register exports
+Handler output must remain deterministic for the same input and must always return traceable `rawTerminalOutput`.
 
-- Export the new handlers through `packages/lottery-handlers/src/index.ts`.
-- Keep exports deterministic and explicit; avoid dynamic runtime registration.
+## 3) Wire Registry + Exports
 
-### 4. Bind handlers in registry
+1. Export handlers from `packages/lottery-handlers/src/index.ts`.
+2. Register bindings in `packages/lottery-handlers/src/registry.ts`.
+3. Ensure `LotteryRegistryEntry.handlers` uses exact binding keys:
+   - `handlers.purchaseHandler = purchaseBindingKey`
+   - `handlers.resultHandler = resultBindingKey`
+4. Verify metadata consistency:
+   - pricing schema and form schema remain valid for `lotteryCode`;
+   - no duplicate binding keys for unrelated lotteries.
 
-Create/update the `LotteryRegistryEntry` source so:
+## 4) Verification Checklist (Developer Side)
 
-- `handlers.purchaseHandler` equals purchase handler binding key.
-- `handlers.resultHandler` equals result handler binding key.
-- `pricing` and `formSchemaVersion` match the UI contract for that lottery.
+Run in order:
 
-### 5. Add verification
+```powershell
+corepack pnpm --filter @lottery/lottery-handlers typecheck
+corepack pnpm --filter @lottery/application test -- terminal-handler-resolver-service terminal-execution-attempt-service
+corepack pnpm smoke
+corepack pnpm --filter @lottery/web build
+```
 
-- Add or update a fake/stub path in `packages/test-kit` if needed.
-- Run:
-  - `corepack pnpm typecheck`
-  - `corepack pnpm test`
-  - `corepack pnpm smoke`
+Expected outcomes:
 
-### 6. Update docs
+- resolver maps `lotteryCode` to intended binding keys;
+- attempt flow receives normalized output shape;
+- smoke path stays green with fake terminal adapters;
+- web build remains stable for lottery pages/admin views.
 
-- Update `docs/modules/boundary-catalog.md` if ownership boundaries changed.
-- Update runbooks if operator actions or queue handling changed.
+## 5) Rollout Notes (Operator Side)
+
+After technical checks pass, run operational rollout using:
+
+- `docs/runbooks/lottery-handler-change.md`
+
+This includes:
+
+- preflight checks,
+- staged rollout verification in `/admin` and `/debug/admin-ops-lab`,
+- rollback conditions and execution path.
 
 ## Hard Rules
 
 - No UI/session logic in handler modules.
 - No runtime-generated terminal code from user input.
 - No direct ledger mutations inside handler code.
-- All terminal outputs must stay traceable (`rawTerminalOutput`).
+- No direct store mutations from handler code.
+- All terminal outputs must remain traceable through `rawTerminalOutput`.
