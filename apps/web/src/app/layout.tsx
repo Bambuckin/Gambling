@@ -13,6 +13,7 @@ export default async function RootLayout({ children }: RootLayoutProps): Promise
     ...(role === "admin" ? [{ href: "/admin", label: "Admin" }] : []),
     ...(role === "user" ? [{ href: "/lottery/demo-lottery", label: "Lottery" }] : []),
     { href: "/debug/access-lab", label: "Access Lab" },
+    { href: "/debug/wallet-lab", label: "Wallet Lab" },
     ...(role ? [] : [{ href: "/login", label: "Login" }])
   ];
 

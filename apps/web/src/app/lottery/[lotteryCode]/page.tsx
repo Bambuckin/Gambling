@@ -6,6 +6,7 @@ import { getLotteryRegistryService } from "../../../lib/registry/registry-runtim
 import { LotteryFormFields } from "../../../lib/lottery-form/render-lottery-form-fields";
 import { getDrawRefreshService } from "../../../lib/draw/draw-runtime";
 import { LEDGER_DEFAULT_CURRENCY, getWalletLedgerService } from "../../../lib/ledger/ledger-runtime";
+import { buildWalletMovementRows } from "../../../lib/ledger/wallet-view";
 
 type LotteryPageProps = {
   readonly params: Promise<{
@@ -40,15 +41,56 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
   const walletLedgerService = getWalletLedgerService();
   const walletSnapshot = await walletLedgerService.getWalletSnapshot(access.identity.identityId, LEDGER_DEFAULT_CURRENCY);
   const walletEntries = await walletLedgerService.listEntries(access.identity.identityId);
+  const walletMovements = buildWalletMovementRows(walletEntries, { limit: 10 });
 
   return (
     <section>
       <h1>Lottery: {lottery.title}</h1>
       <p>Lottery code: {lottery.lotteryCode}</p>
-      <p>Wallet currency: {walletSnapshot.currency}</p>
-      <p>Wallet available (minor): {walletSnapshot.availableMinor}</p>
-      <p>Wallet reserved (minor): {walletSnapshot.reservedMinor}</p>
-      <p>Wallet movement entries: {walletEntries.length}</p>
+      <h2>Wallet Snapshot</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Currency</th>
+            <th>Available (minor)</th>
+            <th>Reserved (minor)</th>
+            <th>Total movements</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>{walletSnapshot.currency}</td>
+            <td>{walletSnapshot.availableMinor}</td>
+            <td>{walletSnapshot.reservedMinor}</td>
+            <td>{walletEntries.length}</td>
+          </tr>
+        </tbody>
+      </table>
+      <h2>Latest Wallet Movements</h2>
+      {walletMovements.length === 0 ? (
+        <p>No wallet movements recorded for this user.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Operation</th>
+              <th>Amount (minor)</th>
+              <th>Reference</th>
+              <th>Created at</th>
+            </tr>
+          </thead>
+          <tbody>
+            {walletMovements.map((movement) => (
+              <tr key={movement.entryId}>
+                <td>{movement.operation}</td>
+                <td>{movement.amountLabel}</td>
+                <td>{movement.referenceLabel}</td>
+                <td>{movement.createdAt}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       <p>Session active for: {access.identity.displayName}</p>
       <p>Role: {access.identity.role}</p>
       <p>Session id: {access.session.sessionId}</p>
