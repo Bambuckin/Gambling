@@ -35,6 +35,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps): Promi
       </form>
 
       <p>Demo user: operator / operator</p>
+      <p>Demo tester: tester / tester</p>
       <p>Demo admin: admin / admin</p>
     </section>
   );

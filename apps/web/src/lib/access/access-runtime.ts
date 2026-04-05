@@ -161,6 +161,14 @@ function defaultIdentitySeeds(): AccessIdentitySeed[] {
       role: "admin",
       status: "active",
       displayName: "Administrator"
+    },
+    {
+      identityId: "seed-tester",
+      login: "tester",
+      password: "tester",
+      role: "user",
+      status: "active",
+      displayName: "Tester User"
     }
   ];
 }
