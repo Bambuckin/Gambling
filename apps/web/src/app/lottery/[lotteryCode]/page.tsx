@@ -1,13 +1,18 @@
 import type { ReactElement } from "react";
 import { redirect } from "next/navigation";
-import { PurchaseDraftService, PurchaseDraftServiceError } from "@lottery/application";
-import type { DrawAvailabilityState } from "@lottery/domain";
+import {
+  PurchaseDraftService,
+  PurchaseDraftServiceError,
+  PurchaseRequestServiceError
+} from "@lottery/application";
+import type { DrawAvailabilityState, PurchaseDraftPayload, PurchaseDraftPayloadValue } from "@lottery/domain";
 import { requireLotteryAccess, submitLogout } from "../../../lib/access/entry-flow";
 import { getLotteryRegistryService } from "../../../lib/registry/registry-runtime";
 import { LotteryFormFields } from "../../../lib/lottery-form/render-lottery-form-fields";
 import { getDrawRefreshService } from "../../../lib/draw/draw-runtime";
 import { LEDGER_DEFAULT_CURRENCY, getWalletLedgerService } from "../../../lib/ledger/ledger-runtime";
 import { buildWalletMovementRows } from "../../../lib/ledger/wallet-view";
+import { getPurchaseRequestService } from "../../../lib/purchase/purchase-request-runtime";
 
 type LotteryPageProps = {
   readonly params: Promise<{
@@ -16,6 +21,7 @@ type LotteryPageProps = {
   readonly searchParams: Promise<{
     readonly draft?: string | string[];
     readonly message?: string | string[];
+    readonly quote?: string | string[];
   }>;
 };
 
@@ -27,6 +33,7 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
   const lottery = await registryService.getLotteryByCode(access.lotteryCode);
   const draftStatus = readSingleParam(resolvedSearchParams.draft);
   const draftMessage = readSingleParam(resolvedSearchParams.message);
+  const quoteToken = readSingleParam(resolvedSearchParams.quote);
 
   if (!lottery) {
     return (
@@ -43,6 +50,7 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
   const walletSnapshot = await walletLedgerService.getWalletSnapshot(access.identity.identityId, LEDGER_DEFAULT_CURRENCY);
   const walletEntries = await walletLedgerService.listEntries(access.identity.identityId);
   const walletMovements = buildWalletMovementRows(walletEntries, { limit: 10 });
+  const confirmationDraft = decodeConfirmationToken(quoteToken, lottery.lotteryCode);
 
   return (
     <section>
@@ -119,6 +127,44 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
         </button>
       </form>
 
+      {confirmationDraft ? (
+        <section>
+          <h2>Confirm Purchase Request</h2>
+          <p>Request id: {confirmationDraft.requestId}</p>
+          <p>Draw id: {confirmationDraft.drawId}</p>
+          <p>
+            Final quote: {confirmationDraft.costMinor} {confirmationDraft.currency} minor
+          </p>
+          <h3>Validated Payload Snapshot</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(confirmationDraft.payload).map(([fieldKey, value]) => (
+                <tr key={fieldKey}>
+                  <td>{fieldKey}</td>
+                  <td>{String(value)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <form action={confirmPurchaseRequestAction}>
+            <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
+            <input type="hidden" name="quoteToken" value={quoteToken ?? ""} />
+            <button type="submit" disabled={Boolean(purchaseBlockedReason)}>
+              Confirm And Create Request
+            </button>
+          </form>
+          <p>
+            <a href={`/lottery/${lottery.lotteryCode}`}>Cancel And Return To Editable Form</a>
+          </p>
+        </section>
+      ) : null}
+
       <form action={handleLogoutAction}>
         <button type="submit">Logout</button>
       </form>
@@ -165,11 +211,28 @@ async function submitPurchaseDraftAction(formData: FormData): Promise<void> {
       lotteryCode: lottery.lotteryCode,
       rawFieldValues
     });
+    const drawId = drawState.snapshot?.drawId;
+    if (!drawId) {
+      return redirect(
+        `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Missing draw id for confirmation quote.")}`
+      );
+    }
+
+    const confirmationToken = encodeConfirmationToken({
+      requestId: `req-${crypto.randomUUID()}`,
+      lotteryCode: preparedDraft.lotteryCode,
+      drawId,
+      payload: preparedDraft.validatedPayload,
+      costMinor: preparedDraft.costMinor,
+      currency: preparedDraft.currency
+    });
 
     const message = encodeURIComponent(
       `Quote ready: ${preparedDraft.costMinor} ${preparedDraft.currency} minor (${preparedDraft.validatedFieldCount}/${preparedDraft.totalFieldCount} fields).`
     );
-    return redirect(`/lottery/${lottery.lotteryCode}?draft=ok&message=${message}`);
+    return redirect(
+      `/lottery/${lottery.lotteryCode}?draft=ready&message=${message}&quote=${encodeURIComponent(confirmationToken)}`
+    );
   } catch (error) {
     if (error instanceof PurchaseDraftServiceError) {
       const firstFieldError = error.fieldErrors[0];
@@ -185,6 +248,143 @@ async function submitPurchaseDraftAction(formData: FormData): Promise<void> {
       `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Failed to prepare purchase quote.")}`
     );
   }
+}
+
+async function confirmPurchaseRequestAction(formData: FormData): Promise<void> {
+  "use server";
+
+  const requestedLotteryCode = String(formData.get("lotteryCode") ?? "");
+  const access = await requireLotteryAccess(requestedLotteryCode);
+  const registryService = getLotteryRegistryService();
+  const lottery = await registryService.getLotteryByCode(access.lotteryCode);
+  if (!lottery) {
+    return redirect(`/lottery/${access.lotteryCode}?draft=error&message=Lottery+not+found`);
+  }
+
+  const confirmationToken = String(formData.get("quoteToken") ?? "");
+  const confirmationDraft = decodeConfirmationToken(confirmationToken, lottery.lotteryCode);
+  if (!confirmationDraft) {
+    return redirect(
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Confirmation snapshot is missing or invalid.")}`
+    );
+  }
+
+  const drawState = await getDrawRefreshService().getDrawState(lottery.lotteryCode);
+  const purchaseBlockedReason = describePurchaseBlockReason(drawState);
+  if (purchaseBlockedReason) {
+    return redirect(
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(`Purchase blocked: ${purchaseBlockedReason}.`)}`
+    );
+  }
+
+  try {
+    const createResult = await getPurchaseRequestService().createAwaitingConfirmation({
+      requestId: confirmationDraft.requestId,
+      userId: access.identity.identityId,
+      lotteryCode: lottery.lotteryCode,
+      drawId: confirmationDraft.drawId,
+      payload: confirmationDraft.payload,
+      costMinor: confirmationDraft.costMinor,
+      currency: confirmationDraft.currency
+    });
+
+    const message = createResult.replayed
+      ? `Request ${createResult.request.snapshot.requestId} already exists with state ${createResult.request.state}.`
+      : `Request ${createResult.request.snapshot.requestId} created with state ${createResult.request.state}.`;
+
+    return redirect(
+      `/lottery/${lottery.lotteryCode}?draft=confirmed&message=${encodeURIComponent(message)}`
+    );
+  } catch (error) {
+    if (error instanceof PurchaseRequestServiceError) {
+      return redirect(
+        `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(error.message)}`
+      );
+    }
+
+    return redirect(
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Failed to create purchase request snapshot.")}`
+    );
+  }
+}
+
+interface PurchaseConfirmationToken {
+  readonly requestId: string;
+  readonly lotteryCode: string;
+  readonly drawId: string;
+  readonly payload: PurchaseDraftPayload;
+  readonly costMinor: number;
+  readonly currency: string;
+}
+
+function encodeConfirmationToken(input: PurchaseConfirmationToken): string {
+  const json = JSON.stringify(input);
+  return Buffer.from(json, "utf8").toString("base64url");
+}
+
+function decodeConfirmationToken(token: string | null, expectedLotteryCode: string): PurchaseConfirmationToken | null {
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const decodedJson = Buffer.from(token, "base64url").toString("utf8");
+    const parsed = JSON.parse(decodedJson) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    const record = parsed as Record<string, unknown>;
+    const requestId = typeof record.requestId === "string" ? record.requestId.trim() : "";
+    const lotteryCode = typeof record.lotteryCode === "string" ? record.lotteryCode.trim().toLowerCase() : "";
+    const drawId = typeof record.drawId === "string" ? record.drawId.trim() : "";
+    const costMinor = typeof record.costMinor === "number" ? Math.trunc(record.costMinor) : NaN;
+    const currency = typeof record.currency === "string" ? record.currency.trim().toUpperCase() : "";
+    const payload = sanitizeConfirmationPayload(record.payload);
+
+    if (
+      !requestId ||
+      !lotteryCode ||
+      !drawId ||
+      !Number.isFinite(costMinor) ||
+      costMinor <= 0 ||
+      !currency ||
+      !payload
+    ) {
+      return null;
+    }
+
+    if (lotteryCode !== expectedLotteryCode.toLowerCase()) {
+      return null;
+    }
+
+    return {
+      requestId,
+      lotteryCode,
+      drawId,
+      payload,
+      costMinor,
+      currency
+    };
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeConfirmationPayload(input: unknown): PurchaseDraftPayload | null {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+
+  const output: Record<string, PurchaseDraftPayloadValue> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (typeof value !== "string" && typeof value !== "number") {
+      return null;
+    }
+    output[key] = value;
+  }
+
+  return output;
 }
 
 function readSingleParam(value: string | string[] | undefined): string | null {

@@ -47,8 +47,8 @@
 
 - [x] **PURC-01**: System validates ticket parameters against lottery-specific rules before confirmation.
 - [x] **PURC-02**: System calculates ticket cost from lottery pricing rules before confirmation.
-- [ ] **PURC-03**: User sees confirmation dialog with lottery, draw, parameters, and final cost before request creation.
-- [ ] **PURC-04**: After confirmation system creates a purchase request with immutable ticket snapshot and status journal.
+- [x] **PURC-03**: User sees confirmation dialog with lottery, draw, parameters, and final cost before request creation.
+- [x] **PURC-04**: After confirmation system creates a purchase request with immutable ticket snapshot and status journal.
 - [ ] **PURC-05**: User can cancel a request while it is queued or waiting between retries, but not after terminal execution starts.
 - [ ] **PURC-06**: User can view a personal request list with current status, attempt count, and final result.
 
@@ -148,8 +148,8 @@
 | BAL-06 | Phase 4 | Complete |
 | PURC-01 | Phase 5 | Complete |
 | PURC-02 | Phase 5 | Complete |
-| PURC-03 | Phase 5 | Pending |
-| PURC-04 | Phase 5 | Pending |
+| PURC-03 | Phase 5 | Complete |
+| PURC-04 | Phase 5 | Complete |
 | PURC-05 | Phase 5 | Pending |
 | PURC-06 | Phase 5 | Pending |
 | TERM-01 | Phase 6 | Pending |
