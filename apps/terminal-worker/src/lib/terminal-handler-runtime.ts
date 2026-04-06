@@ -27,7 +27,7 @@ export class TerminalHandlerRuntime {
   private readonly registryBindings: ReturnType<typeof createLotteryPurchaseHandlerRegistry>;
   private readonly resolverService: TerminalHandlerResolverService;
 
-  constructor(handlers: readonly LotteryPurchaseHandlerContract[] = [new DemoLotteryPurchaseHandler()]) {
+  constructor(handlers: readonly LotteryPurchaseHandlerContract[] = createDefaultHandlersFromEnv()) {
     this.registryBindings = createLotteryPurchaseHandlerRegistry(handlers);
     this.resolverService = new TerminalHandlerResolverService({
       handlerRegistry: new WorkerTerminalHandlerRegistryAdapter(this.registryBindings.listBindings())
@@ -96,8 +96,13 @@ class WorkerTerminalHandlerRegistryAdapter implements TerminalHandlerRegistry {
 
 class DemoLotteryPurchaseHandler implements LotteryPurchaseHandlerContract {
   readonly contractVersion = "v1" as const;
-  readonly lotteryCode = "demo-lottery";
-  readonly bindingKey = "demo-terminal-handler-v1";
+  readonly lotteryCode: string;
+  readonly bindingKey: string;
+
+  constructor(lotteryCode: string) {
+    this.lotteryCode = lotteryCode.trim().toLowerCase();
+    this.bindingKey = `${this.lotteryCode}-terminal-handler-v1`;
+  }
 
   async purchase(context: LotteryPurchaseContext): Promise<LotteryPurchaseResult> {
     return {
@@ -105,4 +110,23 @@ class DemoLotteryPurchaseHandler implements LotteryPurchaseHandlerContract {
       rawTerminalOutput: `[demo-terminal-handler] draw=${context.draw.drawId} attempt=${context.attempt}`
     };
   }
+}
+
+function createDefaultHandlersFromEnv(): readonly LotteryPurchaseHandlerContract[] {
+  const codes = readDefaultLotteryCodes();
+  return codes.map((code) => new DemoLotteryPurchaseHandler(code));
+}
+
+function readDefaultLotteryCodes(): readonly string[] {
+  const raw = process.env.LOTTERY_TERMINAL_HANDLER_CODES;
+  if (!raw) {
+    return ["demo-lottery", "gosloto-6x45", "archive-lottery"];
+  }
+
+  const codes = raw
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0);
+
+  return codes.length > 0 ? [...new Set(codes)] : ["demo-lottery"];
 }

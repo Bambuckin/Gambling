@@ -15,6 +15,10 @@
   },
   "dependencies": {
     "@lottery/application": "workspace:*",
-    "@lottery/domain": "workspace:*"
+    "@lottery/domain": "workspace:*",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0"
   }
 }

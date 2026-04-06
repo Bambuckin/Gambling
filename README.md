@@ -1,91 +1,90 @@
 # Lottery Terminal Operations System
 
-Status: Phase 2 complete (`02-01`..`02-05` complete); Phase 3 (`03-01`) next.
+Status: v1 phase baseline complete (`.planning/STATE.md` reports 100%).
 
-This repository is designed so a new session can continue from files on disk only.
+This repository contains a LAN-first lottery operations platform with:
+- `apps/web` (user/admin web runtime)
+- `apps/terminal-worker` (single active execution worker)
+- shared domain/application/infrastructure/handler packages
 
-## Start Here
+New contributor/model entrypoint:
+- [docs/START-HERE.md](docs/START-HERE.md)
 
-1. `.planning/STATE.md`
-2. `.planning/PROJECT.md`
-3. `.planning/REQUIREMENTS.md`
-4. `.planning/ROADMAP.md`
-5. `docs/adr/ADR-001-stack-and-repo-shape.md`
-6. `.planning/phases/01-foundation-contracts/01-CONTEXT.md`
-7. `.planning/phases/01-foundation-contracts/01-RESEARCH.md`
-8. `docs/modules/boundary-catalog.md`
-9. `docs/modules/lottery-handler-extension.md`
-10. `docs/runbooks/local-bootstrap.md`
-11. `docs/runbooks/fake-terminal-smoke.md`
-12. `docs/runbooks/queue-incident-triage.md`
-13. `.planning/codebase/STRUCTURE.md`
-14. `.planning/phases/01-foundation-contracts/01-01-PLAN.md` through `01-04-PLAN.md`
-15. `.planning/phases/01-foundation-contracts/.continue-here.md`
-16. `.planning/phases/02-access-and-unified-shell/02-CONTEXT.md`
-17. `.planning/phases/02-access-and-unified-shell/02-01-PLAN.md`
-18. `.planning/phases/02-access-and-unified-shell/02-01-SUMMARY.md`
-19. `.planning/phases/02-access-and-unified-shell/.continue-here.md`
-20. `.planning/phases/02-access-and-unified-shell/02-02-PLAN.md`
-21. `.planning/phases/02-access-and-unified-shell/02-02-SUMMARY.md`
-22. `.planning/phases/02-access-and-unified-shell/02-03-PLAN.md`
-23. `.planning/phases/02-access-and-unified-shell/02-03-SUMMARY.md`
-24. `.planning/phases/02-access-and-unified-shell/02-04-PLAN.md`
-25. `.planning/phases/02-access-and-unified-shell/02-04-SUMMARY.md`
-26. `.planning/phases/02-access-and-unified-shell/02-05-PLAN.md`
-27. `.planning/phases/02-access-and-unified-shell/02-05-SUMMARY.md`
+## Quick Start (Local)
 
-## Locked Baseline (ADR-001)
+```powershell
+corepack pnpm install
+corepack pnpm release:check
+corepack pnpm dev:web
+corepack pnpm dev:worker
+```
 
-ADR reference: `docs/adr/ADR-001-stack-and-repo-shape.md`
+## Quick Start (Shared Postgres Runtime)
 
-Chosen workspace shape:
+1. Copy `.env.example` to `.env` and fill DB values.
+2. Start PostgreSQL (local or remote).
+3. Initialize schema and seed data.
+4. Start web and worker processes.
 
-- `apps/web`
-- `apps/terminal-worker`
-- `packages/domain`
-- `packages/application`
-- `packages/infrastructure`
-- `packages/lottery-handlers`
-- `packages/test-kit`
+```powershell
+corepack pnpm install
+corepack pnpm runtime:preflight
+corepack pnpm db:init
+corepack pnpm db:seed
+corepack pnpm start:web
+corepack pnpm start:worker
+```
 
-Root workspace config files:
+Optional local DB:
 
-- `package.json`
-- `pnpm-workspace.yaml`
-- `tsconfig.base.json`
+```powershell
+docker compose -f docker-compose.postgres.yml up -d
+```
+
+## Runtime Modes
+
+- `LOTTERY_STORAGE_BACKEND=in-memory` (default)
+- `LOTTERY_STORAGE_BACKEND=postgres` (shared state for web + worker)
+
+Connection variable:
+- `LOTTERY_POSTGRES_URL` (fallback: `DATABASE_URL`)
 
 ## Root Scripts
 
 - `corepack pnpm dev:web`
 - `corepack pnpm dev:worker`
-- `corepack pnpm lint`
-- `corepack pnpm typecheck`
-- `corepack pnpm test`
-- `corepack pnpm smoke`
+- `corepack pnpm start:web`
+- `corepack pnpm start:worker`
+- `corepack pnpm db:init`
+- `corepack pnpm db:seed`
+- `corepack pnpm db:reset`
+- `corepack pnpm runtime:preflight`
+- `corepack pnpm runtime:preflight:web`
+- `corepack pnpm runtime:preflight:worker`
+- `corepack pnpm release:check`
 
-## Working Rules
+## Deployment + Handoff Docs
 
-- Keep business logic out of UI and terminal apps.
-- Keep terminal execution isolated in worker plus adapter boundaries.
-- Treat balance and request transitions as auditable domain events.
-- Add or change lotteries only through registry and handler contracts.
-- Update `.planning/` and `docs/` when decisions or boundaries change.
+- [START-HERE.md](docs/START-HERE.md)
+- [deployment-bootstrap.md](docs/runbooks/deployment-bootstrap.md)
+- [launch-readiness-checklist.md](docs/runbooks/launch-readiness-checklist.md)
+- [release-readiness.md](docs/runbooks/release-readiness.md)
+- [module-verification-matrix.md](docs/runbooks/module-verification-matrix.md)
+- `ops/runtime/hosts.template.json`
+- `ops/runtime/.env.web.template`
+- `ops/runtime/.env.worker.template`
 
-## Documentation Map
+## Architecture Anchors
 
-- `docs/adr/` - architectural decisions and constraints
-- `docs/modules/boundary-catalog.md` - concrete ownership and anti-ownership map
-- `docs/modules/lottery-handler-extension.md` - deterministic workflow for adding/changing lottery handlers
-- `docs/runbooks/local-bootstrap.md` - local environment bootstrap before continuing work
-- `docs/runbooks/fake-terminal-smoke.md` - smoke verification path without production terminal
-- `docs/runbooks/queue-incident-triage.md` - queue/terminal triage baseline at current phase
-- `.planning/` - roadmap, plans, summaries, and state continuity
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [docs/modules/system-architecture.md](docs/modules/system-architecture.md)
+- [docs/modules/boundary-catalog.md](docs/modules/boundary-catalog.md)
+- [docs/modules/lottery-handler-extension.md](docs/modules/lottery-handler-extension.md)
 
-## Environment Note
+## Planning Continuity
 
-- Git is available on PATH and repository branch is `main`.
-- If a `gsd-tools` git step fails with sandbox `EPERM`, rerun that step via unrestricted shell.
-
-## Immediate Next Step
-
-Start `03-01` in Phase 3 (`Lottery Registry and Draw Pipeline`): implement lottery registry storage, ordering, visibility, and handler references.
+Use in this order when resuming:
+1. `.planning/STATE.md`
+2. `.planning/PROJECT.md`
+3. `.planning/REQUIREMENTS.md`
+4. `.planning/ROADMAP.md`

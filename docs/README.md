@@ -4,9 +4,11 @@ Documentation in this repository is part of execution, not a post-factum attachm
 
 ## Core Sections
 
+- `docs/START-HERE.md` - first-entry orientation for a new engineer/model.
 - `docs/adr/` - architecture, stack, and repository-shape decisions.
 - `docs/modules/` - implemented architecture map, boundaries, contracts, extension guidance.
 - `docs/runbooks/` - verification and operational procedures from local bootstrap to release checks.
+- `docs/handoff-runtime.md` - explicit continuation scope for another model/account.
 
 ## Architecture And Modules
 
@@ -30,6 +32,8 @@ If a decision affects future implementation, write it to `docs/` or `.planning/`
 - `docs/runbooks/queue-incident-triage.md` - queue/terminal incident triage.
 - `docs/runbooks/admin-operations-console.md` - admin operations and observability checks.
 - `docs/runbooks/ticket-persistence-verification.md` - ticket persistence and winnings verification.
+- `docs/runbooks/deployment-bootstrap.md` - machine-role deployment bootstrap for LAN runtime.
+- `docs/runbooks/launch-readiness-checklist.md` - full launch gap checklist and install matrix per machine.
 
 ## Continuation Entry Points
 

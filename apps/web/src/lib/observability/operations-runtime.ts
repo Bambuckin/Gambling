@@ -1,8 +1,12 @@
 import { OperationsAlertService, OperationsAuditService, SystemTimeSource } from "@lottery/application";
-import { InMemoryOperationsAuditLog } from "@lottery/infrastructure";
+import { InMemoryOperationsAuditLog, PostgresOperationsAuditLog } from "@lottery/infrastructure";
 import { getAdminOperationsQueryService } from "../purchase/purchase-runtime";
+import { getWebPostgresPool, getWebStorageBackend } from "../runtime/postgres-runtime";
 
-const operationsAuditLog = new InMemoryOperationsAuditLog();
+const operationsAuditLog =
+  getWebStorageBackend() === "postgres"
+    ? new PostgresOperationsAuditLog(getWebPostgresPool())
+    : new InMemoryOperationsAuditLog();
 
 let cachedOperationsAuditService: OperationsAuditService | null = null;
 let cachedOperationsAlertService: OperationsAlertService | null = null;

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "start": "node --enable-source-maps src/main.ts",
+    "start": "tsx src/main.ts",
     "lint": "node -e \"console.log('worker lint is not configured yet')\"",
     "typecheck": "tsc -p tsconfig.json --pretty false",
     "test": "node -e \"console.log('worker tests are not configured yet')\""

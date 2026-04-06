@@ -1,6 +1,7 @@
 import type { LotteryRegistryEntry } from "@lottery/domain";
 import { LotteryRegistryService } from "@lottery/application";
-import { InMemoryLotteryRegistryStore } from "@lottery/infrastructure";
+import { InMemoryLotteryRegistryStore, PostgresLotteryRegistryStore } from "@lottery/infrastructure";
+import { getWebPostgresPool, getWebStorageBackend } from "../runtime/postgres-runtime";
 
 interface RegistrySeedEntry {
   readonly lotteryCode: string;
@@ -56,9 +57,16 @@ export function getLotteryRegistryService(): LotteryRegistryService {
 
 function createDefaultLotteryRegistryRuntimeFactory(): LotteryRegistryRuntimeFactory {
   const seedEntries = readRegistrySeedEntries();
+  const backend = getWebStorageBackend();
 
   return {
     createService() {
+      if (backend === "postgres") {
+        return new LotteryRegistryService({
+          registryStore: new PostgresLotteryRegistryStore(getWebPostgresPool())
+        });
+      }
+
       return new LotteryRegistryService({
         registryStore: new InMemoryLotteryRegistryStore(seedEntries)
       });

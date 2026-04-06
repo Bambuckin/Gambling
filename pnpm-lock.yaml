@@ -11,6 +11,9 @@ importers:
       '@types/node':
         specifier: ^22.14.1
         version: 22.19.17
+      tsx:
+        specifier: ^4.20.6
+        version: 4.21.0
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
@@ -20,6 +23,15 @@ importers:
 
   apps/terminal-worker:
     dependencies:
+      '@lottery/application':
+        specifier: workspace:*
+        version: link:../../packages/application
+      '@lottery/infrastructure':
+        specifier: workspace:*
+        version: link:../../packages/infrastructure
+      '@lottery/lottery-handlers':
+        specifier: workspace:*
+        version: link:../../packages/lottery-handlers
       pg-boss:
         specifier: ^10.1.6
         version: 10.4.2
@@ -30,6 +42,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@lottery/application':
+        specifier: workspace:*
+        version: link:../../packages/application
+      '@lottery/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@lottery/infrastructure':
+        specifier: workspace:*
+        version: link:../../packages/infrastructure
       next:
         specifier: ^15.0.0
         version: 15.5.14(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -63,6 +84,13 @@ importers:
       '@lottery/domain':
         specifier: workspace:*
         version: link:../domain
+      pg:
+        specifier: ^8.16.3
+        version: 8.20.0
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
 
   packages/lottery-handlers:
     dependencies:
@@ -711,6 +739,9 @@ packages:
 
   '@types/node@22.19.17':
     resolution: {integrity: sha512-wGdMcf+vPYM6jikpS/qhg6WiqSV/OhG+jeeHT/KlVqxYfD40iYJf9/AE1uQxVWFvU7MipKRkRv8NSHiCGgPr8Q==}
+
+  '@types/pg@8.20.0':
+    resolution: {integrity: sha512-bEPFOaMAHTEP1EzpvHTbmwR8UsFyHSKsRisLIHVMXnpNefSbGA1bD6CVy+qKjGSqmZqNqBDV2azOBo8TgkcVow==}
 
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
@@ -1468,6 +1499,12 @@ snapshots:
   '@types/node@22.19.17':
     dependencies:
       undici-types: 6.21.0
+
+  '@types/pg@8.20.0':
+    dependencies:
+      '@types/node': 22.19.17
+      pg-protocol: 1.13.0
+      pg-types: 2.2.0
 
   '@types/react-dom@19.2.3(@types/react@19.2.14)':
     dependencies:

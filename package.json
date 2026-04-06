@@ -10,14 +10,23 @@
   "scripts": {
     "dev:web": "corepack pnpm --filter @lottery/web dev",
     "dev:worker": "corepack pnpm --filter @lottery/terminal-worker dev",
+    "start:web": "corepack pnpm --filter @lottery/web start",
+    "start:worker": "corepack pnpm --filter @lottery/terminal-worker start",
     "lint": "corepack pnpm -r --if-present lint",
     "typecheck": "corepack pnpm -r --if-present typecheck",
     "test": "corepack pnpm -r --if-present test",
     "smoke": "corepack pnpm --filter @lottery/test-kit smoke",
+    "db:init": "corepack pnpm tsx scripts/postgres-init-and-seed.ts --seed-mode=skip",
+    "db:seed": "corepack pnpm tsx scripts/postgres-init-and-seed.ts --seed-mode=if-empty",
+    "db:reset": "corepack pnpm tsx scripts/postgres-init-and-seed.ts --seed-mode=force --reset-runtime",
+    "runtime:preflight": "corepack pnpm tsx scripts/runtime-preflight.ts --role=all --env=.env",
+    "runtime:preflight:web": "corepack pnpm tsx scripts/runtime-preflight.ts --role=web --env=.env",
+    "runtime:preflight:worker": "corepack pnpm tsx scripts/runtime-preflight.ts --role=worker --env=.env",
     "release:check": "powershell -ExecutionPolicy Bypass -File scripts/release-readiness-check.ps1"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",
+    "tsx": "^4.20.6",
     "typescript": "^5.8.3",
     "vitest": "2.1.9"
   }

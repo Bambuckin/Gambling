@@ -1,13 +1,19 @@
 import { DrawRefreshService, SystemTimeSource } from "@lottery/application";
-import { InMemoryDrawStore } from "@lottery/infrastructure";
+import { InMemoryDrawStore, PostgresDrawStore } from "@lottery/infrastructure";
 import type { DrawSnapshot } from "@lottery/domain";
+import { getWebPostgresPool, getWebStorageBackend } from "../runtime/postgres-runtime";
 
 let cachedService: DrawRefreshService | null = null;
 
 export function getDrawRefreshService(): DrawRefreshService {
   if (!cachedService) {
+    const backend = getWebStorageBackend();
+
     cachedService = new DrawRefreshService({
-      drawStore: new InMemoryDrawStore(readSeedSnapshots()),
+      drawStore:
+        backend === "postgres"
+          ? new PostgresDrawStore(getWebPostgresPool())
+          : new InMemoryDrawStore(readSeedSnapshots()),
       timeSource: new SystemTimeSource()
     });
   }

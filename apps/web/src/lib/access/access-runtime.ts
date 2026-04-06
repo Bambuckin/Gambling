@@ -12,9 +12,13 @@ import {
   InMemoryIdentityStore,
   InMemoryAccessAuditLog,
   InMemorySessionStore,
+  PostgresAccessAuditLog,
+  PostgresIdentityStore,
+  PostgresSessionStore,
   Sha256PasswordVerifier,
   hashAccessPassword
 } from "@lottery/infrastructure";
+import { getWebPostgresPool, getWebStorageBackend } from "../runtime/postgres-runtime";
 
 export interface AccessRuntimeFactory {
   createDependencies(): AccessServiceDependencies;
@@ -70,6 +74,18 @@ export function createDefaultAccessRuntimeFactory(): AccessRuntimeFactory {
 
 function createDefaultAdapters(): AccessRuntimeAdapters {
   const seededIdentities = buildSeededIdentities();
+  const backend = getWebStorageBackend();
+
+  if (backend === "postgres") {
+    const pool = getWebPostgresPool();
+
+    return {
+      identityStore: new PostgresIdentityStore(pool),
+      sessionStore: new PostgresSessionStore(pool),
+      accessAuditLog: new PostgresAccessAuditLog(pool),
+      passwordVerifier: new Sha256PasswordVerifier()
+    };
+  }
 
   return {
     identityStore: new InMemoryIdentityStore(seededIdentities),

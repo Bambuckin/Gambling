@@ -1,8 +1,13 @@
 import {
   PurchaseExecutionQueueService,
+  type PurchaseQueueStore,
+  type PurchaseRequestStore,
   SystemTimeSource,
+  type TerminalExecutionLock,
   TerminalExecutionAttemptService,
   TerminalRetryService,
+  type TicketStore,
+  type TicketVerificationJobStore,
   TicketVerificationResultService,
   TicketPersistenceService,
   TicketVerificationQueueService,
@@ -15,22 +20,52 @@ import {
   InMemoryPurchaseRequestStore,
   InMemoryTerminalExecutionLock,
   InMemoryTicketStore,
-  InMemoryTicketVerificationJobStore
+  InMemoryTicketVerificationJobStore,
+  PostgresLedgerStore,
+  PostgresPurchaseQueueStore,
+  PostgresPurchaseRequestStore,
+  PostgresTerminalExecutionLock,
+  PostgresTicketStore,
+  PostgresTicketVerificationJobStore
 } from "@lottery/infrastructure";
 import { TerminalHandlerRuntime } from "./lib/terminal-handler-runtime.js";
+import { getWorkerPostgresPool, getWorkerStorageBackend } from "./lib/runtime/postgres-runtime.js";
 
 type WorkerBootState = "booting" | "ready";
 
 const WORKER_ID = "terminal-worker";
-const POLL_INTERVAL_MS = 3000;
+const rawPollIntervalMs = Number(process.env.LOTTERY_TERMINAL_POLL_INTERVAL_MS ?? 3000);
+const POLL_INTERVAL_MS = Number.isFinite(rawPollIntervalMs) && rawPollIntervalMs >= 250 ? rawPollIntervalMs : 3000;
 const bootTimestamp = new Date().toISOString();
 const timeSource = new SystemTimeSource();
-const requestStore = new InMemoryPurchaseRequestStore();
-const queueStore = new InMemoryPurchaseQueueStore();
-const executionLock = new InMemoryTerminalExecutionLock();
-const ledgerStore = new InMemoryLedgerStore();
-const ticketStore = new InMemoryTicketStore();
-const verificationJobStore = new InMemoryTicketVerificationJobStore();
+const storageBackend = getWorkerStorageBackend();
+const postgresPool = storageBackend === "postgres" ? getWorkerPostgresPool() : null;
+const requestStore: PurchaseRequestStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresPurchaseRequestStore(postgresPool)
+    : new InMemoryPurchaseRequestStore();
+const queueStore: PurchaseQueueStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresPurchaseQueueStore(postgresPool)
+    : new InMemoryPurchaseQueueStore();
+const executionLock: TerminalExecutionLock =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresTerminalExecutionLock(postgresPool, {
+        ttlSeconds: Number(process.env.LOTTERY_TERMINAL_LOCK_TTL_SECONDS ?? 30)
+      })
+    : new InMemoryTerminalExecutionLock();
+const ledgerStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresLedgerStore(postgresPool)
+    : new InMemoryLedgerStore();
+const ticketStore: TicketStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresTicketStore(postgresPool)
+    : new InMemoryTicketStore();
+const verificationJobStore: TicketVerificationJobStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresTicketVerificationJobStore(postgresPool)
+    : new InMemoryTicketVerificationJobStore();
 const walletLedgerService = new WalletLedgerService({
   ledgerStore,
   timeSource

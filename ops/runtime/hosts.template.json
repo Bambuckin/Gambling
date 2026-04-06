@@ -1,0 +1,31 @@
+{
+  "server": {
+    "label": "web-server",
+    "ip": "<SERVER_IP>",
+    "hostname": "<SERVER_HOSTNAME>",
+    "webPort": 3000
+  },
+  "database": {
+    "label": "postgres",
+    "ip": "<DB_IP>",
+    "port": 5432,
+    "dbName": "lottery",
+    "user": "lottery",
+    "password": "<DB_PASSWORD>"
+  },
+  "mainTerminal": {
+    "label": "main-terminal",
+    "ip": "<TERMINAL_IP>",
+    "workerId": "terminal-worker"
+  },
+  "clientComputers": [
+    {
+      "label": "cashier-1",
+      "ip": "<CLIENT_1_IP>"
+    },
+    {
+      "label": "cashier-2",
+      "ip": "<CLIENT_2_IP>"
+    }
+  ]
+}

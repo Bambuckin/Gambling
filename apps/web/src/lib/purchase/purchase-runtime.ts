@@ -2,16 +2,39 @@ import {
   AdminOperationsQueryService,
   AdminQueueService,
   PurchaseOrchestrationService,
+  type PurchaseQueueStore,
+  type PurchaseRequestStore,
   PurchaseRequestQueryService,
   PurchaseRequestService,
-  SystemTimeSource
+  SystemTimeSource,
+  type TicketStore
 } from "@lottery/application";
-import { InMemoryPurchaseQueueStore, InMemoryPurchaseRequestStore, InMemoryTicketStore } from "@lottery/infrastructure";
+import {
+  InMemoryPurchaseQueueStore,
+  InMemoryPurchaseRequestStore,
+  InMemoryTicketStore,
+  PostgresPurchaseQueueStore,
+  PostgresPurchaseRequestStore,
+  PostgresTicketStore
+} from "@lottery/infrastructure";
 import { getWalletLedgerService } from "../ledger/ledger-runtime";
+import { getWebPostgresPool, getWebStorageBackend } from "../runtime/postgres-runtime";
 
-const requestStore = new InMemoryPurchaseRequestStore();
-const queueStore = new InMemoryPurchaseQueueStore();
-const ticketStore = new InMemoryTicketStore();
+const storageBackend = getWebStorageBackend();
+const postgresPool = storageBackend === "postgres" ? getWebPostgresPool() : null;
+
+const requestStore: PurchaseRequestStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresPurchaseRequestStore(postgresPool)
+    : new InMemoryPurchaseRequestStore();
+const queueStore: PurchaseQueueStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresPurchaseQueueStore(postgresPool)
+    : new InMemoryPurchaseQueueStore();
+const ticketStore: TicketStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresTicketStore(postgresPool)
+    : new InMemoryTicketStore();
 
 let cachedRequestService: PurchaseRequestService | null = null;
 let cachedOrchestrationService: PurchaseOrchestrationService | null = null;
@@ -79,9 +102,9 @@ export function getAdminOperationsQueryService(): AdminOperationsQueryService {
 }
 
 export function getPurchaseRuntimeStores(): {
-  readonly requestStore: InMemoryPurchaseRequestStore;
-  readonly queueStore: InMemoryPurchaseQueueStore;
-  readonly ticketStore: InMemoryTicketStore;
+  readonly requestStore: PurchaseRequestStore;
+  readonly queueStore: PurchaseQueueStore;
+  readonly ticketStore: TicketStore;
 } {
   return {
     requestStore,

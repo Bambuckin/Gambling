@@ -21,7 +21,7 @@ The main safety rule is preserved across all modules: at any time only one reque
 
 1. `packages/domain` - pure state and type contracts (requests, ledger, registry, ticket lifecycle).
 2. `packages/application` - use-case services and ports for access, registry/draw, purchase, queue/terminal, ticket verification, audit/alerts.
-3. `packages/infrastructure` - in-memory adapter implementations for ports.
+3. `packages/infrastructure` - adapter implementations for ports (`in-memory` + `postgres` backends).
 4. `packages/lottery-handlers` - deterministic purchase/result handler contracts and registry.
 5. `packages/test-kit` - fake terminal and handler adapters for smoke coverage.
 
@@ -61,6 +61,7 @@ Detailed ownership and import constraints live in `docs/modules/boundary-catalog
 - `docs/modules/system-architecture.md` - module map and expanded flow handoff.
 - `docs/modules/boundary-catalog.md` - source-of-truth ownership and disallowed integrations.
 - `docs/runbooks/` - module verification, regression, and operator procedures.
+- `docs/runbooks/launch-readiness-checklist.md` - full launch checklist, machine install matrix, and gap handoff.
 
 ## Delivery Rule
 

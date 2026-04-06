@@ -16,5 +16,7 @@ Current runbooks:
 - `admin-operations-console.md` - admin console triage for queue pressure, terminal state, and problematic requests
 - `lottery-handler-change.md` - operator rollout/rollback checklist for lottery handler binding changes
 - `release-readiness.md` - final release gate and go/no-go checklist (`corepack pnpm release:check`)
+- `deployment-bootstrap.md` - LAN deployment preparation with Postgres runtime, machine roles, and handoff files
+- `launch-readiness-checklist.md` - exhaustive launch checklist: missing gaps, machine installs, status/data flow, and handoff scope
 
 When a phase introduces new operational or verification behavior, update runbooks in the same step.

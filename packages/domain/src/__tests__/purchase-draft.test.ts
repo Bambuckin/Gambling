@@ -124,9 +124,9 @@ function numberField(
     label: fieldKey,
     type: "number",
     required: options.required ?? true,
-    min: options.min,
-    max: options.max,
-    step: options.step
+    ...(options.min !== undefined ? { min: options.min } : {}),
+    ...(options.max !== undefined ? { max: options.max } : {}),
+    ...(options.step !== undefined ? { step: options.step } : {})
   };
 }
 
