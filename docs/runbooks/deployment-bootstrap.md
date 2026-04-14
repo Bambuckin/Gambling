@@ -24,8 +24,8 @@ Install:
 - Corepack enabled (`corepack enable`)
 - Repo checkout
 
-One-click launcher from repo root:
-- `Start Main Server.cmd`
+One-click launcher:
+- `bin/Start Main Server.cmd`
 
 Run:
 
@@ -129,8 +129,8 @@ If you want copyable folders with one-click launchers, build them on the main se
 corepack pnpm bundle:lan
 ```
 
-One-click launcher from repo root:
-- `Build LAN Bundles.cmd`
+One-click launcher:
+- `bin/Build LAN Bundles.cmd`
 
 Output:
 - `dist/lan-bundles/client-workstation`
