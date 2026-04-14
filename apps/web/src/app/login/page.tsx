@@ -16,27 +16,49 @@ export default async function LoginPage({ searchParams }: LoginPageProps): Promi
   const errorMessage = errorCode ? describeAccessError(errorCode) : null;
 
   return (
-    <section>
-      <h1>Login</h1>
-      <p>Авторизуйся, чтобы продолжить в выбранную лотерею.</p>
-      {errorMessage ? <p>{errorMessage}</p> : null}
+    <section className="page-column login-shell">
+      <header className="hero-card">
+        <p className="hero-eyebrow">Secure Access</p>
+        <h1>Вход в терминальную витрину</h1>
+        <p className="hero-lead">После авторизации система вернёт тебя в выбранную лотерею и сохранит контекст покупки.</p>
+      </header>
 
-      <form action={handleLoginAction}>
-        <input type="hidden" name="returnTo" value={returnToPath ?? ""} />
-        <label>
-          Login
-          <input name="login" type="text" autoComplete="username" required />
-        </label>
-        <label>
-          Password
-          <input name="password" type="password" autoComplete="current-password" required />
-        </label>
-        <button type="submit">Sign In</button>
-      </form>
+      <section className="panel">
+        <h2>Авторизация</h2>
+        {errorMessage ? <p className="alert-row error">{errorMessage}</p> : null}
 
-      <p>Demo user: operator / operator</p>
-      <p>Demo tester: tester / tester</p>
-      <p>Demo admin: admin / admin</p>
+        <form action={handleLoginAction} className="page-column">
+          <input type="hidden" name="returnTo" value={returnToPath ?? ""} />
+          <label className="field">
+            Логин
+            <input name="login" type="text" autoComplete="username" required />
+          </label>
+          <label className="field">
+            Пароль
+            <input name="password" type="password" autoComplete="current-password" required />
+          </label>
+          <div className="actions-row">
+            <button className="btn-primary" type="submit">
+              Войти
+            </button>
+          </div>
+        </form>
+
+        <div className="mini-grid">
+          <article className="mini-stat">
+            <span className="label">User</span>
+            <span className="value">operator / operator</span>
+          </article>
+          <article className="mini-stat">
+            <span className="label">Tester</span>
+            <span className="value">tester / tester</span>
+          </article>
+          <article className="mini-stat">
+            <span className="label">Admin</span>
+            <span className="value">admin / admin</span>
+          </article>
+        </div>
+      </section>
     </section>
   );
 }
@@ -74,7 +96,7 @@ function describeAccessError(errorCode: string): string {
     case "identity_not_found":
       return "Пользователь не найден.";
     case "identity_disabled":
-      return "Доступ пользователя отключен.";
+      return "Доступ пользователя отключён.";
     case "invalid_password":
       return "Неверный пароль.";
     case "session_not_found":

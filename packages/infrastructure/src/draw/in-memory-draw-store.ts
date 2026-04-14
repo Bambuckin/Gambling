@@ -24,5 +24,12 @@ export class InMemoryDrawStore implements DrawStore {
 }
 
 function cloneSnapshot(snapshot: DrawSnapshot): DrawSnapshot {
-  return { ...snapshot };
+  return {
+    ...snapshot,
+    ...(snapshot.availableDraws
+      ? {
+          availableDraws: snapshot.availableDraws.map((draw) => ({ ...draw }))
+        }
+      : {})
+  };
 }

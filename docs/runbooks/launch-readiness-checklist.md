@@ -11,6 +11,7 @@ This document is the single place for launch scope:
 - Shared runtime state for `web` + `terminal-worker` through Postgres (`LOTTERY_STORAGE_BACKEND=postgres`).
 - Database schema bootstrap and seed: `scripts/postgres-init-and-seed.ts`.
 - Single active terminal executor lock: `PostgresTerminalExecutionLock`.
+- Customer UI refreshed to NLoto-like visual surface with preserved login/purchase/queue flow.
 - Runtime env/IP templates:
   - `.env.example`
   - `ops/runtime/.env.web.template`
@@ -27,8 +28,7 @@ This document is the single place for launch scope:
 
 Blocking:
 
-- [ ] Final customer-facing ticket purchase UI in `apps/web/src/app/lottery/[lotteryCode]/page.tsx` (or an explicitly new route set).
-- [ ] Real terminal handler integrations in `apps/terminal-worker/src/lib/terminal-handler-runtime.ts` (current logic is deterministic stub behavior).
+- [ ] Big 8 is integrated only to cart stage (`added_to_cart`); payment/checkout automation is still not implemented.
 - [ ] Real network and secret values filled in `.env` and `ops/runtime/hosts.template.json`.
 - [ ] Integration smoke in target LAN with live terminal flow.
 
@@ -152,7 +152,7 @@ Terminal machine:
 Manual verification:
 
 - Login page works: `/login`
-- Purchase request can be created: `/lottery/demo-lottery`
+- Purchase request can be created: `/lottery/mechtallion`
 - Queue/alerts visible: `/admin`
 - Worker logs show reservation + attempt + result traces
 
@@ -168,4 +168,3 @@ Manual verification:
 8. `scripts/postgres-init-and-seed.ts`
 9. `apps/web/src/app/lottery/[lotteryCode]/page.tsx`
 10. `apps/terminal-worker/src/lib/terminal-handler-runtime.ts`
-

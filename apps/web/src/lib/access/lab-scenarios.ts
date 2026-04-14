@@ -24,8 +24,8 @@ export const SCENARIOS: readonly AccessLabScenario[] = [
     runner: "login_user_with_return",
     login: "operator",
     password: "operator",
-    returnToLotteryCode: "demo-lottery",
-    probePath: "/lottery/demo-lottery",
+    returnToLotteryCode: "mechtallion",
+    probePath: "/lottery/mechtallion",
     expectedOutcome: "User session is created and lottery path opens without re-login prompt."
   },
   {

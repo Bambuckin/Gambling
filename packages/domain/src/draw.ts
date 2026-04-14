@@ -1,9 +1,17 @@
+export interface DrawOption {
+  readonly drawId: string;
+  readonly drawAt: string;
+  readonly label: string;
+  readonly priceMinor?: number;
+}
+
 export interface DrawSnapshot {
   readonly lotteryCode: string;
   readonly drawId: string;
   readonly drawAt: string;
   readonly fetchedAt: string;
   readonly freshnessTtlSeconds: number;
+  readonly availableDraws?: readonly DrawOption[];
 }
 
 export interface DrawFreshness {
@@ -63,4 +71,24 @@ export function resolveDrawAvailabilityState(
     snapshot,
     freshness
   };
+}
+
+export function listSnapshotDrawOptions(snapshot: DrawSnapshot | null): readonly DrawOption[] {
+  if (!snapshot) {
+    return [];
+  }
+
+  if (snapshot.availableDraws && snapshot.availableDraws.length > 0) {
+    return snapshot.availableDraws
+      .map((draw) => ({ ...draw }))
+      .sort((left, right) => Date.parse(left.drawAt) - Date.parse(right.drawAt));
+  }
+
+  return [
+    {
+      drawId: snapshot.drawId,
+      drawAt: snapshot.drawAt,
+      label: snapshot.drawId
+    }
+  ];
 }

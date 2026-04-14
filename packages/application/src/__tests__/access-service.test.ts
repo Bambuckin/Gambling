@@ -296,6 +296,7 @@ function createIdentity(input: {
     role: input.role,
     status: input.status,
     displayName: input.login,
+    phone: "79990000000",
     createdAt: "2026-04-05T00:00:00.000Z",
     updatedAt: "2026-04-05T00:00:00.000Z"
   };

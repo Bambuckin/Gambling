@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  arePurchaseDraftPayloadsEqual,
   type PurchaseDraftPayload,
   type PurchaseRequestRecord,
   createAwaitingConfirmationRequest
@@ -120,23 +121,5 @@ function matchesSnapshot(existing: PurchaseRequestRecord, input: CreateAwaitingC
 }
 
 function arePayloadsEqual(left: PurchaseDraftPayload, right: PurchaseDraftPayload): boolean {
-  const leftEntries = Object.entries(left).sort(([a], [b]) => a.localeCompare(b));
-  const rightEntries = Object.entries(right).sort(([a], [b]) => a.localeCompare(b));
-  if (leftEntries.length !== rightEntries.length) {
-    return false;
-  }
-
-  for (let index = 0; index < leftEntries.length; index += 1) {
-    const leftEntry = leftEntries[index];
-    const rightEntry = rightEntries[index];
-    if (!leftEntry || !rightEntry) {
-      return false;
-    }
-
-    if (leftEntry[0] !== rightEntry[0] || leftEntry[1] !== rightEntry[1]) {
-      return false;
-    }
-  }
-
-  return true;
+  return arePurchaseDraftPayloadsEqual(left, right);
 }

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: complete
-stopped_at: Completed Phase 9 and release-readiness closure
-last_updated: "2026-04-06T00:55:00.000Z"
-last_activity: 2026-04-06 -- Phase 9 complete
+status: executing
+stopped_at: Completed Phase 11 cart execution and realtime status
+last_updated: "2026-04-14T10:45:11.9684419+05:00"
+last_activity: 2026-04-14 -- Quick task 260414-ewe project artifact cleanup completed
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 39
-  completed_plans: 39
+  total_phases: 12
+  completed_phases: 11
+  total_plans: 41
+  completed_plans: 41
   percent: 100
 ---
 
@@ -18,128 +18,64 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-05)
+See: `.planning/PROJECT.md` (updated 2026-04-05)
 
-**Core value:** Each confirmed purchase should move predictably from the web interface to the single main terminal with correct reserve and debit behavior, clear status, and full event traceability.  
-**Current focus:** Phase 9 complete - v1.0 hardening, extension docs, and release readiness baseline finished.
+Core value:
+Each confirmed purchase must move predictably from web UI to the single main terminal with correct reserve/debit behavior, clear status, and full event traceability.
+
+Current focus:
+Phase 12 — `cashier-kiosk-client-and-lan-deployment`.
 
 ## Current Position
 
-Phase: 9
-Plan: Complete
-Status: Complete
-Last activity: 2026-04-06 -- Phase 9 complete
+Phase: 11 (`big-8-terminal-cart-execution-and-realtime-status`) — COMPLETE  
+Plan: 1 of 1  
+Status: Completed Phase 11  
+Last activity: 2026-04-14 -- Quick task 260414-ewe project artifact cleanup completed
 
-Progress: [##########] 100% (39/39 plan summaries)
+Progress: `[##########] 100% (41/41 plan summaries)`
 
-## Performance Metrics
+## Completed Roadmap Slice
 
-**Velocity:**
+- Phase 10 complete (`10-01`): Big 8 live draw sync + purchase payload contract.
+- Phase 11 complete (`11-01`): real Big 8 add-to-cart execution + truthful cart lifecycle + realtime status polling.
 
-- Total plans completed: 39
-- Average duration: 23 min
-- Total execution time: 4.44 hours
+## Key Decisions (Latest)
 
-**By Phase:**
+- Added request terminal outcome/state `added_to_cart` to separate cart stage from real purchase success.
+- Big 8 terminal execution is deterministic and bound to pre-registered handler (`bolshaya-8`) only.
+- Cashier/admin realtime status is polling-based (`/api/lottery/[lotteryCode]/requests`, `/api/admin/operations`) for now.
+- Draw sync and purchase automation share one terminal tab session; worker skips draw sync while execution poll is active.
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1 | 4 | 78 min | 20 min |
-| 2 | 5 | 128 min | 26 min |
-| 3 | 4 | - | - |
-| 4 | 4 | 71 min | 18 min |
-| 5 | 5 | - | - |
-| 6 | 5 | 50 min | 10 min |
-| 7 | 4 | 70 min | 18 min |
-| 8 | 4 | - | - |
-| 9 | 4 | 55 min | 14 min |
+## Verification Snapshot (Phase 11)
 
-**Recent Trend:**
+Executed and passed:
 
-- Last 5 plans: 06-05 (6 min), 07-01 (16 min), 07-02 (14 min), 07-03 (22 min), 07-04 (18 min)
-- Trend: Stable
+- `corepack pnpm --filter @lottery/domain test`
+- `corepack pnpm --filter @lottery/application test`
+- `corepack pnpm --filter @lottery/infrastructure typecheck`
+- `corepack pnpm --filter @lottery/infrastructure test`
+- `corepack pnpm --filter @lottery/terminal-worker typecheck`
+- `corepack pnpm --filter @lottery/web build`
 
-| Phase 3 P01 | 8 min | 4 tasks | 19 files |
-| Phase 3 P02 | 18 min | 3 tasks | 9 files |
-| Phase 3 P03 | 6 min | 3 tasks | 11 files |
-| Phase 3 P04 | 16 min | 3 tasks | 8 files |
-| Phase 4 P01 | 26 min | 3 tasks | 14 files |
-| Phase 4 P02 | 10 min | 3 tasks | 5 files |
-| Phase 4 P03 | 20 min | 3 tasks | 6 files |
-| Phase 4 P04 | 15 min | 3 tasks | 4 files |
-| Phase 5 P1 | 12min | 3 tasks | 8 files |
-| Phase 5 P2 | 16min | 3 tasks | 12 files |
-| Phase 5 P3 | 11min | 3 tasks | 10 files |
-| Phase 5 P4 | 10min | 3 tasks | 8 files |
-| Phase 5 P5 | 14min | 3 tasks | 8 files |
-| Phase 6 P1 | 23min | 3 tasks | 12 files |
-| Phase 6 P2 | 9min | 3 tasks | 10 files |
-| Phase 6 P4 | 6min | 3 tasks | 8 files |
-| Phase 6 P5 | 6min | 3 tasks | 8 files |
-| Phase 7 P1 | 16 min | 3 tasks | 15 files |
-| Phase 7 P2 | 14 min | 3 tasks | 12 files |
-| Phase 7 P3 | 22 min | 3 tasks | 15 files |
-| Phase 7 P4 | 18 min | 3 tasks | 12 files |
+## Remaining Gaps
 
-## Accumulated Context
+- Checkout/payment automation after cart stage is not implemented yet (Phase 12+ scope).
+- Live end-to-end terminal execution run requires active NLoto session on the terminal machine and should be re-verified there after deployment.
 
-### Decisions
+## Resume Pointers
 
-Decisions are logged in PROJECT.md Key Decisions table.  
-Recent decisions affecting current work:
+Start from:
 
-- [Phase 01]: ADR-001 locked the stack and repository shape before broad scaffolding.
-- [Phase 01]: Runtime and shared package boundaries are explicit on disk under `apps/*` and `packages/*`.
-- [Phase 01]: Request lifecycle, ledger, and handler boundaries are enforced by typed contracts.
-- [Phase 01]: Module ownership and runbook continuity are now formalized in docs.
-- [Phase 02]: Access/session lifecycle contracts are centralized in domain and application service boundaries.
-- [Phase 02]: Session model now includes optional `returnToLotteryCode` for post-login route restoration.
-- [Phase 02]: Role policy checks are centralized in shared guards and enforced across middleware + server flow.
-- [Phase 02]: Access lifecycle now emits typed audit events via `AccessAuditLog` port with replaceable adapter wiring.
-- [Phase 02]: Access Lab provides data-driven manual verification so ready modules can be rebound without route rewrites.
-- [Phase 03]: Lottery shell catalog now resolves through LotteryRegistryService enabled/order state
-- [Phase 03]: Registry runtime composition mirrors access runtime and keeps route files adapter-agnostic
-- [Phase 03]: Lottery registry entries now carry typed formFields metadata used by shared lottery shell renderer
-- [Phase 03]: Lottery page submits metadata-driven purchase draft via server action without hardcoded lottery-specific JSX
-- [Phase 03]: DrawRefreshService now resolves missing/stale/fresh states and exposes purchase-blocking contract
-- [Phase 03]: Lottery page now blocks purchase draft submission when draw data is stale or missing
-- [Phase 3]: Admin registry mutations now flow through LotteryRegistryService boundaries - Admin UI uses helper boundary and service methods for enable/disable/reorder so route files do not own registry business rules
-- [Phase 3]: Phase 3 keeps separate operational and verification UI surfaces - Admin Console owns mutation controls while Registry Lab remains test-only contour for safe manual inspection
-- [Phase 4]: Wallet aggregate now derives from immutable ledger history via WalletLedgerService - Replaces hash-based preview with auditable read path before reserve/debit/release mutation rules.
-- [Phase 5]: Purchase draft validation and fixed pricing quote are centralized in PurchaseDraftService before confirmation. - Route actions now delegate payload checks and quote math to application/domain layers, reducing duplicated rule logic and keeping pricing deterministic.
-- [Phase 5]: Purchase requests are now persisted as immutable awaiting_confirmation snapshots through PurchaseRequestService. - Confirmation and persistence moved behind a store-backed service boundary, preventing route-level lifecycle drift and enabling replay-safe request creation.
-- [Phase 5]: Confirmed requests now reserve funds and enter queued state via PurchaseOrchestrationService. - Queue insertion and reserve side effects are now coordinated in one service boundary with replay-safe request keys, preventing duplicate reserve records and route-level drift.
-- [Phase 5]: Queued request cancellation now transitions to reserve_released and removes queue item through orchestration service. - Cancellation and financial rollback are now coupled in one boundary, ensuring queued items cannot continue to execution after reserve release.
-- [Phase 5]: Purchase request status/attempt/final-result view now reads through PurchaseRequestQueryService with dedicated Purchase Lab verification contour. - Read projections for user and debug surfaces are now centralized in application service, reducing route-level projection drift and giving a stable verification surface.
+1. `.planning/phases/11-big-8-terminal-cart-execution-and-realtime-status/11-01-SUMMARY.md`
+2. `apps/terminal-worker/src/lib/big8-terminal-cart-handler.ts`
+3. `apps/terminal-worker/src/main.ts`
+4. `docs/modules/big8-terminal-integration.md`
+5. `docs/runbooks/deployment-bootstrap.md`
 
-### Pending Todos
+## Quick Tasks Completed
 
-None yet.
-
-### Quick Tasks Completed
-
-| ID | Description | Date | Notes |
-|----|-------------|------|-------|
-| 260405-0101 | Complete plan 01-01: ADR-001, root workspace baseline, docs alignment | 2026-04-05 | summary created, roadmap/requirements advanced |
-| 260405-0102 | Complete plan 01-02: scaffold apps/packages, wire scripts and TS config, run smoke checks | 2026-04-05 | install/typecheck/lint/test/smoke executed |
-| 260405-0103 | Complete plan 01-03: define core contracts, fake adapters, and state-machine tests | 2026-04-05 | typecheck/test/smoke revalidated |
-| 260405-0104 | Complete plan 01-04: write module docs, runbooks, and entrypoint links | 2026-04-05 | typecheck/test/smoke and file-link checks passed |
-| 260405-0201 | Complete plan 02-01: implement access contracts, session lifecycle service, and in-memory adapters | 2026-04-05 | application tests/typecheck/smoke passed |
-| 260405-0202 | Complete plan 02-02: implement unified shell login/lottery routes and redirect flow | 2026-04-05 | web build/typecheck + root checks passed |
-| 260405-0203 | Complete plan 02-03: add role guards, middleware route filtering, and denied/admin boundaries | 2026-04-05 | web build/typecheck + application tests + smoke passed |
-| 260405-0204 | Complete plan 02-04: add access audit contracts, port integration, and verification assertions | 2026-04-05 | application tests/typecheck/smoke passed |
-| 260405-0205 | Complete plan 02-05: add Access Lab UI harness and runbook-backed scenario flow | 2026-04-05 | web typecheck/build + root typecheck/smoke passed |
-| 260405-noi | Quick task: add dedicated tester credentials and launch local web UI | 2026-04-05 | web typecheck passed, `http://localhost:3000/login` opened |
-| 260405-nsq | Quick task: fix cookie mutation crash in server render access flow | 2026-04-05 | web typecheck passed; `/login` and `/debug/access-lab` return `200` |
-
-### Blockers/Concerns
-
-- No active blockers after `corepack pnpm release:check` pass.
-
-## Session Continuity
-
-Last session: 2026-04-05T18:03:00.000Z
-Stopped at: Completed Phase 9 and release-readiness closure
-Resume file: .planning/phases/09-hardening-extension-docs-and-release-readiness/.continue-here.md
-
-Repository baseline: `main`, git operational.
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260413-oja | Local mock terminal page for Big 8 payload transfer check (web -> worker) | 2026-04-13 | uncommitted | [260413-oja-mock-terminal-page-payload](./quick/260413-oja-mock-terminal-page-payload/) |
+| 260414-ewe | Clean repository-local dependencies, caches, and build artifacts while preserving project files | 2026-04-14 | uncommitted | [260414-ewe-clean-project-artifacts](./quick/260414-ewe-clean-project-artifacts/) |

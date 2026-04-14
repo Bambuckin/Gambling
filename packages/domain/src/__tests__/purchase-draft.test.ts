@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { LotteryFormFieldDefinition } from "../lottery-registry.js";
-import { PurchaseDraftPricingError, quotePurchaseDraft, validatePurchaseDraftFields } from "../purchase-draft.js";
+import {
+  PurchaseDraftPricingError,
+  quotePurchaseDraft,
+  validateBig8PurchaseDraft,
+  validatePurchaseDraftFields
+} from "../purchase-draft.js";
 
 describe("purchase draft validation", () => {
   it("validates mixed field types and returns normalized payload", () => {
@@ -107,6 +112,100 @@ describe("purchase draft quote", () => {
         }
       )
     ).toThrow(PurchaseDraftPricingError);
+  });
+
+  it("calculates Big 8 quote from ticket multipliers", () => {
+    const validation = validateBig8PurchaseDraft({
+      contactPhone: "79990001122",
+      tickets: [
+        {
+          boardNumbers: [1, 2, 3, 4, 5, 6, 7, 8],
+          extraNumber: 2,
+          multiplier: 1
+        },
+        {
+          boardNumbers: [9, 10, 11, 12, 13, 14, 15, 16],
+          extraNumber: 4,
+          multiplier: 3
+        }
+      ]
+    });
+
+    expect(validation.ok).toBe(true);
+    if (!validation.ok) {
+      throw new Error("Expected successful Big 8 validation");
+    }
+
+    const quote = quotePurchaseDraft(
+      {
+        strategy: "fixed",
+        baseAmountMinor: 25_000
+      },
+      validation.payload
+    );
+
+    expect(quote).toEqual({
+      strategy: "fixed",
+      baseAmountMinor: 25_000,
+      multiplier: 4,
+      totalAmountMinor: 100_000
+    });
+  });
+});
+
+describe("Big 8 purchase draft validation", () => {
+  it("accepts structured tickets with phone and normalized board order", () => {
+    const validation = validateBig8PurchaseDraft({
+      contactPhone: "+7 (999) 000-11-22",
+      tickets: [
+        {
+          boardNumbers: [8, 4, 2, 1, 6, 3, 5, 7],
+          extraNumber: 3,
+          multiplier: 2
+        }
+      ]
+    });
+
+    expect(validation.ok).toBe(true);
+    if (!validation.ok) {
+      throw new Error("Expected successful Big 8 validation");
+    }
+
+    expect(validation.payload).toEqual({
+      schema: "big8-v1",
+      contactPhone: "79990001122",
+      tickets: [
+        {
+          boardNumbers: [1, 2, 3, 4, 5, 6, 7, 8],
+          extraNumber: 3,
+          multiplier: 2
+        }
+      ]
+    });
+  });
+
+  it("rejects malformed Big 8 boards", () => {
+    const validation = validateBig8PurchaseDraft({
+      contactPhone: "79990001122",
+      tickets: [
+        {
+          boardNumbers: [1, 1, 2, 3, 4, 5, 6, 7],
+          extraNumber: 5,
+          multiplier: 11
+        }
+      ]
+    });
+
+    expect(validation.ok).toBe(false);
+    if (validation.ok) {
+      throw new Error("Expected Big 8 validation failure");
+    }
+
+    expect(validation.errors.map((error) => error.fieldKey)).toEqual([
+      "tickets[0].boardNumbers",
+      "tickets[0].extraNumber",
+      "tickets[0].multiplier"
+    ]);
   });
 });
 

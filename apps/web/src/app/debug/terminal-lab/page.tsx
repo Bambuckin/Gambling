@@ -80,6 +80,9 @@ export default async function TerminalLabPage(): Promise<ReactElement> {
         <Link href="/debug/purchase-lab">Open Purchase Lab</Link>
       </p>
       <p>
+        <Link href="/debug/mock-terminal">Open Mock Terminal Inbox</Link>
+      </p>
+      <p>
         <Link href="/debug/ticket-lab">Open Ticket Lab</Link>
       </p>
       <p>

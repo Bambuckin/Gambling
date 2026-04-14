@@ -57,4 +57,18 @@ describe("TerminalRetryService", () => {
       })
     ).toBe("error");
   });
+
+  it("keeps add-to-cart state untouched", () => {
+    const service = new TerminalRetryService({
+      maxAttempts: 5
+    });
+
+    expect(
+      service.resolveNextState({
+        attempt: 1,
+        candidateState: "added_to_cart",
+        rawOutput: "[terminal] added_to_cart"
+      })
+    ).toBe("added_to_cart");
+  });
 });

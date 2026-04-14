@@ -11,6 +11,9 @@ import {
   type LotteryPurchaseResult,
   type LotteryResultCheck
 } from "@lottery/lottery-handlers";
+import { listDefaultTerminalHandlerCodes as listDefaultCatalogHandlerCodes } from "@lottery/infrastructure";
+import { Big8TerminalCartHandler } from "./big8-terminal-cart-handler.js";
+import { Big8MockTerminalHandler } from "./big8-mock-terminal-handler.js";
 
 export interface ResolvedPurchaseHandler {
   readonly binding: TerminalHandlerBinding;
@@ -107,20 +110,65 @@ class DemoLotteryPurchaseHandler implements LotteryPurchaseHandlerContract {
   async purchase(context: LotteryPurchaseContext): Promise<LotteryPurchaseResult> {
     return {
       externalTicketReference: `${context.lotteryCode}-${context.requestId}-terminal-stub`,
+      executionOutcome: "ticket_purchased",
       rawTerminalOutput: `[demo-terminal-handler] draw=${context.draw.drawId} attempt=${context.attempt}`
     };
   }
 }
 
 function createDefaultHandlersFromEnv(): readonly LotteryPurchaseHandlerContract[] {
+  const big8CartAutomationEnabled =
+    (process.env.LOTTERY_BIG8_CART_AUTOMATION_ENABLED ?? "true").trim().toLowerCase() !== "false";
+  const big8TerminalMode = (process.env.LOTTERY_BIG8_TERMINAL_MODE ?? "real").trim().toLowerCase();
+  const useBig8MockTerminal = big8TerminalMode === "mock";
+  const big8MockLatencyMs = readPositiveIntFromEnv("LOTTERY_BIG8_MOCK_LATENCY_MS");
+  const big8ActionTimeoutMs = readPositiveIntFromEnv("LOTTERY_BIG8_ACTION_TIMEOUT_MS");
+  const big8DrawModalWaitMs = readPositiveIntFromEnv("LOTTERY_BIG8_DRAW_MODAL_WAIT_MS");
+  const big8HandlerOptions = {
+    ...(process.env.LOTTERY_TERMINAL_BROWSER_URL
+      ? { browserUrl: process.env.LOTTERY_TERMINAL_BROWSER_URL }
+      : {}),
+    ...(process.env.LOTTERY_TERMINAL_PAGE_URL ? { pageUrl: process.env.LOTTERY_TERMINAL_PAGE_URL } : {}),
+    ...(big8ActionTimeoutMs ? { stepTimeoutMs: big8ActionTimeoutMs } : {}),
+    ...(big8DrawModalWaitMs ? { drawModalWaitMs: big8DrawModalWaitMs } : {}),
+    ...(process.env.LOTTERY_BIG8_RELOAD_BEFORE_PURCHASE
+      ? {
+          reloadBeforeRun:
+            process.env.LOTTERY_BIG8_RELOAD_BEFORE_PURCHASE.trim().toLowerCase() !== "false"
+        }
+      : {})
+  };
+
   const codes = readDefaultLotteryCodes();
-  return codes.map((code) => new DemoLotteryPurchaseHandler(code));
+  return codes.map((code) =>
+    code === "bolshaya-8" && big8CartAutomationEnabled
+      ? useBig8MockTerminal
+        ? new Big8MockTerminalHandler({
+            ...(big8MockLatencyMs ? { latencyMs: big8MockLatencyMs } : {})
+          })
+        : new Big8TerminalCartHandler(big8HandlerOptions)
+      : new DemoLotteryPurchaseHandler(code)
+  );
+}
+
+function readPositiveIntFromEnv(key: string): number | null {
+  const raw = process.env[key];
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return Math.trunc(parsed);
 }
 
 function readDefaultLotteryCodes(): readonly string[] {
   const raw = process.env.LOTTERY_TERMINAL_HANDLER_CODES;
   if (!raw) {
-    return ["demo-lottery", "gosloto-6x45", "archive-lottery"];
+    return listDefaultCatalogHandlerCodes();
   }
 
   const codes = raw
@@ -128,5 +176,5 @@ function readDefaultLotteryCodes(): readonly string[] {
     .map((value) => value.trim().toLowerCase())
     .filter((value) => value.length > 0);
 
-  return codes.length > 0 ? [...new Set(codes)] : ["demo-lottery"];
+  return codes.length > 0 ? [...new Set(codes)] : listDefaultCatalogHandlerCodes();
 }

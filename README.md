@@ -35,6 +35,28 @@ corepack pnpm start:web
 corepack pnpm start:worker
 ```
 
+## One-Command Runtime Prep (LAN)
+
+Use wrapper scripts when you want to avoid manual `.env` editing:
+
+```powershell
+# Web machine: generate .env, install deps, bootstrap DB, start web
+.\scripts\prepare-web-runtime.ps1 `
+  -EnvFile .env `
+  -DbHost 192.168.1.10 `
+  -DbPassword "your_db_password"
+
+# Terminal machine: generate .env, install deps, open Chrome (optional), start worker
+.\scripts\prepare-worker-runtime.ps1 `
+  -EnvFile .env `
+  -DbHost 192.168.1.10 `
+  -DbPassword "your_db_password" `
+  -OpenTerminalChrome
+```
+
+Helper script:
+- `scripts/create-runtime-env.ps1` (generates `.env` from `ops/runtime/.env.*.template`).
+
 Optional local DB:
 
 ```powershell
@@ -48,6 +70,29 @@ docker compose -f docker-compose.postgres.yml up -d
 
 Connection variable:
 - `LOTTERY_POSTGRES_URL` (fallback: `DATABASE_URL`)
+
+Big 8 worker mode:
+- `LOTTERY_BIG8_TERMINAL_MODE=real` - live NL terminal automation (default)
+- `LOTTERY_BIG8_TERMINAL_MODE=mock` - local mock terminal flow for web -> worker payload verification
+- `LOTTERY_BIG8_MOCK_LATENCY_MS=250` - optional delay in mock mode
+
+## Local Mock Terminal Check (One PC)
+
+Use this when you need to verify payload transfer from client web UI to worker without live checkout:
+
+1. Set in `.env`:
+   - `LOTTERY_BIG8_TERMINAL_MODE=mock`
+2. Start web and worker:
+   - `corepack pnpm start:web`
+   - `.\scripts\start-worker-mock-terminal.ps1 -EnvFile .env`
+3. Open:
+   - client form: `/lottery/bolshaya-8`
+   - terminal simulator: `/debug/mock-terminal`
+4. Submit a Big 8 request from the client page and confirm it.
+5. In `Mock Terminal Inbox`, verify:
+   - request moved through queue/execution states
+   - payload snapshot (phone + tickets) is visible
+   - worker raw output includes `[big8-mock-terminal]`
 
 ## Root Scripts
 
@@ -66,6 +111,11 @@ Connection variable:
 ## Deployment + Handoff Docs
 
 - [START-HERE.md](docs/START-HERE.md)
+- [GETTING-STARTED.md](docs/GETTING-STARTED.md)
+- [DEVELOPMENT.md](docs/DEVELOPMENT.md)
+- [TESTING.md](docs/TESTING.md)
+- [CONFIGURATION.md](docs/CONFIGURATION.md)
+- [API.md](docs/API.md)
 - [deployment-bootstrap.md](docs/runbooks/deployment-bootstrap.md)
 - [launch-readiness-checklist.md](docs/runbooks/launch-readiness-checklist.md)
 - [release-readiness.md](docs/runbooks/release-readiness.md)
@@ -74,12 +124,23 @@ Connection variable:
 - `ops/runtime/.env.web.template`
 - `ops/runtime/.env.worker.template`
 
+## Workspace Maps
+
+- [apps/web/README.md](apps/web/README.md)
+- [apps/terminal-worker/README.md](apps/terminal-worker/README.md)
+- [packages/domain/README.md](packages/domain/README.md)
+- [packages/application/README.md](packages/application/README.md)
+- [packages/infrastructure/README.md](packages/infrastructure/README.md)
+- [packages/lottery-handlers/README.md](packages/lottery-handlers/README.md)
+- [packages/test-kit/README.md](packages/test-kit/README.md)
+
 ## Architecture Anchors
 
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [docs/modules/system-architecture.md](docs/modules/system-architecture.md)
 - [docs/modules/boundary-catalog.md](docs/modules/boundary-catalog.md)
 - [docs/modules/lottery-handler-extension.md](docs/modules/lottery-handler-extension.md)
+- [docs/modules/ui-customization.md](docs/modules/ui-customization.md)
 
 ## Planning Continuity
 

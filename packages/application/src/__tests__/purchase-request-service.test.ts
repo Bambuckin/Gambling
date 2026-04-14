@@ -62,6 +62,52 @@ describe("PurchaseRequestService", () => {
     expect(replay.request.snapshot.requestId).toBe(first.request.snapshot.requestId);
   });
 
+  it("treats nested payloads as identical for replay protection", async () => {
+    const service = createService();
+
+    const first = await service.createAwaitingConfirmation({
+      requestId: "req-201-nested",
+      userId: "seed-user",
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-101",
+      payload: {
+        schema: "big8-v1",
+        contactPhone: "79990001122",
+        tickets: [
+          {
+            boardNumbers: [1, 2, 3, 4, 5, 6, 7, 8],
+            extraNumber: 1,
+            multiplier: 1
+          }
+        ]
+      },
+      costMinor: 25_000,
+      currency: "RUB"
+    });
+    const replay = await service.createAwaitingConfirmation({
+      requestId: "req-201-nested",
+      userId: "seed-user",
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-101",
+      payload: {
+        schema: "big8-v1",
+        contactPhone: "79990001122",
+        tickets: [
+          {
+            boardNumbers: [1, 2, 3, 4, 5, 6, 7, 8],
+            extraNumber: 1,
+            multiplier: 1
+          }
+        ]
+      },
+      costMinor: 25_000,
+      currency: "RUB"
+    });
+
+    expect(first.replayed).toBe(false);
+    expect(replay.replayed).toBe(true);
+  });
+
   it("throws conflict when requestId is reused with different payload", async () => {
     const service = createService();
 
@@ -160,7 +206,7 @@ function cloneRecord(record: PurchaseRequestRecord): PurchaseRequestRecord {
   return {
     snapshot: {
       ...record.snapshot,
-      payload: { ...record.snapshot.payload }
+      payload: JSON.parse(JSON.stringify(record.snapshot.payload))
     },
     state: record.state,
     journal: record.journal.map((entry) => ({ ...entry }))

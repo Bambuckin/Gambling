@@ -1,6 +1,6 @@
 import { DrawRefreshService, SystemTimeSource } from "@lottery/application";
-import { InMemoryDrawStore, PostgresDrawStore } from "@lottery/infrastructure";
-import type { DrawSnapshot } from "@lottery/domain";
+import { createDefaultDrawSnapshots, InMemoryDrawStore, PostgresDrawStore } from "@lottery/infrastructure";
+import type { DrawOption, DrawSnapshot } from "@lottery/domain";
 import { getWebPostgresPool, getWebStorageBackend } from "../runtime/postgres-runtime";
 
 let cachedService: DrawRefreshService | null = null;
@@ -54,6 +54,7 @@ function sanitizeSeedSnapshot(input: unknown): DrawSnapshot | null {
   const fetchedAt = typeof record.fetchedAt === "string" ? record.fetchedAt : "";
   const freshnessTtlSeconds =
     typeof record.freshnessTtlSeconds === "number" ? Math.trunc(record.freshnessTtlSeconds) : NaN;
+  const availableDraws = sanitizeDrawOptions(record.availableDraws);
 
   if (!lotteryCode || !drawId || !drawAt || !fetchedAt || !Number.isFinite(freshnessTtlSeconds) || freshnessTtlSeconds <= 0) {
     return null;
@@ -64,27 +65,44 @@ function sanitizeSeedSnapshot(input: unknown): DrawSnapshot | null {
     drawId,
     drawAt,
     fetchedAt,
-    freshnessTtlSeconds
+    freshnessTtlSeconds,
+    ...(availableDraws.length > 0 ? { availableDraws } : {})
   };
 }
 
 function defaultSeedSnapshots(): DrawSnapshot[] {
-  const now = Date.now();
+  return createDefaultDrawSnapshots(new Date());
+}
 
-  return [
-    {
-      lotteryCode: "demo-lottery",
-      drawId: "demo-draw-001",
-      drawAt: new Date(now + 60 * 60 * 1000).toISOString(),
-      fetchedAt: new Date(now - 10 * 60 * 1000).toISOString(),
-      freshnessTtlSeconds: 60 * 60
-    },
-    {
-      lotteryCode: "gosloto-6x45",
-      drawId: "gosloto-draw-044",
-      drawAt: new Date(now + 2 * 60 * 60 * 1000).toISOString(),
-      fetchedAt: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
-      freshnessTtlSeconds: 30 * 60
-    }
-  ];
+function sanitizeDrawOptions(input: unknown): DrawOption[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input
+    .map((item) => sanitizeDrawOption(item))
+    .filter((item): item is DrawOption => item !== null);
+}
+
+function sanitizeDrawOption(input: unknown): DrawOption | null {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+
+  const record = input as Record<string, unknown>;
+  const drawId = typeof record.drawId === "string" ? record.drawId.trim() : "";
+  const drawAt = typeof record.drawAt === "string" ? record.drawAt : "";
+  const label = typeof record.label === "string" ? record.label.trim() : "";
+  const priceMinor = typeof record.priceMinor === "number" ? Math.trunc(record.priceMinor) : undefined;
+
+  if (!drawId || !drawAt || !label) {
+    return null;
+  }
+
+  return {
+    drawId,
+    drawAt,
+    label,
+    ...(typeof priceMinor === "number" && Number.isFinite(priceMinor) ? { priceMinor } : {})
+  };
 }

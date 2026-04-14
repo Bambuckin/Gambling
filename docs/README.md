@@ -5,6 +5,11 @@ Documentation in this repository is part of execution, not a post-factum attachm
 ## Core Sections
 
 - `docs/START-HERE.md` - first-entry orientation for a new engineer/model.
+- `docs/GETTING-STARTED.md` - first 30-60 minute onboarding route through code, runtime, and planning context.
+- `docs/DEVELOPMENT.md` - safe code-change map and common workflows by subsystem.
+- `docs/TESTING.md` - honest automated/manual verification map.
+- `docs/CONFIGURATION.md` - env surface, runtime modes, and bootstrap wiring.
+- `docs/API.md` - page routes, JSON endpoints, and server-action write surfaces.
 - `docs/adr/` - architecture, stack, and repository-shape decisions.
 - `docs/modules/` - implemented architecture map, boundaries, contracts, extension guidance.
 - `docs/runbooks/` - verification and operational procedures from local bootstrap to release checks.
@@ -18,6 +23,17 @@ Documentation in this repository is part of execution, not a post-factum attachm
 - `docs/modules/system-architecture.md` - expanded runtime/package flow map.
 - `docs/modules/boundary-catalog.md` - source-of-truth module ownership and allowed/disallowed integration points.
 - `docs/modules/lottery-handler-extension.md` - deterministic workflow for adding/changing lottery handlers.
+- `docs/modules/ui-customization.md` - where to edit visual surface and seeded lottery catalog safely.
+
+## Workspace-Level Maps
+
+- `apps/web/README.md` - route and runtime composition map for the Next.js app.
+- `apps/terminal-worker/README.md` - worker loop, handler coverage, and runtime integration notes.
+- `packages/domain/README.md` - pure contract and invariant map.
+- `packages/application/README.md` - ports and service ownership.
+- `packages/infrastructure/README.md` - storage/schema/seed adapter map.
+- `packages/lottery-handlers/README.md` - handler contract boundary and current limitation note.
+- `packages/test-kit/README.md` - fake helpers and smoke scaffold reality check.
 
 ## Session Independence Rule
 

@@ -1,4 +1,4 @@
-import { normalizeIdentityLogin, type AccessIdentity } from "@lottery/domain";
+import { normalizeIdentityLogin, normalizeIdentityPhone, type AccessIdentity } from "@lottery/domain";
 import type { IdentityStore } from "@lottery/application";
 
 export class InMemoryIdentityStore implements IdentityStore {
@@ -23,7 +23,8 @@ export class InMemoryIdentityStore implements IdentityStore {
   upsert(identity: AccessIdentity): void {
     const canonicalIdentity: AccessIdentity = {
       ...identity,
-      login: normalizeIdentityLogin(identity.login)
+      login: normalizeIdentityLogin(identity.login),
+      phone: normalizeIdentityPhone(identity.phone)
     };
 
     this.identitiesById.set(canonicalIdentity.identityId, canonicalIdentity);

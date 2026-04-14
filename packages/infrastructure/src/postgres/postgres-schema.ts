@@ -8,6 +8,7 @@ create table if not exists lottery_identities (
   role text not null,
   status text not null,
   display_name text not null,
+  phone text not null,
   created_at timestamptz not null,
   updated_at timestamptz not null
 );
@@ -121,4 +122,17 @@ create table if not exists lottery_terminal_execution_locks (
 
 export async function initializeLotteryPostgresSchema(pool: Pool): Promise<void> {
   await pool.query(LOTTERY_POSTGRES_SCHEMA_SQL);
+  await pool.query(`
+    alter table lottery_identities
+    add column if not exists phone text;
+  `);
+  await pool.query(`
+    update lottery_identities
+    set phone = '79990000000'
+    where phone is null or btrim(phone) = '';
+  `);
+  await pool.query(`
+    alter table lottery_identities
+    alter column phone set not null;
+  `);
 }

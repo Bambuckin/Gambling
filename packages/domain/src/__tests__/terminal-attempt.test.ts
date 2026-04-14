@@ -27,6 +27,19 @@ describe("normalizeTerminalAttempt", () => {
     });
   });
 
+  it("accepts add-to-cart as a valid terminal completion outcome", () => {
+    const normalized = normalizeTerminalAttempt({
+      requestId: "req-700-cart",
+      attempt: 1,
+      outcome: "added_to_cart",
+      startedAt: "2026-04-05T22:00:00.000Z",
+      finishedAt: "2026-04-05T22:00:01.000Z",
+      rawOutput: "[terminal] added_to_cart"
+    });
+
+    expect(normalized.outcome).toBe("added_to_cart");
+  });
+
   it("rejects invalid attempt metadata", () => {
     expect(() =>
       normalizeTerminalAttempt({

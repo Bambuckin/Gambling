@@ -1,5 +1,11 @@
 import type { AccessAuditLog, IdentityStore, SessionStore } from "@lottery/application";
-import { normalizeIdentityLogin, type AccessAuditEvent, type AccessIdentity, type AccessSession } from "@lottery/domain";
+import {
+  normalizeIdentityLogin,
+  normalizeIdentityPhone,
+  type AccessAuditEvent,
+  type AccessIdentity,
+  type AccessSession
+} from "@lottery/domain";
 import type { Pool } from "pg";
 import { deepClone, normalizeText, optionalNormalizedText } from "./utils.js";
 
@@ -21,6 +27,7 @@ export class PostgresIdentityStore implements IdentityStore {
           role,
           status,
           display_name,
+          phone,
           created_at,
           updated_at
         from lottery_identities
@@ -49,6 +56,7 @@ export class PostgresIdentityStore implements IdentityStore {
           role,
           status,
           display_name,
+          phone,
           created_at,
           updated_at
         from lottery_identities
@@ -77,9 +85,10 @@ export class PostgresIdentityStore implements IdentityStore {
           role,
           status,
           display_name,
+          phone,
           created_at,
           updated_at
-        ) values ($1, $2, $3, $4, $5, $6, $7, $8)
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         on conflict (identity_id)
         do update
           set login = excluded.login,
@@ -87,6 +96,7 @@ export class PostgresIdentityStore implements IdentityStore {
               role = excluded.role,
               status = excluded.status,
               display_name = excluded.display_name,
+              phone = excluded.phone,
               created_at = excluded.created_at,
               updated_at = excluded.updated_at
       `,
@@ -97,6 +107,7 @@ export class PostgresIdentityStore implements IdentityStore {
         payload.role,
         payload.status,
         payload.displayName,
+        payload.phone,
         payload.createdAt,
         payload.updatedAt
       ]
@@ -283,6 +294,7 @@ function normalizeIdentity(identity: AccessIdentity): AccessIdentity {
     role: identity.role,
     status: identity.status,
     displayName: normalizeText(identity.displayName, "identity.displayName"),
+    phone: normalizeIdentityPhone(identity.phone),
     createdAt: toIsoString(identity.createdAt),
     updatedAt: toIsoString(identity.updatedAt)
   };
@@ -312,6 +324,7 @@ function rowToAccessIdentity(row: {
   role: AccessIdentity["role"];
   status: AccessIdentity["status"];
   display_name: string;
+  phone: string;
   created_at: unknown;
   updated_at: unknown;
 }): AccessIdentity {
@@ -322,6 +335,7 @@ function rowToAccessIdentity(row: {
     role: row.role,
     status: row.status,
     displayName: row.display_name,
+    phone: normalizeIdentityPhone(row.phone),
     createdAt: toIsoFromUnknown(row.created_at),
     updatedAt: toIsoFromUnknown(row.updated_at)
   };

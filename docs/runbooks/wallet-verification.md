@@ -16,7 +16,7 @@ Manual verification procedure for Phase 4 wallet snapshot and movement history v
 
 ## Step 1: Verify User Wallet Snapshot In Lottery Area
 
-1. Open `http://localhost:3000/lottery/demo-lottery`.
+1. Open `http://localhost:3000/lottery/mechtallion`.
 2. Sign in as `tester` / `tester` if prompted.
 3. Confirm the `Wallet Snapshot` table is visible.
 4. Confirm `Currency`, `Available (minor)`, and `Reserved (minor)` are present.

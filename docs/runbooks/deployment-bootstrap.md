@@ -11,7 +11,7 @@ This runbook prepares the current repository for LAN deployment with shared Post
 
 ## 2. What Still Requires Project-Specific Completion
 
-- Production terminal automation handler logic (real browser/API integration) is still domain-specific.
+- Big 8 is integrated to cart stage only; checkout/payment automation is still pending.
 - Final customer-facing ticket purchase UI page/visual system can be replaced independently.
 - Infrastructure values must be filled: actual IPs, credentials, hostnames.
 
@@ -24,6 +24,9 @@ Install:
 - Corepack enabled (`corepack enable`)
 - Repo checkout
 
+One-click launcher from repo root:
+- `Start Main Server.cmd`
+
 Run:
 
 ```powershell
@@ -32,6 +35,15 @@ Copy-Item ops/runtime/.env.web.template .env
 # fill DB IP/password and server host/port
 .\scripts\bootstrap-runtime.ps1 -EnvFile .env -SeedMode if-empty
 .\scripts\start-web-runtime.ps1 -EnvFile .env
+```
+
+Alternative (wrapper, no manual `.env` editing):
+
+```powershell
+.\scripts\prepare-web-runtime.ps1 `
+  -EnvFile .env `
+  -DbHost <DB_IP> `
+  -DbPassword "<DB_PASSWORD>"
 ```
 
 Notes:
@@ -44,7 +56,9 @@ Install:
 - Node.js >= 20.11
 - Corepack enabled
 - Repo checkout
-- Any terminal automation prerequisites you will use (browser, credentials, selectors, or API access)
+- Google Chrome or Chromium with the National Lottery tab already opened and authenticated
+- Chrome remote debugging enabled so the worker can attach to the existing cashier tab
+- Any remaining terminal automation prerequisites you will use (browser profile, credentials, selectors, or API access)
 
 Run:
 
@@ -54,6 +68,47 @@ Copy-Item ops/runtime/.env.worker.template .env
 # fill DB IP/password and terminal handler codes
 .\scripts\start-worker-runtime.ps1 -EnvFile .env
 ```
+
+Alternative (wrapper, no manual `.env` editing):
+
+```powershell
+.\scripts\prepare-worker-runtime.ps1 `
+  -EnvFile .env `
+  -DbHost <DB_IP> `
+  -DbPassword "<DB_PASSWORD>" `
+  -OpenTerminalChrome
+```
+
+Chrome launch example on the terminal machine:
+
+```powershell
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" `
+  --remote-debugging-port=9222 `
+  --user-data-dir="C:\LotteryTerminalChrome" `
+  https://webapp.cloud.nationallottery.ru/
+```
+
+If you use `prepare-worker-runtime.ps1 -OpenTerminalChrome`, this launch step is done automatically.
+
+Worker env values needed for live Big 8 draw sync:
+
+- `LOTTERY_BIG8_LIVE_DRAW_SYNC_ENABLED=true`
+- `LOTTERY_BIG8_CART_AUTOMATION_ENABLED=true`
+- `LOTTERY_BIG8_TERMINAL_MODE=real`
+- `LOTTERY_BIG8_DRAW_SYNC_INTERVAL_MS=20000`
+- `LOTTERY_TERMINAL_BROWSER_URL=http://127.0.0.1:9222`
+- `LOTTERY_TERMINAL_PAGE_URL=https://webapp.cloud.nationallottery.ru/`
+- `LOTTERY_BIG8_DRAW_MODAL_WAIT_MS=2500`
+- `LOTTERY_BIG8_DRAW_TTL_SECONDS=45`
+- `LOTTERY_BIG8_ACTION_TIMEOUT_MS=8000`
+- `LOTTERY_BIG8_RELOAD_BEFORE_PURCHASE=true`
+
+Local single-PC verification mode (no live NL checkout):
+
+- set `LOTTERY_BIG8_TERMINAL_MODE=mock`
+- optional `LOTTERY_BIG8_MOCK_LATENCY_MS=250`
+- use `/debug/mock-terminal` to observe payloads consumed by worker from queue
+- shortcut script: `.\scripts\start-worker-mock-terminal.ps1 -EnvFile .env`
 
 ### C) Client Computers
 
@@ -65,6 +120,40 @@ Use:
 - Log in with configured credentials
 
 No Node.js, DB, worker, or repo is needed on client PCs.
+
+### D) Portable LAN Bundles (client PC + terminal receiver)
+
+If you want copyable folders with one-click launchers, build them on the main server machine:
+
+```powershell
+corepack pnpm bundle:lan
+```
+
+One-click launcher from repo root:
+- `Build LAN Bundles.cmd`
+
+Output:
+- `dist/lan-bundles/client-workstation`
+- `dist/lan-bundles/terminal-receiver`
+
+What goes where:
+- copy `client-workstation` to the cashier/client PC
+- copy `terminal-receiver` to the terminal PC
+
+Launchers inside bundles:
+- `Start Client.cmd`
+- `Start Terminal Receiver.cmd`
+
+Bundle behavior:
+- client bundle opens Chrome/Edge in app mode to `/lottery/bolshaya-8`
+- terminal bundle starts a portable mock receiver runtime and opens `/terminal/receiver`
+- terminal bundle connects to the shared Postgres on the main server IP baked into the bundle
+- no real NLoto checkout is used in this slice; the terminal only proves payload receipt and request state change
+
+Important:
+- the main server machine must already be running web on `0.0.0.0:<PORT>`
+- PostgreSQL on the main server must accept LAN connections from the terminal PC
+- default bundle IPs currently target the active LAN map from phase 12; override them with script params if IPs change
 
 ## 4. Database Bootstrap Commands
 
@@ -87,6 +176,9 @@ Script: `scripts/postgres-init-and-seed.ts`
 - Host/IP template: `ops/runtime/hosts.template.json`
 - Web env template: `ops/runtime/.env.web.template`
 - Worker env template: `ops/runtime/.env.worker.template`
+- Env generator: `scripts/create-runtime-env.ps1`
+- Web wrapper: `scripts/prepare-web-runtime.ps1`
+- Worker wrapper: `scripts/prepare-worker-runtime.ps1`
 - Runtime gap checklist: `docs/runbooks/launch-readiness-checklist.md`
 
 ## 6. Optional Local PostgreSQL (docker)
@@ -120,8 +212,9 @@ On terminal machine:
 Manual checks:
 - `/login` works with seeded users
 - `/admin` shows queue/terminal/alerts
-- `/lottery/demo-lottery` can create and queue request
-- worker logs show reservation + attempt processing
+- `/lottery/bolshaya-8` shows live draw choices and refreshes them every 20 seconds
+- `/lottery/mechtallion` can create and queue request
+- worker logs show draw sync refreshes and request reservation + attempt processing
 
 ## 8. Handoff Notes For Another Model/Account
 

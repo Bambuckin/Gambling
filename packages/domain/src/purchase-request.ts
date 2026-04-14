@@ -1,4 +1,4 @@
-import type { PurchaseDraftPayload, PurchaseDraftPayloadValue } from "./purchase-draft.js";
+import { clonePurchaseDraftPayload, type PurchaseDraftPayload } from "./purchase-draft.js";
 import { applyRequestStateTransition, type RequestState } from "./request-state.js";
 
 export interface PurchaseRequestSnapshot {
@@ -124,14 +124,7 @@ function cloneSnapshot(snapshot: PurchaseRequestSnapshot): PurchaseRequestSnapsh
 }
 
 function clonePayload(input: PurchaseDraftPayload): PurchaseDraftPayload {
-  const output: Record<string, PurchaseDraftPayloadValue> = {};
-  for (const [key, value] of Object.entries(input)) {
-    if (typeof value !== "string" && typeof value !== "number") {
-      throw new PurchaseRequestValidationError(`payload field "${key}" has unsupported type`);
-    }
-    output[key] = value;
-  }
-  return output;
+  return clonePurchaseDraftPayload(input);
 }
 
 function requireNonEmpty(value: string, field: string): string {

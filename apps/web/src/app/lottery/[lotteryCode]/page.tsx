@@ -1,5 +1,7 @@
-import type { ReactElement } from "react";
+﻿import type { CSSProperties, ReactElement } from "react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import {
   PurchaseDraftService,
   PurchaseDraftServiceError,
@@ -9,21 +11,24 @@ import {
 import type {
   DrawAvailabilityState,
   PurchaseDraftPayload,
-  PurchaseDraftPayloadValue,
   RequestState
 } from "@lottery/domain";
+import { isBig8PurchaseDraftPayload, sanitizePurchaseDraftPayload } from "@lottery/domain";
 import { requireLotteryAccess, submitLogout } from "../../../lib/access/entry-flow";
-import { getLotteryRegistryService } from "../../../lib/registry/registry-runtime";
-import { LotteryFormFields } from "../../../lib/lottery-form/render-lottery-form-fields";
 import { getDrawRefreshService } from "../../../lib/draw/draw-runtime";
 import { LEDGER_DEFAULT_CURRENCY, getWalletLedgerService } from "../../../lib/ledger/ledger-runtime";
 import { buildWalletMovementRows } from "../../../lib/ledger/wallet-view";
+import { Big8PurchaseForm } from "../../../lib/lottery-form/big8-purchase-form";
+import { LotteryFormFields } from "../../../lib/lottery-form/render-lottery-form-fields";
 import {
   getPurchaseOrchestrationService,
   getPurchaseRequestQueryService,
   getPurchaseRequestService
 } from "../../../lib/purchase/purchase-runtime";
+import { LotteryLiveMonitor } from "../../../lib/purchase/lottery-live-monitor";
+import { getLotteryRegistryService } from "../../../lib/registry/registry-runtime";
 import { getTicketQueryService } from "../../../lib/ticket/ticket-runtime";
+import { resolveLotteryPresentation } from "../../../lib/ui/lottery-presentation";
 
 type LotteryPageProps = {
   readonly params: Promise<{
@@ -48,14 +53,15 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
 
   if (!lottery) {
     return (
-      <section>
-        <h1>Lottery not found</h1>
-        <p>Lottery code: {access.lotteryCode}</p>
+      <section className="panel">
+        <h1>Лотерея не найдена</h1>
+        <p className="muted">Код: {access.lotteryCode}</p>
       </section>
     );
   }
 
   const drawState = await getDrawRefreshService().getDrawState(lottery.lotteryCode);
+  const availableDraws = await getDrawRefreshService().listAvailableDraws(lottery.lotteryCode);
   const purchaseBlockedReason = describePurchaseBlockReason(drawState);
   const walletLedgerService = getWalletLedgerService();
   const walletSnapshot = await walletLedgerService.getWalletSnapshot(access.identity.identityId, LEDGER_DEFAULT_CURRENCY);
@@ -67,201 +73,295 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
   const tickets = (await getTicketQueryService().listUserTickets(access.identity.identityId)).filter(
     (ticket) => ticket.lotteryCode === lottery.lotteryCode
   );
+  const presentation = resolveLotteryPresentation(lottery.lotteryCode);
+  const drawBadge = resolveDrawBadge(drawState);
+  const draftBadge = resolveDraftBadge(draftStatus);
+  const purchaseStatusTone = resolvePurchaseStatusTone(drawState);
+  const purchaseStatusMessage = resolvePurchaseStatusMessage(drawState);
+  const isBig8Lottery = lottery.formSchemaVersion === "v3-big8-live";
 
   return (
-    <section>
-      <h1>Lottery: {lottery.title}</h1>
-      <p>Lottery code: {lottery.lotteryCode}</p>
-      <h2>Wallet Snapshot</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Currency</th>
-            <th>Available (minor)</th>
-            <th>Reserved (minor)</th>
-            <th>Total movements</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>{walletSnapshot.currency}</td>
-            <td>{walletSnapshot.availableMinor}</td>
-            <td>{walletSnapshot.reservedMinor}</td>
-            <td>{walletEntries.length}</td>
-          </tr>
-        </tbody>
-      </table>
-      <h2>Latest Wallet Movements</h2>
-      {walletMovements.length === 0 ? (
-        <p>No wallet movements recorded for this user.</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Operation</th>
-              <th>Amount (minor)</th>
-              <th>Reference</th>
-              <th>Created at</th>
-            </tr>
-          </thead>
-          <tbody>
-            {walletMovements.map((movement) => (
-              <tr key={movement.entryId}>
-                <td>{movement.operation}</td>
-                <td>{movement.amountLabel}</td>
-                <td>{movement.referenceLabel}</td>
-                <td>{movement.createdAt}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      <p>Session active for: {access.identity.displayName}</p>
-      <p>Role: {access.identity.role}</p>
-      <p>Session id: {access.session.sessionId}</p>
-      <p>Session expires at: {access.session.expiresAt}</p>
-      <p>Current draw status: {drawState.status}</p>
-      <p>Current draw id: {drawState.snapshot?.drawId ?? "none"}</p>
-      <p>Current draw at: {drawState.snapshot?.drawAt ?? "none"}</p>
-      <p>Draw fetched at: {drawState.snapshot?.fetchedAt ?? "none"}</p>
-      <p>Draw freshness: {drawState.freshness?.isFresh ? "fresh" : drawState.status === "missing" ? "missing" : "stale"}</p>
-      <p>Draw stale since: {drawState.freshness?.staleSince ?? "n/a"}</p>
-      <p>Form schema version: {lottery.formSchemaVersion}</p>
-      <p>Pricing strategy: {lottery.pricing.strategy}</p>
-      <p>Base amount (minor): {lottery.pricing.baseAmountMinor}</p>
-      <p>Purchase handler: {lottery.handlers.purchaseHandler}</p>
-      <p>Result handler: {lottery.handlers.resultHandler}</p>
-      {purchaseBlockedReason ? <p>Purchase blocked: {purchaseBlockedReason}</p> : <p>Purchase controls are active.</p>}
-
-      {draftStatus && draftMessage ? <p>Draft [{draftStatus}]: {draftMessage}</p> : null}
-
-      <form action={submitPurchaseDraftAction}>
-        <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
-        <LotteryFormFields fields={lottery.formFields} />
-        <button type="submit" disabled={Boolean(purchaseBlockedReason)}>
-          Prepare Purchase Draft
-        </button>
-      </form>
-
-      {confirmationDraft ? (
-        <section>
-          <h2>Confirm Purchase Request</h2>
-          <p>Request id: {confirmationDraft.requestId}</p>
-          <p>Draw id: {confirmationDraft.drawId}</p>
-          <p>
-            Final quote: {confirmationDraft.costMinor} {confirmationDraft.currency} minor
-          </p>
-          <h3>Validated Payload Snapshot</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Field</th>
-                <th>Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(confirmationDraft.payload).map(([fieldKey, value]) => (
-                <tr key={fieldKey}>
-                  <td>{fieldKey}</td>
-                  <td>{String(value)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <form action={confirmPurchaseRequestAction}>
-            <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
-            <input type="hidden" name="quoteToken" value={quoteToken ?? ""} />
-            <button type="submit" disabled={Boolean(purchaseBlockedReason)}>
-              Confirm And Create Request
+    <section className="lottery-page">
+      <header
+        className="lottery-hero"
+        style={
+          {
+            background: `linear-gradient(145deg, ${presentation.accentFrom} 0%, ${presentation.accentTo} 100%)`
+          } as CSSProperties
+        }
+      >
+        <div className="lottery-hero-head">
+          <div>
+            <p className="hero-eyebrow">{presentation.category}</p>
+            <h1>{lottery.title}</h1>
+          </div>
+          <span className={`badge ${drawBadge.kind}`}>{drawBadge.label}</span>
+        </div>
+        <p>{presentation.tagline}</p>
+        <div className="actions-row">
+          <Link className="btn-ghost" href="/">
+            Ко всем лотереям
+          </Link>
+          <form action={handleLogoutAction}>
+            <button className="btn-ghost" type="submit">
+              Выйти
             </button>
           </form>
-          <p>
-            <a href={`/lottery/${lottery.lotteryCode}`}>Cancel And Return To Editable Form</a>
+        </div>
+      </header>
+
+      {draftStatus && draftMessage ? (
+        <p className={`alert-row ${draftBadge}`}>{draftMessage}</p>
+      ) : (
+        <p className={`alert-row ${purchaseStatusTone}`}>{purchaseStatusMessage}</p>
+      )}
+
+      <section className="split-grid">
+        <article className="panel">
+          <h2>Новый билет</h2>
+          <p className="muted">
+            {isBig8Lottery
+              ? `Базовая ставка: ${formatMinorAsRub(lottery.pricing.baseAmountMinor)} • список тиражей синхронизируется каждые 20 секунд`
+              : `Стоимость билета: ${formatMinorAsRub(lottery.pricing.baseAmountMinor)} • схема: ${lottery.formSchemaVersion}`}
           </p>
-        </section>
-      ) : null}
+          {isBig8Lottery ? (
+            <form action={submitPurchaseDraftAction} className="page-column">
+              <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
+              <Big8PurchaseForm
+                lotteryCode={lottery.lotteryCode}
+                baseAmountMinor={lottery.pricing.baseAmountMinor}
+                accountPhone={access.identity.phone}
+                purchaseBlockedReason={purchaseBlockedReason}
+                initialDrawOptions={availableDraws}
+              />
+            </form>
+          ) : (
+            <form action={submitPurchaseDraftAction} className="page-column">
+              <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
+              <LotteryFormFields fields={lottery.formFields} />
+              <div className="actions-row">
+                <button className="btn-primary" type="submit" disabled={Boolean(purchaseBlockedReason)}>
+                  Подготовить заявку
+                </button>
+              </div>
+            </form>
+          )}
 
-      <h2>Purchase Requests</h2>
-      {purchaseRequests.length === 0 ? (
-        <p>No purchase requests yet.</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Request</th>
-              <th>State</th>
-              <th>Draw</th>
-              <th>Attempts</th>
-              <th>Cost (minor)</th>
-              <th>Created at</th>
-              <th>Final result</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {purchaseRequests.map((request) => (
-              <tr key={request.requestId}>
-                <td>{request.requestId}</td>
-                <td>{request.status}</td>
-                <td>{request.drawId}</td>
-                <td>{request.attemptCount}</td>
-                <td>
-                  {request.costMinor} {request.currency}
-                </td>
-                <td>{request.createdAt}</td>
-                <td>{request.finalResult ?? "n/a"}</td>
-                <td>
-                  {isRequestCancelableStatus(request.status) ? (
-                    <form action={cancelPurchaseRequestAction}>
-                      <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
-                      <input type="hidden" name="requestId" value={request.requestId} />
-                      <button type="submit">Cancel Request</button>
-                    </form>
-                  ) : (
-                    "Not cancelable"
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+          {confirmationDraft ? (
+            <section className="panel">
+              <h3>{isBig8PurchaseDraftPayload(confirmationDraft.payload) ? "Подтверждение корзины Big 8" : "Подтверждение заявки"}</h3>
+              <div className="mini-grid">
+                <article className="mini-stat">
+                  <span className="label">Request ID</span>
+                  <span className="value">{confirmationDraft.requestId}</span>
+                </article>
+                <article className="mini-stat">
+                  <span className="label">Тираж</span>
+                  <span className="value">{confirmationDraft.drawLabel ?? confirmationDraft.drawId}</span>
+                </article>
+                <article className="mini-stat">
+                  <span className="label">Сумма</span>
+                  <span className="value">{formatMinorAsRub(confirmationDraft.costMinor)}</span>
+                </article>
+                {confirmationDraft.ticketCount ? (
+                  <article className="mini-stat">
+                    <span className="label">Билетов</span>
+                    <span className="value">{confirmationDraft.ticketCount}</span>
+                  </article>
+                ) : null}
+              </div>
+              {renderConfirmationPayloadDetails(confirmationDraft.payload, lottery.pricing.baseAmountMinor)}
+              <div className="actions-row">
+                <form action={confirmPurchaseRequestAction}>
+                  <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
+                  <input type="hidden" name="quoteToken" value={quoteToken ?? ""} />
+                  <button className="btn-primary" type="submit" disabled={Boolean(purchaseBlockedReason)}>
+                    Подтвердить и отправить в очередь
+                  </button>
+                </form>
+                <Link className="btn-ghost" href={`/lottery/${lottery.lotteryCode}`}>
+                  Отменить и редактировать
+                </Link>
+              </div>
+            </section>
+          ) : null}
+        </article>
 
-      <h2>Ticket Outcomes</h2>
-      {tickets.length === 0 ? (
-        <p>No ticket verification outcomes yet.</p>
-      ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Ticket</th>
-              <th>Request</th>
-              <th>Draw</th>
-              <th>Verification</th>
-              <th>Winning (minor)</th>
-              <th>Verified at</th>
-              <th>External reference</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tickets.map((ticket) => (
-              <tr key={ticket.ticketId}>
-                <td>{ticket.ticketId}</td>
-                <td>{ticket.requestId}</td>
-                <td>{ticket.drawId}</td>
-                <td>{ticket.verificationStatus}</td>
-                <td>{ticket.winningAmountMinor ?? 0}</td>
-                <td>{ticket.verifiedAt ?? "pending"}</td>
-                <td>{ticket.externalReference}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+        <article className="panel">
+          <h2>Сессия и кошелёк</h2>
+          <div className="mini-grid">
+            <article className="mini-stat">
+              <span className="label">Пользователь</span>
+              <span className="value">{access.identity.displayName}</span>
+            </article>
+            <article className="mini-stat">
+              <span className="label">Роль</span>
+              <span className="value">{access.identity.role}</span>
+            </article>
+            <article className="mini-stat">
+              <span className="label">Телефон</span>
+              <span className="value">{formatPhone(access.identity.phone)}</span>
+            </article>
+            <article className="mini-stat">
+              <span className="label">Доступно</span>
+              <span className="value">{formatMinorAsRub(walletSnapshot.availableMinor)}</span>
+            </article>
+            <article className="mini-stat">
+              <span className="label">В резерве</span>
+              <span className="value">{formatMinorAsRub(walletSnapshot.reservedMinor)}</span>
+            </article>
+          </div>
 
-      <form action={handleLogoutAction}>
-        <button type="submit">Logout</button>
-      </form>
+          <div className="mini-grid">
+            <article className="mini-stat">
+              <span className="label">Текущий тираж</span>
+              <span className="value">{drawState.snapshot?.drawId ?? "нет данных"}</span>
+            </article>
+            <article className="mini-stat">
+              <span className="label">Время тиража</span>
+              <span className="value">{formatIso(drawState.snapshot?.drawAt)}</span>
+            </article>
+            <article className="mini-stat">
+              <span className="label">Обновлено</span>
+              <span className="value">{formatIso(drawState.snapshot?.fetchedAt)}</span>
+            </article>
+            <article className="mini-stat">
+              <span className="label">Свежесть</span>
+              <span className="value">{drawState.freshness?.isFresh ? "актуально" : "нужна проверка"}</span>
+            </article>
+            <article className="mini-stat">
+              <span className="label">Доступных тиражей</span>
+              <span className="value">{availableDraws.length}</span>
+            </article>
+          </div>
+
+          <h3>Последние движения кошелька</h3>
+          {walletMovements.length === 0 ? (
+            <p className="muted">Движений пока нет.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Операция</th>
+                    <th>Сумма</th>
+                    <th>Ссылка</th>
+                    <th>Время</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {walletMovements.map((movement) => (
+                    <tr key={movement.entryId}>
+                      <td>{movement.operation}</td>
+                      <td>{movement.amountLabel}</td>
+                      <td>{movement.referenceLabel}</td>
+                      <td>{movement.createdAt}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </article>
+      </section>
+
+      <LotteryLiveMonitor
+        lotteryCode={lottery.lotteryCode}
+        initialRequests={purchaseRequests.map((request) => ({
+          requestId: request.requestId,
+          status: request.status,
+          drawId: request.drawId,
+          attemptCount: request.attemptCount,
+          updatedAt: request.updatedAt,
+          finalResult: request.finalResult
+        }))}
+      />
+
+      <section className="two-col">
+        <article className="panel">
+          <h2>Заявки на покупку</h2>
+          {purchaseRequests.length === 0 ? (
+            <p className="muted">Заявок пока нет.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Статус</th>
+                    <th>Тираж</th>
+                    <th>Попытки</th>
+                    <th>Сумма</th>
+                    <th>Создана</th>
+                    <th>Итог</th>
+                    <th>Действие</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchaseRequests.map((request) => (
+                    <tr key={request.requestId}>
+                      <td>{request.requestId}</td>
+                      <td>{request.status}</td>
+                      <td>{request.drawId}</td>
+                      <td>{request.attemptCount}</td>
+                      <td>{formatMinorAsRub(request.costMinor)}</td>
+                      <td>{formatIso(request.createdAt)}</td>
+                      <td>{request.finalResult ?? "нет"}</td>
+                      <td>
+                        {isRequestCancelableStatus(request.status) ? (
+                          <form action={cancelPurchaseRequestAction}>
+                            <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
+                            <input type="hidden" name="requestId" value={request.requestId} />
+                            <button className="btn-danger" type="submit">
+                              Отменить
+                            </button>
+                          </form>
+                        ) : (
+                          <span className="muted">закрыта</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </article>
+
+        <article className="panel">
+          <h2>Проверка билетов</h2>
+          {tickets.length === 0 ? (
+            <p className="muted">Результатов проверки пока нет.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Ticket</th>
+                    <th>Request</th>
+                    <th>Тираж</th>
+                    <th>Статус</th>
+                    <th>Выигрыш</th>
+                    <th>Проверка</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tickets.map((ticket) => (
+                    <tr key={ticket.ticketId}>
+                      <td>{ticket.ticketId}</td>
+                      <td>{ticket.requestId}</td>
+                      <td>{ticket.drawId}</td>
+                      <td>{ticket.verificationStatus}</td>
+                      <td>{formatMinorAsRub(ticket.winningAmountMinor ?? 0)}</td>
+                      <td>{formatIso(ticket.verifiedAt) ?? "в очереди"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </article>
+      </section>
     </section>
   );
 }
@@ -284,16 +384,11 @@ async function submitPurchaseDraftAction(formData: FormData): Promise<void> {
     return redirect(`/lottery/${access.lotteryCode}?draft=error&message=Lottery+not+found`);
   }
   const drawState = await getDrawRefreshService().getDrawState(lottery.lotteryCode);
+  const liveDraws = await getDrawRefreshService().listAvailableDraws(lottery.lotteryCode);
   const purchaseBlockedReason = describePurchaseBlockReason(drawState);
   if (purchaseBlockedReason) {
-    const blockedMessage = encodeURIComponent(`Purchase blocked: ${purchaseBlockedReason}.`);
+    const blockedMessage = encodeURIComponent(`Покупка заблокирована: ${purchaseBlockedReason}.`);
     return redirect(`/lottery/${lottery.lotteryCode}?draft=error&message=${blockedMessage}`);
-  }
-
-  const rawFieldValues: Record<string, string | undefined> = {};
-  for (const field of lottery.formFields) {
-    const value = formData.get(field.fieldKey);
-    rawFieldValues[field.fieldKey] = typeof value === "string" ? value : undefined;
   }
 
   const purchaseDraftService = new PurchaseDraftService({
@@ -301,14 +396,23 @@ async function submitPurchaseDraftAction(formData: FormData): Promise<void> {
   });
 
   try {
-    const preparedDraft = await purchaseDraftService.prepareDraft({
-      lotteryCode: lottery.lotteryCode,
-      rawFieldValues
-    });
-    const drawId = drawState.snapshot?.drawId;
-    if (!drawId) {
+    const isBig8Lottery = lottery.formSchemaVersion === "v3-big8-live";
+    const preparedDraft = isBig8Lottery
+      ? await purchaseDraftService.prepareDraft({
+          lotteryCode: lottery.lotteryCode,
+          structuredPayload: readBig8StructuredPayload(formData, access.identity.phone)
+        })
+      : await purchaseDraftService.prepareDraft({
+          lotteryCode: lottery.lotteryCode,
+          rawFieldValues: readRawFieldValues(formData, lottery.formFields)
+        });
+    const drawId = isBig8Lottery
+      ? String(formData.get("selectedDrawId") ?? "").trim()
+      : drawState.snapshot?.drawId;
+    const selectedDraw = drawId ? liveDraws.find((draw) => draw.drawId === drawId) ?? null : null;
+    if (!drawId || (isBig8Lottery && !selectedDraw)) {
       return redirect(
-        `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Missing draw id for confirmation quote.")}`
+        `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Для заявки не найден актуальный тираж.")}`
       );
     }
 
@@ -316,30 +420,38 @@ async function submitPurchaseDraftAction(formData: FormData): Promise<void> {
       requestId: `req-${crypto.randomUUID()}`,
       lotteryCode: preparedDraft.lotteryCode,
       drawId,
+      ...(selectedDraw ? { drawLabel: selectedDraw.label } : {}),
       payload: preparedDraft.validatedPayload,
+      ticketCount: preparedDraft.ticketCount,
       costMinor: preparedDraft.costMinor,
       currency: preparedDraft.currency
     });
 
     const message = encodeURIComponent(
-      `Quote ready: ${preparedDraft.costMinor} ${preparedDraft.currency} minor (${preparedDraft.validatedFieldCount}/${preparedDraft.totalFieldCount} fields).`
+      isBig8Lottery
+        ? `Черновик Big 8 готов: ${preparedDraft.ticketCount} бил., ${formatMinorAsRub(preparedDraft.costMinor)}.`
+        : `Черновик готов: ${formatMinorAsRub(preparedDraft.costMinor)} (${preparedDraft.validatedFieldCount}/${preparedDraft.totalFieldCount} полей).`
     );
     return redirect(
       `/lottery/${lottery.lotteryCode}?draft=ready&message=${message}&quote=${encodeURIComponent(confirmationToken)}`
     );
   } catch (error) {
+    rethrowIfRedirectError(error);
+
     if (error instanceof PurchaseDraftServiceError) {
       const firstFieldError = error.fieldErrors[0];
       const message = firstFieldError
-        ? `Invalid "${firstFieldError.fieldKey}": ${firstFieldError.message}.`
+        ? `Поле "${firstFieldError.fieldKey}": ${firstFieldError.message}.`
         : error.message;
-      return redirect(
-        `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(message)}`
-      );
+      return redirect(`/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(message)}`);
+    }
+
+    if (error instanceof Error && error.message.trim().length > 0) {
+      return redirect(`/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(error.message)}`);
     }
 
     return redirect(
-      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Failed to prepare purchase quote.")}`
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Не удалось подготовить черновик покупки.")}`
     );
   }
 }
@@ -359,15 +471,25 @@ async function confirmPurchaseRequestAction(formData: FormData): Promise<void> {
   const confirmationDraft = decodeConfirmationToken(confirmationToken, lottery.lotteryCode);
   if (!confirmationDraft) {
     return redirect(
-      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Confirmation snapshot is missing or invalid.")}`
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Снимок подтверждения отсутствует или поврежден.")}`
     );
   }
 
   const drawState = await getDrawRefreshService().getDrawState(lottery.lotteryCode);
+  const liveDraws = await getDrawRefreshService().listAvailableDraws(lottery.lotteryCode);
   const purchaseBlockedReason = describePurchaseBlockReason(drawState);
   if (purchaseBlockedReason) {
     return redirect(
-      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(`Purchase blocked: ${purchaseBlockedReason}.`)}`
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(`Покупка заблокирована: ${purchaseBlockedReason}.`)}`
+    );
+  }
+
+  if (
+    lottery.formSchemaVersion === "v3-big8-live" &&
+    !liveDraws.some((draw) => draw.drawId === confirmationDraft.drawId)
+  ) {
+    return redirect(
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Выбранный тираж уже не доступен. Обновите список и соберите билет заново.")}`
     );
   }
 
@@ -388,21 +510,19 @@ async function confirmPurchaseRequestAction(formData: FormData): Promise<void> {
     });
 
     const message = queueResult.replayed
-      ? `Request ${queueResult.request.snapshot.requestId} is already queued (attempts ${queueResult.queueItem.attemptCount}).`
-      : `Request ${queueResult.request.snapshot.requestId} queued with status ${queueResult.request.state}.`;
+      ? `Заявка ${queueResult.request.snapshot.requestId} уже стоит в очереди (попытка ${queueResult.queueItem.attemptCount}).`
+      : `Заявка ${queueResult.request.snapshot.requestId} отправлена в очередь со статусом ${queueResult.request.state}.`;
 
-    return redirect(
-      `/lottery/${lottery.lotteryCode}?draft=queued&message=${encodeURIComponent(message)}`
-    );
+    return redirect(`/lottery/${lottery.lotteryCode}?draft=queued&message=${encodeURIComponent(message)}`);
   } catch (error) {
+    rethrowIfRedirectError(error);
+
     if (error instanceof PurchaseRequestServiceError || error instanceof PurchaseOrchestrationServiceError) {
-      return redirect(
-        `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(error.message)}`
-      );
+      return redirect(`/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(error.message)}`);
     }
 
     return redirect(
-      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Failed to create purchase request snapshot.")}`
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Не удалось создать заявку на покупку.")}`
     );
   }
 }
@@ -421,7 +541,7 @@ async function cancelPurchaseRequestAction(formData: FormData): Promise<void> {
 
   if (!requestId.trim()) {
     return redirect(
-      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Request id is required for cancellation.")}`
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Нужен request id для отмены.")}`
     );
   }
 
@@ -431,21 +551,19 @@ async function cancelPurchaseRequestAction(formData: FormData): Promise<void> {
       userId: access.identity.identityId
     });
     const message = canceled.replayed
-      ? `Request ${canceled.request.snapshot.requestId} was already canceled.`
-      : `Request ${canceled.request.snapshot.requestId} canceled with state ${canceled.request.state}.`;
+      ? `Заявка ${canceled.request.snapshot.requestId} уже была отменена.`
+      : `Заявка ${canceled.request.snapshot.requestId} отменена со статусом ${canceled.request.state}.`;
 
-    return redirect(
-      `/lottery/${lottery.lotteryCode}?draft=canceled&message=${encodeURIComponent(message)}`
-    );
+    return redirect(`/lottery/${lottery.lotteryCode}?draft=canceled&message=${encodeURIComponent(message)}`);
   } catch (error) {
+    rethrowIfRedirectError(error);
+
     if (error instanceof PurchaseOrchestrationServiceError) {
-      return redirect(
-        `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(error.message)}`
-      );
+      return redirect(`/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(error.message)}`);
     }
 
     return redirect(
-      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Failed to cancel request.")}`
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Не удалось отменить заявку.")}`
     );
   }
 }
@@ -454,7 +572,9 @@ interface PurchaseConfirmationToken {
   readonly requestId: string;
   readonly lotteryCode: string;
   readonly drawId: string;
+  readonly drawLabel?: string;
   readonly payload: PurchaseDraftPayload;
+  readonly ticketCount?: number;
   readonly costMinor: number;
   readonly currency: string;
 }
@@ -480,9 +600,11 @@ function decodeConfirmationToken(token: string | null, expectedLotteryCode: stri
     const requestId = typeof record.requestId === "string" ? record.requestId.trim() : "";
     const lotteryCode = typeof record.lotteryCode === "string" ? record.lotteryCode.trim().toLowerCase() : "";
     const drawId = typeof record.drawId === "string" ? record.drawId.trim() : "";
+    const drawLabel = typeof record.drawLabel === "string" ? record.drawLabel.trim() : undefined;
     const costMinor = typeof record.costMinor === "number" ? Math.trunc(record.costMinor) : NaN;
     const currency = typeof record.currency === "string" ? record.currency.trim().toUpperCase() : "";
-    const payload = sanitizeConfirmationPayload(record.payload);
+    const ticketCount = typeof record.ticketCount === "number" ? Math.trunc(record.ticketCount) : undefined;
+    const payload = sanitizePurchaseDraftPayload(record.payload);
 
     if (
       !requestId ||
@@ -504,7 +626,9 @@ function decodeConfirmationToken(token: string | null, expectedLotteryCode: stri
       requestId,
       lotteryCode,
       drawId,
+      ...(drawLabel ? { drawLabel } : {}),
       payload,
+      ...(typeof ticketCount === "number" && ticketCount > 0 ? { ticketCount } : {}),
       costMinor,
       currency
     };
@@ -513,20 +637,133 @@ function decodeConfirmationToken(token: string | null, expectedLotteryCode: stri
   }
 }
 
-function sanitizeConfirmationPayload(input: unknown): PurchaseDraftPayload | null {
-  if (!input || typeof input !== "object") {
+function readRawFieldValues(
+  formData: FormData,
+  fields: readonly {
+    readonly fieldKey: string;
+  }[]
+): Record<string, string | undefined> {
+  const rawFieldValues: Record<string, string | undefined> = {};
+  for (const field of fields) {
+    const value = formData.get(field.fieldKey);
+    rawFieldValues[field.fieldKey] = typeof value === "string" ? value : undefined;
+  }
+
+  return rawFieldValues;
+}
+
+function readBig8StructuredPayload(formData: FormData, accountPhone: string): unknown {
+  const payloadFromFields = readBig8StructuredPayloadFromFields(formData, accountPhone);
+  if (payloadFromFields) {
+    return payloadFromFields;
+  }
+
+  const rawJson = String(formData.get("structuredPayloadJson") ?? "");
+  if (!rawJson.trim()) {
+    throw new Error("Нужен JSON билета Big 8");
+  }
+
+  const parsed = JSON.parse(rawJson) as unknown;
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("JSON билета Big 8 поврежден");
+  }
+
+  return {
+    schema: "big8-v1",
+    ...(parsed as Record<string, unknown>),
+    contactPhone: accountPhone
+  };
+}
+
+function readBig8StructuredPayloadFromFields(formData: FormData, accountPhone: string): unknown | null {
+  if (!formData.has("big8TicketCount")) {
     return null;
   }
 
-  const output: Record<string, PurchaseDraftPayloadValue> = {};
-  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    if (typeof value !== "string" && typeof value !== "number") {
-      return null;
-    }
-    output[key] = value;
+  const rawTicketCount = String(formData.get("big8TicketCount") ?? "").trim();
+  const parsedTicketCount = Number.parseInt(rawTicketCount, 10);
+  const ticketCount = Number.isInteger(parsedTicketCount) && parsedTicketCount > 0 ? parsedTicketCount : 0;
+  const tickets: Array<{
+    readonly boardNumbers: readonly number[];
+    readonly extraNumber: number | null;
+    readonly multiplier: number | null;
+  }> = [];
+
+  for (let index = 0; index < ticketCount; index += 1) {
+    const rawBoardNumbers = String(formData.get(`big8TicketBoardNumbers-${index}`) ?? "").trim();
+    const boardNumbers =
+      rawBoardNumbers.length === 0
+        ? []
+        : rawBoardNumbers.split(",").map((entry) => Number.parseInt(entry.trim(), 10));
+    const rawExtraNumber = String(formData.get(`big8TicketExtraNumber-${index}`) ?? "").trim();
+    const parsedExtraNumber = Number.parseInt(rawExtraNumber, 10);
+    const extraNumber = Number.isInteger(parsedExtraNumber) ? parsedExtraNumber : null;
+    const rawMultiplier = String(formData.get(`big8TicketMultiplier-${index}`) ?? "").trim();
+    const parsedMultiplier = Number.parseInt(rawMultiplier, 10);
+    const multiplier = Number.isInteger(parsedMultiplier) ? parsedMultiplier : null;
+
+    tickets.push({
+      boardNumbers,
+      extraNumber,
+      multiplier
+    });
   }
 
-  return output;
+  return {
+    schema: "big8-v1",
+    contactPhone: accountPhone,
+    tickets
+  };
+}
+
+function renderConfirmationPayloadDetails(payload: PurchaseDraftPayload, baseAmountMinor: number): ReactElement {
+  if (!isBig8PurchaseDraftPayload(payload)) {
+    return (
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Поле</th>
+              <th>Значение</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(payload).map(([fieldKey, value]) => (
+              <tr key={fieldKey}>
+                <td>{fieldKey}</td>
+                <td>{String(value)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  return (
+    <div className="big8-confirmation-grid">
+      {payload.tickets.map((ticket, index) => (
+        <article key={`confirm-${index + 1}`} className="big8-confirmation-card">
+          <div className="big8-confirmation-head">
+            <strong>Билет {index + 1}</strong>
+            <span>{formatMinorAsRub(baseAmountMinor * ticket.multiplier)}</span>
+          </div>
+          <p>
+            Поле 1: {ticket.boardNumbers.join(", ")}
+          </p>
+          <p>Поле 2: {ticket.extraNumber}</p>
+          <p>Множитель: x{ticket.multiplier}</p>
+        </article>
+      ))}
+      <article className="big8-confirmation-card">
+        <div className="big8-confirmation-head">
+          <strong>Телефон</strong>
+          <span>{formatPhone(payload.contactPhone)}</span>
+        </div>
+        <p>Телефон подтянут из учетной записи и попадет в terminal payload без ручного ввода на клиенте.</p>
+      </article>
+    </div>
+  );
 }
 
 function isRequestCancelableStatus(state: RequestState): boolean {
@@ -543,16 +780,95 @@ function readSingleParam(value: string | string[] | undefined): string | null {
   return null;
 }
 
+function rethrowIfRedirectError(error: unknown): void {
+  if (isRedirectError(error)) {
+    throw error;
+  }
+}
+
 function describePurchaseBlockReason(drawState: DrawAvailabilityState): string | null {
   if (drawState.status === "missing") {
-    return "draw data is missing";
-  }
-
-  if (drawState.status === "stale") {
-    return drawState.freshness?.staleSince
-      ? `draw data is stale since ${drawState.freshness.staleSince}`
-      : "draw data is stale";
+    return "данные тиража отсутствуют";
   }
 
   return null;
 }
+
+function resolvePurchaseStatusTone(drawState: DrawAvailabilityState): "ok" | "warn" {
+  return drawState.status === "stale" ? "warn" : "ok";
+}
+
+function resolvePurchaseStatusMessage(drawState: DrawAvailabilityState): string {
+  if (drawState.status === "missing") {
+    return "Покупка заблокирована: данные тиража отсутствуют.";
+  }
+
+  if (drawState.status === "stale") {
+    return "Покупка доступна, проверка свежести тиража временно отключена.";
+  }
+
+  return "Покупка доступна, данные тиража актуальны.";
+}
+
+function resolveDrawBadge(drawState: DrawAvailabilityState): { readonly label: string; readonly kind: "success" | "warning" | "danger" } {
+  switch (drawState.status) {
+    case "fresh":
+      return { label: "Тираж активен", kind: "success" };
+    case "stale":
+      return { label: "Тираж устарел", kind: "warning" };
+    case "missing":
+      return { label: "Нет данных тиража", kind: "danger" };
+    default:
+      return { label: "Статус неизвестен", kind: "warning" };
+  }
+}
+
+function resolveDraftBadge(draftStatus: string | null): "ok" | "warn" | "error" {
+  if (draftStatus === "queued" || draftStatus === "ready" || draftStatus === "canceled") {
+    return "ok";
+  }
+  if (draftStatus === "warning") {
+    return "warn";
+  }
+  return "error";
+}
+
+function formatIso(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function formatMinorAsRub(amountMinor: number): string {
+  const amount = amountMinor / 100;
+  return new Intl.NumberFormat("ru-RU", {
+    style: "currency",
+    currency: "RUB",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount);
+}
+
+function formatPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 11) {
+    return `+${digits[0]} (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}`;
+  }
+
+  return phone;
+}
+
+

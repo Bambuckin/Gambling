@@ -107,6 +107,42 @@ describe("PurchaseDraftService", () => {
       code: "pricing_failed"
     });
   });
+
+  it("prepares Big 8 structured draft from ticket payload", async () => {
+    const service = createPurchaseDraftService([
+      createEntry({
+        lotteryCode: "bolshaya-8",
+        formSchemaVersion: "v3-big8-live",
+        pricing: {
+          strategy: "fixed",
+          baseAmountMinor: 25_000
+        }
+      })
+    ]);
+
+    const result = await service.prepareDraft({
+      lotteryCode: "bolshaya-8",
+      structuredPayload: {
+        contactPhone: "79990001122",
+        tickets: [
+          {
+            boardNumbers: [1, 2, 3, 4, 5, 6, 7, 8],
+            extraNumber: 1,
+            multiplier: 2
+          },
+          {
+            boardNumbers: [9, 10, 11, 12, 13, 14, 15, 16],
+            extraNumber: 4,
+            multiplier: 1
+          }
+        ]
+      }
+    });
+
+    expect(result.ticketCount).toBe(2);
+    expect(result.multiplier).toBe(3);
+    expect(result.costMinor).toBe(75_000);
+  });
 });
 
 function createPurchaseDraftService(entries: readonly LotteryRegistryEntry[]): PurchaseDraftService {

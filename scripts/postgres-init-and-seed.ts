@@ -1,5 +1,7 @@
 import { hashAccessPassword } from "@lottery/infrastructure";
 import {
+  createDefaultDrawSnapshots,
+  createDefaultLotteryRegistryEntries,
   getPostgresPool,
   initializeLotteryPostgresSchema,
   PostgresDrawStore,
@@ -155,6 +157,7 @@ function defaultIdentities(): readonly {
   readonly role: "user" | "admin";
   readonly status: "active";
   readonly displayName: string;
+  readonly phone: string;
   readonly createdAt: string;
   readonly updatedAt: string;
 }[] {
@@ -168,6 +171,7 @@ function defaultIdentities(): readonly {
       role: "user",
       status: "active",
       displayName: "Operator User",
+      phone: "79990000001",
       createdAt: nowIso,
       updatedAt: nowIso
     },
@@ -178,6 +182,7 @@ function defaultIdentities(): readonly {
       role: "admin",
       status: "active",
       displayName: "Administrator",
+      phone: "79990000002",
       createdAt: nowIso,
       updatedAt: nowIso
     },
@@ -188,6 +193,7 @@ function defaultIdentities(): readonly {
       role: "user",
       status: "active",
       displayName: "Tester User",
+      phone: "79990000003",
       createdAt: nowIso,
       updatedAt: nowIso
     }
@@ -195,127 +201,11 @@ function defaultIdentities(): readonly {
 }
 
 function defaultRegistryEntries(): readonly LotteryRegistryEntry[] {
-  return [
-    {
-      lotteryCode: "demo-lottery",
-      title: "Demo Lottery",
-      enabled: true,
-      displayOrder: 10,
-      formSchemaVersion: "v1-demo",
-      formFields: [
-        {
-          fieldKey: "draw_count",
-          label: "Draw Count",
-          type: "number",
-          required: true,
-          min: 1,
-          max: 10,
-          step: 1,
-          defaultValue: 1
-        },
-        {
-          fieldKey: "ticket_note",
-          label: "Ticket Note",
-          type: "text",
-          required: false,
-          placeholder: "Optional note"
-        }
-      ],
-      pricing: {
-        strategy: "fixed",
-        baseAmountMinor: 100
-      },
-      handlers: {
-        purchaseHandler: "handlers.demo-lottery.purchase.v1",
-        resultHandler: "handlers.demo-lottery.result.v1"
-      }
-    },
-    {
-      lotteryCode: "gosloto-6x45",
-      title: "Gosloto 6x45",
-      enabled: true,
-      displayOrder: 20,
-      formSchemaVersion: "v1-gosloto",
-      formFields: [
-        {
-          fieldKey: "draw_count",
-          label: "Draw Count",
-          type: "number",
-          required: true,
-          min: 1,
-          max: 5,
-          step: 1,
-          defaultValue: 1
-        },
-        {
-          fieldKey: "bet_system",
-          label: "Bet System",
-          type: "select",
-          required: true,
-          options: [
-            { value: "standard", label: "Standard" },
-            { value: "extended", label: "Extended" }
-          ]
-        }
-      ],
-      pricing: {
-        strategy: "fixed",
-        baseAmountMinor: 150
-      },
-      handlers: {
-        purchaseHandler: "handlers.gosloto-6x45.purchase.v1",
-        resultHandler: "handlers.gosloto-6x45.result.v1"
-      }
-    },
-    {
-      lotteryCode: "archive-lottery",
-      title: "Archive Lottery (Disabled)",
-      enabled: false,
-      displayOrder: 30,
-      formSchemaVersion: "v1-archive",
-      formFields: [
-        {
-          fieldKey: "draw_count",
-          label: "Draw Count",
-          type: "number",
-          required: true,
-          min: 1,
-          max: 3,
-          step: 1,
-          defaultValue: 1
-        }
-      ],
-      pricing: {
-        strategy: "fixed",
-        baseAmountMinor: 50
-      },
-      handlers: {
-        purchaseHandler: "handlers.archive-lottery.purchase.v1",
-        resultHandler: "handlers.archive-lottery.result.v1"
-      }
-    }
-  ];
+  return createDefaultLotteryRegistryEntries();
 }
 
 function defaultDrawSnapshots(): readonly DrawSnapshot[] {
-  const now = Date.now();
-
-  return [
-    {
-      lotteryCode: "demo-lottery",
-      drawId: "demo-draw-001",
-      drawAt: new Date(now + 60 * 60 * 1000).toISOString(),
-      fetchedAt: new Date(now - 10 * 60 * 1000).toISOString(),
-      freshnessTtlSeconds: 60 * 60
-    },
-    {
-      lotteryCode: "gosloto-6x45",
-      drawId: "gosloto-draw-044",
-      drawAt: new Date(now + 2 * 60 * 60 * 1000).toISOString(),
-      fetchedAt: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
-      freshnessTtlSeconds: 30 * 60
-    }
-  ];
+  return createDefaultDrawSnapshots(new Date());
 }
 
 function defaultLedgerEntries(): readonly LedgerEntry[] {

@@ -5,7 +5,7 @@ export interface LotteryShellEntry {
   readonly title: string;
 }
 
-const FALLBACK_LOTTERY_CODE = "demo-lottery";
+const FALLBACK_LOTTERY_CODE = "mechtallion";
 
 export async function readLotteryShellCatalog(): Promise<LotteryShellEntry[]> {
   const visible = await getLotteryRegistryService().getVisibleLotteries();

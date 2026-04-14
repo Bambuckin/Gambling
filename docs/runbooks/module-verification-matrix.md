@@ -72,7 +72,8 @@ Run commands from repository root: `C:\Users\11\Documents\Gambling`.
   - `corepack pnpm smoke`
 - Quick triage:
   - fake terminal behavior: `packages/test-kit/src/fake-terminal.ts`
-  - smoke entrypoint: `packages/test-kit/src/smoke.ts`
+  - fake handlers: `packages/test-kit/src/fake-lottery-handler.ts`
+  - note: `corepack pnpm smoke` is currently a scaffold command, not a real smoke entrypoint file
 
 ## Cross-Module Notes
 

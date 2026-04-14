@@ -16,7 +16,7 @@ Manual verification procedure for Phase 5 purchase request orchestration behavio
 
 ## Step 1: Validate And Price Draft Before Confirmation
 
-1. Open `http://localhost:3000/lottery/demo-lottery`.
+1. Open `http://localhost:3000/lottery/mechtallion`.
 2. Sign in as `tester` / `tester` if prompted.
 3. Fill lottery form values (for example `draw_count=2`).
 4. Click `Prepare Purchase Draft`.
@@ -46,7 +46,7 @@ Expected outcome:
 
 ## Step 3: Cancel Queued Request And Verify Reserve Release
 
-1. Return to `http://localhost:3000/lottery/demo-lottery`.
+1. Return to `http://localhost:3000/lottery/mechtallion`.
 2. Click `Cancel Request` on queued item.
 3. Confirm page shows `Draft [canceled]` message.
 4. Confirm request row status updates to `reserve_released`.

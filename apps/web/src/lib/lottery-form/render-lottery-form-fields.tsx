@@ -7,9 +7,9 @@ interface LotteryFormFieldsProps {
 
 export function LotteryFormFields({ fields }: LotteryFormFieldsProps): ReactElement {
   return (
-    <>
+    <div className="lottery-form-grid">
       {fields.map((field) => (
-        <label key={field.fieldKey}>
+        <label key={field.fieldKey} className="field">
           {field.label}
           {field.type === "select" ? (
             <select name={field.fieldKey} required={field.required} defaultValue={resolveSelectDefaultValue(field)}>
@@ -33,7 +33,7 @@ export function LotteryFormFields({ fields }: LotteryFormFieldsProps): ReactElem
           )}
         </label>
       ))}
-    </>
+    </div>
   );
 }
 

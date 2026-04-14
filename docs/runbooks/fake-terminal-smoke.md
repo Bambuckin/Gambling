@@ -73,7 +73,7 @@ corepack pnpm dev:web
 
 Expected result:
 
-- User scenario opens `/lottery/demo-lottery` after session creation
+- User scenario opens `/lottery/mechtallion` after session creation
 - Admin-denied scenario redirects `/admin` to `/denied?...required=admin`
 - Logout scenario clears session and protected routes redirect to `/login`
 

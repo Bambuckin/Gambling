@@ -22,6 +22,14 @@ Primary safety invariant:
 - `packages/application` - use-case services and ports.
 - `packages/infrastructure` - concrete adapters (`in-memory` and `postgres`).
 - `packages/lottery-handlers` - deterministic handler contracts and registry.
+- workspace-level maps:
+  - `apps/web/README.md`
+  - `apps/terminal-worker/README.md`
+  - `packages/domain/README.md`
+  - `packages/application/README.md`
+  - `packages/infrastructure/README.md`
+  - `packages/lottery-handlers/README.md`
+  - `packages/test-kit/README.md`
 
 ## 3. What is done vs missing
 
@@ -30,11 +38,11 @@ Implemented:
 - shared Postgres runtime for web + worker;
 - persisted queue/lock/ledger/tickets/audit storage;
 - bootstrap + seed + preflight scripts;
+- customer-facing UI surface in NLoto-like visual style;
 - deployment and handoff runbooks.
 
 Still required before production go-live:
 
-- final customer-facing purchase UI;
 - real terminal integration handlers (current handlers are deterministic stubs).
 
 ## 4. Launch path
@@ -56,6 +64,8 @@ Templates:
 
 - Purchase UI replacement:
   - `apps/web/src/app/lottery/[lotteryCode]/page.tsx`
+  - `apps/web/src/lib/ui/lottery-presentation.ts`
+  - `apps/web/src/app/styles.css`
 - Real terminal integration:
   - `apps/terminal-worker/src/lib/terminal-handler-runtime.ts`
 - New lottery onboarding:
@@ -67,5 +77,8 @@ Templates:
 2. `ARCHITECTURE.md`
 3. `docs/modules/system-architecture.md`
 4. `docs/modules/boundary-catalog.md`
-5. `docs/runbooks/launch-readiness-checklist.md`
-
+5. `docs/CONFIGURATION.md`
+6. `docs/API.md`
+7. `docs/DEVELOPMENT.md`
+8. `docs/TESTING.md`
+9. `docs/runbooks/launch-readiness-checklist.md`

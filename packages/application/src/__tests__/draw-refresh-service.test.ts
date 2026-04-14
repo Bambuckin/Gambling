@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DrawSnapshot } from "@lottery/domain";
+import type { DrawOption, DrawSnapshot } from "@lottery/domain";
 import { DrawRefreshService, type DrawDataProvider } from "../services/draw-refresh-service.js";
 import type { DrawStore } from "../ports/draw-store.js";
 import type { TimeSource } from "../ports/time-source.js";
@@ -59,7 +59,11 @@ describe("draw refresh service", () => {
           drawId: "draw-202",
           drawAt: "2026-04-05T18:00:00.000Z",
           fetchedAt: "2026-04-05T12:00:00.000Z",
-          freshnessTtlSeconds: 3600
+          freshnessTtlSeconds: 3600,
+          availableDraws: [
+            drawOption("draw-202", "2026-04-05T18:00:00.000Z", "draw-202"),
+            drawOption("draw-203", "2026-04-05T18:20:00.000Z", "draw-203")
+          ]
         };
       }
     };
@@ -67,6 +71,29 @@ describe("draw refresh service", () => {
     const refreshed = await service.refreshLottery("demo-lottery", provider);
     expect(refreshed.status).toBe("fresh");
     expect(refreshed.snapshot?.drawId).toBe("draw-202");
+    expect(refreshed.snapshot?.availableDraws).toHaveLength(2);
+  });
+
+  it("lists snapshot draw options in chronological order", async () => {
+    const service = buildService(
+      [
+        {
+          lotteryCode: "demo-lottery",
+          drawId: "draw-301",
+          drawAt: "2026-04-05T17:00:00.000Z",
+          fetchedAt: "2026-04-05T12:00:00.000Z",
+          freshnessTtlSeconds: 1800,
+          availableDraws: [
+            drawOption("draw-302", "2026-04-05T18:00:00.000Z", "later"),
+            drawOption("draw-301", "2026-04-05T17:00:00.000Z", "earlier")
+          ]
+        }
+      ],
+      "2026-04-05T12:00:00.000Z"
+    );
+
+    const draws = await service.listAvailableDraws("demo-lottery");
+    expect(draws.map((draw) => draw.drawId)).toEqual(["draw-301", "draw-302"]);
   });
 });
 
@@ -103,5 +130,20 @@ class InMemoryDrawStore implements DrawStore {
 }
 
 function cloneSnapshot(snapshot: DrawSnapshot): DrawSnapshot {
-  return { ...snapshot };
+  return {
+    ...snapshot,
+    ...(snapshot.availableDraws
+      ? {
+          availableDraws: snapshot.availableDraws.map((draw) => ({ ...draw }))
+        }
+      : {})
+  };
+}
+
+function drawOption(drawId: string, drawAt: string, label: string): DrawOption {
+  return {
+    drawId,
+    drawAt,
+    label
+  };
 }

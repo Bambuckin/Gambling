@@ -1,6 +1,8 @@
 import {
   type DrawAvailabilityState,
+  type DrawOption,
   type DrawSnapshot,
+  listSnapshotDrawOptions,
   normalizeLotteryCode,
   resolveDrawAvailabilityState
 } from "@lottery/domain";
@@ -18,6 +20,7 @@ export interface DrawSnapshotUpsertInput {
   readonly drawAt: string;
   readonly fetchedAt?: string;
   readonly freshnessTtlSeconds: number;
+  readonly availableDraws?: readonly DrawOption[];
 }
 
 export interface DrawDataProvider {
@@ -52,6 +55,12 @@ export class DrawRefreshService {
     return resolveDrawAvailabilityState(normalizedCode, snapshot, nowIso);
   }
 
+  async listAvailableDraws(lotteryCode: string): Promise<readonly DrawOption[]> {
+    const normalizedCode = normalizeLotteryCode(lotteryCode);
+    const snapshot = await this.drawStore.getSnapshot(normalizedCode);
+    return listSnapshotDrawOptions(snapshot);
+  }
+
   async upsertSnapshot(input: DrawSnapshotUpsertInput): Promise<DrawSnapshot> {
     const nowIso = this.timeSource.nowIso();
     const snapshot = sanitizeSnapshot(input, nowIso);
@@ -71,6 +80,7 @@ export class DrawRefreshService {
       drawId: provided.drawId,
       drawAt: provided.drawAt,
       freshnessTtlSeconds: provided.freshnessTtlSeconds,
+      ...(provided.availableDraws ? { availableDraws: provided.availableDraws } : {}),
       ...(provided.fetchedAt ? { fetchedAt: provided.fetchedAt } : {})
     });
 
@@ -95,6 +105,7 @@ function sanitizeSnapshot(input: DrawSnapshotUpsertInput | DrawSnapshot, fallbac
 
   const drawAt = normalizeIsoOrThrow(input.drawAt, `drawAt for lottery "${lotteryCode}"`);
   const fetchedAt = normalizeIsoOrThrow(input.fetchedAt ?? fallbackFetchedAt, `fetchedAt for lottery "${lotteryCode}"`);
+  const availableDraws = sanitizeDrawOptions(input.availableDraws);
 
   const freshnessTtlSeconds = Math.trunc(input.freshnessTtlSeconds);
   if (!Number.isFinite(freshnessTtlSeconds) || freshnessTtlSeconds <= 0) {
@@ -106,7 +117,8 @@ function sanitizeSnapshot(input: DrawSnapshotUpsertInput | DrawSnapshot, fallbac
     drawId,
     drawAt,
     fetchedAt,
-    freshnessTtlSeconds
+    freshnessTtlSeconds,
+    ...(availableDraws.length > 0 ? { availableDraws } : {})
   };
 }
 
@@ -117,4 +129,29 @@ function normalizeIsoOrThrow(value: string, fieldLabel: string): string {
   }
 
   return new Date(timestamp).toISOString();
+}
+
+function sanitizeDrawOptions(input: readonly DrawOption[] | undefined): readonly DrawOption[] {
+  if (!input || input.length === 0) {
+    return [];
+  }
+
+  const uniqueById = new Map<string, DrawOption>();
+  for (const entry of input) {
+    const drawId = entry.drawId.trim();
+    if (!drawId) {
+      throw new DrawRefreshValidationError("availableDraws drawId is required");
+    }
+
+    uniqueById.set(drawId, {
+      drawId,
+      drawAt: normalizeIsoOrThrow(entry.drawAt, `availableDraws.${drawId}.drawAt`),
+      label: entry.label.trim() || drawId,
+      ...(typeof entry.priceMinor === "number" && Number.isFinite(entry.priceMinor)
+        ? { priceMinor: Math.max(0, Math.trunc(entry.priceMinor)) }
+        : {})
+    });
+  }
+
+  return [...uniqueById.values()].sort((left, right) => Date.parse(left.drawAt) - Date.parse(right.drawAt));
 }

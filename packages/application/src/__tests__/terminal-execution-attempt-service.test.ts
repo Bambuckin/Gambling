@@ -94,6 +94,44 @@ describe("TerminalExecutionAttemptService", () => {
     expect((await ticketStore.listTickets()).length).toBe(0);
   });
 
+  it("records add-to-cart attempt and does not create a purchased ticket", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([createExecutingRequest("req-802-cart")]);
+    const queueStore = new InMemoryPurchaseQueueStore([
+      queueItem({
+        requestId: "req-802-cart",
+        status: "executing",
+        attemptCount: 1
+      })
+    ]);
+    const ticketStore = new InMemoryTicketStore();
+    const ticketPersistenceService = new TicketPersistenceService({
+      ticketStore
+    });
+    const service = new TerminalExecutionAttemptService({
+      requestStore,
+      queueStore,
+      ticketPersistenceService
+    });
+
+    const result = await service.recordAttemptResult({
+      requestId: "req-802-cart",
+      attempt: 1,
+      startedAt: "2026-04-05T22:11:00.000Z",
+      result: terminalResult({
+        requestId: "req-802-cart",
+        nextState: "added_to_cart",
+        rawOutput: "[terminal] added_to_cart"
+      })
+    });
+
+    expect(result.request.state).toBe("added_to_cart");
+    expect(result.queueItem).toBeNull();
+    expect(result.ticket).toBeNull();
+    expect(result.journalNote).toContain("outcome=added_to_cart");
+    expect(await queueStore.getQueueItemByRequestId("req-802-cart")).toBeNull();
+    expect((await ticketStore.listTickets()).length).toBe(0);
+  });
+
   it("rejects non-executing request state", async () => {
     const requestStore = new InMemoryPurchaseRequestStore([createQueuedRequest("req-803")]);
     const queueStore = new InMemoryPurchaseQueueStore([

@@ -24,7 +24,7 @@ The target is deterministic behavior from registry metadata to terminal executio
 
 Before code changes, lock these decisions:
 
-- `lotteryCode`: stable identifier (`demo-lottery`, `gosloto-6x45`, etc).
+- `lotteryCode`: stable identifier (`mechtallion`, `bolshaya-8`, etc).
 - `purchaseBindingKey` and `resultBindingKey`: immutable keys used by worker resolution.
 - Compatibility strategy:
   - additive change (new lottery code), or

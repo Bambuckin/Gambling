@@ -1,6 +1,10 @@
 import type { LotteryRegistryEntry } from "@lottery/domain";
 import { LotteryRegistryService } from "@lottery/application";
-import { InMemoryLotteryRegistryStore, PostgresLotteryRegistryStore } from "@lottery/infrastructure";
+import {
+  createDefaultLotteryRegistryEntries,
+  InMemoryLotteryRegistryStore,
+  PostgresLotteryRegistryStore
+} from "@lottery/infrastructure";
 import { getWebPostgresPool, getWebStorageBackend } from "../runtime/postgres-runtime";
 
 interface RegistrySeedEntry {
@@ -327,106 +331,7 @@ function sanitizeHandlerBindings(input: unknown, lotteryCode: string): RegistryS
 }
 
 function defaultRegistrySeeds(): LotteryRegistryEntry[] {
-  return [
-    {
-      lotteryCode: "demo-lottery",
-      title: "Demo Lottery",
-      enabled: true,
-      displayOrder: 10,
-      formSchemaVersion: "v1-demo",
-      formFields: [
-        {
-          fieldKey: "draw_count",
-          label: "Draw Count",
-          type: "number",
-          required: true,
-          min: 1,
-          max: 10,
-          step: 1,
-          defaultValue: 1
-        },
-        {
-          fieldKey: "ticket_note",
-          label: "Ticket Note",
-          type: "text",
-          required: false,
-          placeholder: "Optional note"
-        }
-      ],
-      pricing: {
-        strategy: "fixed",
-        baseAmountMinor: 100
-      },
-      handlers: {
-        purchaseHandler: "handlers.demo-lottery.purchase.v1",
-        resultHandler: "handlers.demo-lottery.result.v1"
-      }
-    },
-    {
-      lotteryCode: "gosloto-6x45",
-      title: "Gosloto 6x45",
-      enabled: true,
-      displayOrder: 20,
-      formSchemaVersion: "v1-gosloto",
-      formFields: [
-        {
-          fieldKey: "draw_count",
-          label: "Draw Count",
-          type: "number",
-          required: true,
-          min: 1,
-          max: 5,
-          step: 1,
-          defaultValue: 1
-        },
-        {
-          fieldKey: "bet_system",
-          label: "Bet System",
-          type: "select",
-          required: true,
-          options: [
-            { value: "standard", label: "Standard" },
-            { value: "extended", label: "Extended" }
-          ]
-        }
-      ],
-      pricing: {
-        strategy: "fixed",
-        baseAmountMinor: 150
-      },
-      handlers: {
-        purchaseHandler: "handlers.gosloto-6x45.purchase.v1",
-        resultHandler: "handlers.gosloto-6x45.result.v1"
-      }
-    },
-    {
-      lotteryCode: "archive-lottery",
-      title: "Archive Lottery (Disabled)",
-      enabled: false,
-      displayOrder: 30,
-      formSchemaVersion: "v1-archive",
-      formFields: [
-        {
-          fieldKey: "draw_count",
-          label: "Draw Count",
-          type: "number",
-          required: true,
-          min: 1,
-          max: 3,
-          step: 1,
-          defaultValue: 1
-        }
-      ],
-      pricing: {
-        strategy: "fixed",
-        baseAmountMinor: 50
-      },
-      handlers: {
-        purchaseHandler: "handlers.archive-lottery.purchase.v1",
-        resultHandler: "handlers.archive-lottery.result.v1"
-      }
-    }
-  ];
+  return createDefaultLotteryRegistryEntries();
 }
 
 function defaultFormFieldsForLottery(lotteryCode: string): RegistrySeedEntry["formFields"] {

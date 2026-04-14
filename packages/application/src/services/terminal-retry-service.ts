@@ -19,6 +19,10 @@ export class TerminalRetryService {
   }
 
   resolveNextState(input: ResolveTerminalRetryInput): TerminalExecutionResult["nextState"] {
+    if (input.candidateState === "added_to_cart") {
+      return "added_to_cart";
+    }
+
     if (input.candidateState === "success") {
       return "success";
     }

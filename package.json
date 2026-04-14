@@ -22,6 +22,7 @@
     "runtime:preflight": "corepack pnpm tsx scripts/runtime-preflight.ts --role=all --env=.env",
     "runtime:preflight:web": "corepack pnpm tsx scripts/runtime-preflight.ts --role=web --env=.env",
     "runtime:preflight:worker": "corepack pnpm tsx scripts/runtime-preflight.ts --role=worker --env=.env",
+    "bundle:lan": "powershell -ExecutionPolicy Bypass -File scripts/build-lan-bundles.ps1",
     "release:check": "powershell -ExecutionPolicy Bypass -File scripts/release-readiness-check.ps1"
   },
   "devDependencies": {

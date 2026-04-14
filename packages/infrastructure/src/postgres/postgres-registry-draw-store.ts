@@ -131,7 +131,17 @@ function normalizeDrawSnapshot(snapshot: DrawSnapshot): DrawSnapshot {
     drawId: snapshot.drawId.trim(),
     drawAt: toIsoString(snapshot.drawAt),
     fetchedAt: toIsoString(snapshot.fetchedAt),
-    freshnessTtlSeconds: Math.trunc(snapshot.freshnessTtlSeconds)
+    freshnessTtlSeconds: Math.trunc(snapshot.freshnessTtlSeconds),
+    ...(snapshot.availableDraws
+      ? {
+          availableDraws: snapshot.availableDraws.map((draw) => ({
+            drawId: draw.drawId.trim(),
+            drawAt: toIsoString(draw.drawAt),
+            label: draw.label.trim(),
+            ...(typeof draw.priceMinor === "number" ? { priceMinor: Math.max(0, Math.trunc(draw.priceMinor)) } : {})
+          }))
+        }
+      : {})
   };
 }
 

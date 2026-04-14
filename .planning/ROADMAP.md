@@ -1,8 +1,8 @@
-# Roadmap: Lottery Terminal Operations System
+﻿# Roadmap: Lottery Terminal Operations System
 
 ## Overview
 
-Этот roadmap режет систему на девять вертикальных фаз: от фундаментальных контрактов и архитектуры к доступу, реестру лотерей, финансам, оркестрации покупки, терминальному исполнению, сверке билетов, операционному администрированию и финальной документации/усилению качества. Такой порядок держит главный риск под контролем: на каждом шаге появляется частично работоспособный, проверяемый кусок, а не мертвый слой “на будущее”.
+Р­С‚РѕС‚ roadmap СЂРµР¶РµС‚ СЃРёСЃС‚РµРјСѓ РЅР° РґРµРІСЏС‚СЊ РІРµСЂС‚РёРєР°Р»СЊРЅС‹С… С„Р°Р·: РѕС‚ С„СѓРЅРґР°РјРµРЅС‚Р°Р»СЊРЅС‹С… РєРѕРЅС‚СЂР°РєС‚РѕРІ Рё Р°СЂС…РёС‚РµРєС‚СѓСЂС‹ Рє РґРѕСЃС‚СѓРїСѓ, СЂРµРµСЃС‚СЂСѓ Р»РѕС‚РµСЂРµР№, С„РёРЅР°РЅСЃР°Рј, РѕСЂРєРµСЃС‚СЂР°С†РёРё РїРѕРєСѓРїРєРё, С‚РµСЂРјРёРЅР°Р»СЊРЅРѕРјСѓ РёСЃРїРѕР»РЅРµРЅРёСЋ, СЃРІРµСЂРєРµ Р±РёР»РµС‚РѕРІ, РѕРїРµСЂР°С†РёРѕРЅРЅРѕРјСѓ Р°РґРјРёРЅРёСЃС‚СЂРёСЂРѕРІР°РЅРёСЋ Рё С„РёРЅР°Р»СЊРЅРѕР№ РґРѕРєСѓРјРµРЅС‚Р°С†РёРё/СѓСЃРёР»РµРЅРёСЋ РєР°С‡РµСЃС‚РІР°. РўР°РєРѕР№ РїРѕСЂСЏРґРѕРє РґРµСЂР¶РёС‚ РіР»Р°РІРЅС‹Р№ СЂРёСЃРє РїРѕРґ РєРѕРЅС‚СЂРѕР»РµРј: РЅР° РєР°Р¶РґРѕРј С€Р°РіРµ РїРѕСЏРІР»СЏРµС‚СЃСЏ С‡Р°СЃС‚РёС‡РЅРѕ СЂР°Р±РѕС‚РѕСЃРїРѕСЃРѕР±РЅС‹Р№, РїСЂРѕРІРµСЂСЏРµРјС‹Р№ РєСѓСЃРѕРє, Р° РЅРµ РјРµСЂС‚РІС‹Р№ СЃР»РѕР№ вЂњРЅР° Р±СѓРґСѓС‰РµРµвЂќ.
 
 ## Phases
 
@@ -12,15 +12,15 @@
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Foundation Contracts** - Зафиксировать каркас проекта, модульные границы, ADR и тестовый bootstrap.
-- [x] **Phase 2: Access and Unified Shell** - Поднять авторизацию, роли и общий интерфейсный shell с возвратом в выбранную лотерею. (completed 2026-04-05)
-- [x] **Phase 3: Lottery Registry and Draw Pipeline** - Реализовать реестр лотерей, управление доступностью и поток актуальных тиражей. (completed 2026-04-05)
-- [x] **Phase 4: Internal Ledger and Wallet Views** - Собрать внутренний ledger баланса, резервы и пользовательское отображение движения средств. (completed 2026-04-05)
-- [x] **Phase 5: Purchase Request Orchestration** - Построить подтверждение покупки, создание заявки, очередь и пользовательские статусы. (completed 2026-04-05)
-- [x] **Phase 6: Main Terminal Execution Engine** - Подключить последовательное исполнение на терминале, retry и нормализацию результата. (completed 2026-04-05)
-- [x] **Phase 7: Ticket Verification and Winnings** - Добавить хранение билетов, сверку после розыгрыша и начисление выигрыша. (completed 2026-04-05)
-- [x] **Phase 8: Admin Operations and Observability** - Дать администратору полный операционный контур: очередь, ошибки, лотереи, терминал, алерты. (completed 2026-04-05)
-- [x] **Phase 9: Hardening, Extension Docs, and Release Readiness** - Закрыть документацию, расширяемость, регрессионные проверки и готовность к изменению системы. (completed 2026-04-06)
+- [x] **Phase 1: Foundation Contracts** - Р—Р°С„РёРєСЃРёСЂРѕРІР°С‚СЊ РєР°СЂРєР°СЃ РїСЂРѕРµРєС‚Р°, РјРѕРґСѓР»СЊРЅС‹Рµ РіСЂР°РЅРёС†С‹, ADR Рё С‚РµСЃС‚РѕРІС‹Р№ bootstrap.
+- [x] **Phase 2: Access and Unified Shell** - РџРѕРґРЅСЏС‚СЊ Р°РІС‚РѕСЂРёР·Р°С†РёСЋ, СЂРѕР»Рё Рё РѕР±С‰РёР№ РёРЅС‚РµСЂС„РµР№СЃРЅС‹Р№ shell СЃ РІРѕР·РІСЂР°С‚РѕРј РІ РІС‹Р±СЂР°РЅРЅСѓСЋ Р»РѕС‚РµСЂРµСЋ. (completed 2026-04-05)
+- [x] **Phase 3: Lottery Registry and Draw Pipeline** - Р РµР°Р»РёР·РѕРІР°С‚СЊ СЂРµРµСЃС‚СЂ Р»РѕС‚РµСЂРµР№, СѓРїСЂР°РІР»РµРЅРёРµ РґРѕСЃС‚СѓРїРЅРѕСЃС‚СЊСЋ Рё РїРѕС‚РѕРє Р°РєС‚СѓР°Р»СЊРЅС‹С… С‚РёСЂР°Р¶РµР№. (completed 2026-04-05)
+- [x] **Phase 4: Internal Ledger and Wallet Views** - РЎРѕР±СЂР°С‚СЊ РІРЅСѓС‚СЂРµРЅРЅРёР№ ledger Р±Р°Р»Р°РЅСЃР°, СЂРµР·РµСЂРІС‹ Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРѕРµ РѕС‚РѕР±СЂР°Р¶РµРЅРёРµ РґРІРёР¶РµРЅРёСЏ СЃСЂРµРґСЃС‚РІ. (completed 2026-04-05)
+- [x] **Phase 5: Purchase Request Orchestration** - РџРѕСЃС‚СЂРѕРёС‚СЊ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ РїРѕРєСѓРїРєРё, СЃРѕР·РґР°РЅРёРµ Р·Р°СЏРІРєРё, РѕС‡РµСЂРµРґСЊ Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёРµ СЃС‚Р°С‚СѓСЃС‹. (completed 2026-04-05)
+- [x] **Phase 6: Main Terminal Execution Engine** - РџРѕРґРєР»СЋС‡РёС‚СЊ РїРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅРѕРµ РёСЃРїРѕР»РЅРµРЅРёРµ РЅР° С‚РµСЂРјРёРЅР°Р»Рµ, retry Рё РЅРѕСЂРјР°Р»РёР·Р°С†РёСЋ СЂРµР·СѓР»СЊС‚Р°С‚Р°. (completed 2026-04-05)
+- [x] **Phase 7: Ticket Verification and Winnings** - Р”РѕР±Р°РІРёС‚СЊ С…СЂР°РЅРµРЅРёРµ Р±РёР»РµС‚РѕРІ, СЃРІРµСЂРєСѓ РїРѕСЃР»Рµ СЂРѕР·С‹РіСЂС‹С€Р° Рё РЅР°С‡РёСЃР»РµРЅРёРµ РІС‹РёРіСЂС‹С€Р°. (completed 2026-04-05)
+- [x] **Phase 8: Admin Operations and Observability** - Р”Р°С‚СЊ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ РїРѕР»РЅС‹Р№ РѕРїРµСЂР°С†РёРѕРЅРЅС‹Р№ РєРѕРЅС‚СѓСЂ: РѕС‡РµСЂРµРґСЊ, РѕС€РёР±РєРё, Р»РѕС‚РµСЂРµРё, С‚РµСЂРјРёРЅР°Р», Р°Р»РµСЂС‚С‹. (completed 2026-04-05)
+- [x] **Phase 9: Hardening, Extension Docs, and Release Readiness** - Р—Р°РєСЂС‹С‚СЊ РґРѕРєСѓРјРµРЅС‚Р°С†РёСЋ, СЂР°СЃС€РёСЂСЏРµРјРѕСЃС‚СЊ, СЂРµРіСЂРµСЃСЃРёРѕРЅРЅС‹Рµ РїСЂРѕРІРµСЂРєРё Рё РіРѕС‚РѕРІРЅРѕСЃС‚СЊ Рє РёР·РјРµРЅРµРЅРёСЋ СЃРёСЃС‚РµРјС‹. (completed 2026-04-06)
 
 ## Phase Details
 
@@ -203,7 +203,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -216,4 +216,55 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Ticket Verification and Winnings | 4/4 | Complete | 2026-04-05 |
 | 8. Admin Operations and Observability | 4/4 | Complete    | 2026-04-05 |
 | 9. Hardening, Extension Docs, and Release Readiness | 4/4 | Complete | 2026-04-06 |
+| 10. Big 8 Live Draw Sync and Purchase Contract | 1/1 | Complete | 2026-04-13 |
+| 11. Big 8 Terminal Cart Execution and Realtime Status | 1/1 | Complete | 2026-04-13 |
+| 12. Cashier Kiosk Client and LAN Deployment | 0/0 | Not planned | - |
 
+
+### Phase 10: Big 8 Live Draw Sync and Purchase Contract
+
+**Goal:** Replace the synthetic Big 8 draw/purchase model with a live terminal-backed contract that the client UI can use for real multi-ticket draft creation.
+**Requirements**: TBD
+**Depends on:** Phase 9
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+  1. Big 8 draw list is fetched from the terminal interface, persisted in shared storage, and refreshed every 20 seconds.
+  2. Client UI shows terminal-backed upcoming draws, defaults to the nearest draw, and allows explicit draw selection.
+  3. User account data available to purchase flow includes the terminal phone number used for request creation.
+  4. Big 8 purchase drafts support one or more tickets with `8 of 20 + 1 of 4` selections and deterministic per-ticket pricing before queue submission.
+**Plans:** 1 plan
+
+Plans:
+- [x] 10-01: Implement Big 8 live draw sync, account phone plumbing, and multi-ticket purchase draft contract.
+
+### Phase 11: Big 8 Terminal Cart Execution and Realtime Status
+
+**Goal:** Execute queued Big 8 requests against the real National Lottery terminal interface up to cart addition and return low-latency status to cashier clients.
+**Requirements**: TBD
+**Depends on:** Phase 10
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+  1. Worker drives `https://webapp.cloud.nationallottery.ru/` through a deterministic Big 8 handler tied to a managed terminal session.
+  2. Selected draw, account phone, and all requested tickets are added to the terminal cart without finalizing payment.
+  3. Raw attempt output, cart-add result, retries, and terminal errors are persisted and visible in queue/request history.
+  4. Cashier and admin screens receive near-real-time execution status updates without manual page reload loops.
+**Plans:** 1 plan
+
+Plans:
+- [x] 11-01: Implement real Big 8 cart execution, split cart lifecycle semantics, and add realtime cashier/admin status polling.
+
+### Phase 12: Cashier Kiosk Client and LAN Deployment
+
+**Goal:** Package the cashier workstation as a locked-down kiosk runtime and document repeatable LAN deployment for the current single-host setup with future portability.
+**Requirements**: TBD
+**Depends on:** Phase 11
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+  1. Cashier launcher opens the client UI in kiosk mode and blocks general workstation access until supervised exit.
+  2. Web, worker, and Postgres runtime setup is documented for one-host LAN deployment with clean env and start scripts.
+  3. Terminal machine prerequisites and installation steps are explicit enough to re-install the worker without rediscovering hidden steps.
+  4. Handoff docs explain how to move database or web hosting to another machine later without changing purchase/business logic.
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 12 to break down)

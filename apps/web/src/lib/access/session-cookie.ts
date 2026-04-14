@@ -11,12 +11,13 @@ export async function readSessionCookie(): Promise<string | null> {
 
 export async function writeSessionCookie(sessionId: string, roleHint: SessionRole): Promise<void> {
   const cookieStore = await cookies();
+  const secure = shouldUseSecureAccessCookies();
 
   cookieStore.set(ACCESS_SESSION_COOKIE_NAME, sessionId, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    secure: process.env.NODE_ENV === "production",
+    secure,
     maxAge: ACCESS_SESSION_COOKIE_MAX_AGE_SECONDS
   });
 
@@ -24,7 +25,7 @@ export async function writeSessionCookie(sessionId: string, roleHint: SessionRol
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    secure: process.env.NODE_ENV === "production",
+    secure,
     maxAge: ACCESS_SESSION_COOKIE_MAX_AGE_SECONDS
   });
 }
@@ -36,11 +37,21 @@ export async function clearSessionCookie(): Promise<void> {
 }
 
 export function buildSessionSetCookieHeader(sessionId: string): string {
-  return [
+  const segments = [
     `${ACCESS_SESSION_COOKIE_NAME}=${sessionId}`,
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
     `Max-Age=${ACCESS_SESSION_COOKIE_MAX_AGE_SECONDS}`
-  ].join("; ");
+  ];
+
+  if (shouldUseSecureAccessCookies()) {
+    segments.push("Secure");
+  }
+
+  return segments.join("; ");
+}
+
+function shouldUseSecureAccessCookies(): boolean {
+  return process.env.LOTTERY_ACCESS_COOKIE_SECURE?.trim().toLowerCase() === "true";
 }

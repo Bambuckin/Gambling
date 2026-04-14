@@ -8,6 +8,7 @@ import { getDrawRefreshService } from "../../lib/draw/draw-runtime";
 import { getOperationsAlertService, getOperationsAuditService } from "../../lib/observability/operations-runtime";
 import { listAdminRegistryEntries, moveAdminLottery, setAdminLotteryEnabled } from "../../lib/registry/admin-registry";
 import { getAdminOperationsQueryService, getAdminQueueService } from "../../lib/purchase/purchase-runtime";
+import { AdminLiveMonitor } from "../../lib/purchase/admin-live-monitor";
 
 type AdminPageProps = {
   readonly searchParams: Promise<{
@@ -73,6 +74,21 @@ export default async function AdminPage({ searchParams }: AdminPageProps): Promi
       )}
 
       <h2>Queue Operations</h2>
+      <AdminLiveMonitor
+        initialTerminal={operationsSnapshot.terminal}
+        initialQueue={operationsSnapshot.queue}
+        initialProblemRequests={operationsSnapshot.problemRequests.map((problem) => ({
+          requestId: problem.requestId,
+          anomalyHint: problem.anomalyHint,
+          status: problem.status,
+          queueStatus: problem.queueStatus,
+          queuePriority: problem.queuePriority,
+          attemptCount: problem.attemptCount,
+          updatedAt: problem.updatedAt
+        }))}
+        initialActiveExecutionRequestId={queueSnapshot.activeExecutionRequestId}
+      />
+
       <h3>Terminal Status</h3>
       <table>
         <tbody>
@@ -273,10 +289,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps): Promi
         <Link href="/debug/admin-ops-lab">Open Admin Ops Lab</Link>
       </p>
       <p>
-        <Link href="/lottery/demo-lottery">Open Demo Lottery</Link>
+        <Link href="/lottery/mechtallion">Open Mechtallion</Link>
       </p>
       <p>
-        <Link href="/lottery/gosloto-6x45">Open Gosloto 6x45</Link>
+        <Link href="/lottery/bolshaya-8">Open Bolshaya 8</Link>
       </p>
 
       <form action={logoutFromAdminAction}>

@@ -8,8 +8,11 @@ export interface LotteryPurchaseContext {
   readonly attempt: number;
 }
 
+export type LotteryPurchaseExecutionOutcome = "ticket_purchased" | "added_to_cart";
+
 export interface LotteryPurchaseResult {
-  readonly externalTicketReference: string;
+  readonly executionOutcome?: LotteryPurchaseExecutionOutcome;
+  readonly externalTicketReference?: string | null;
   readonly rawTerminalOutput: string;
 }
 

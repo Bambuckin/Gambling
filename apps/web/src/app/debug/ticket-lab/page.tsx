@@ -96,7 +96,7 @@ export default async function TicketLabPage(): Promise<ReactElement> {
         <Link href="/debug/purchase-lab">Open Purchase Lab</Link>
       </p>
       <p>
-        <Link href="/lottery/demo-lottery">Open Demo Lottery</Link>
+        <Link href="/lottery/mechtallion">Open Mechtallion</Link>
       </p>
       <p>
         <Link href="/">Back to shell</Link>

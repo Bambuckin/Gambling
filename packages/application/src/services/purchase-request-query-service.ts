@@ -80,7 +80,12 @@ function deriveAttemptCount(
 }
 
 function resolveFinalResult(status: RequestState, note: string | undefined): string | null {
-  if (status !== "success" && status !== "error" && status !== "reserve_released") {
+  if (
+    status !== "added_to_cart" &&
+    status !== "success" &&
+    status !== "error" &&
+    status !== "reserve_released"
+  ) {
     return null;
   }
 

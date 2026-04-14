@@ -19,6 +19,18 @@ describe("request state machine", () => {
     expect(state).toBe("success");
   });
 
+  it("allows cart stage completion without marking ticket purchase success", () => {
+    let state: RequestState = "created";
+    state = applyRequestStateTransition(state, "awaiting_confirmation");
+    state = applyRequestStateTransition(state, "confirmed");
+    state = applyRequestStateTransition(state, "queued");
+    state = applyRequestStateTransition(state, "executing");
+    state = applyRequestStateTransition(state, "added_to_cart");
+
+    expect(state).toBe("added_to_cart");
+    expect(canTransitionRequestState("added_to_cart", "executing").allowed).toBe(false);
+  });
+
   it("rejects invalid transition from created directly to executing", () => {
     const check = canTransitionRequestState("created", "executing");
     expect(check.allowed).toBe(false);
@@ -39,6 +51,7 @@ describe("request state machine", () => {
     expect(canCancelRequestState("queued").allowed).toBe(true);
     expect(canCancelRequestState("retrying").allowed).toBe(true);
     expect(canCancelRequestState("executing").allowed).toBe(false);
+    expect(canCancelRequestState("added_to_cart").allowed).toBe(false);
     expect(() => assertCancelableRequestState("success")).toThrow(
       "request in state success cannot be canceled"
     );

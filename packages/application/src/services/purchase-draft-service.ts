@@ -1,7 +1,9 @@
 import {
+  type PurchaseDraftValidationResult,
   PurchaseDraftPricingError,
   type PurchaseDraftFieldError,
   type PurchaseDraftPayload,
+  validateBig8PurchaseDraft,
   quotePurchaseDraft,
   validatePurchaseDraftFields
 } from "@lottery/domain";
@@ -13,7 +15,8 @@ export interface PurchaseDraftServiceDependencies {
 
 export interface PreparePurchaseDraftInput {
   readonly lotteryCode: string;
-  readonly rawFieldValues: Readonly<Record<string, string | undefined>>;
+  readonly rawFieldValues?: Readonly<Record<string, string | undefined>>;
+  readonly structuredPayload?: unknown;
   readonly currency?: string;
 }
 
@@ -26,6 +29,7 @@ export interface PreparedPurchaseDraft {
   readonly pricingStrategy: "fixed" | "matrix" | "formula";
   readonly baseAmountMinor: number;
   readonly multiplier: number;
+  readonly ticketCount: number;
   readonly costMinor: number;
   readonly currency: string;
 }
@@ -83,7 +87,7 @@ export class PurchaseDraftService {
       });
     }
 
-    const validation = validatePurchaseDraftFields(lottery.formFields, input.rawFieldValues);
+    const validation = resolveDraftValidation(lottery, input);
     if (!validation.ok) {
       throw new PurchaseDraftServiceError(`lottery "${lottery.lotteryCode}" payload failed validation`, {
         code: "validation_failed",
@@ -102,6 +106,7 @@ export class PurchaseDraftService {
         pricingStrategy: quote.strategy,
         baseAmountMinor: quote.baseAmountMinor,
         multiplier: quote.multiplier,
+        ticketCount: resolveTicketCount(validation.payload),
         costMinor: quote.totalAmountMinor,
         currency: normalizeCurrency(input.currency)
       };
@@ -121,4 +126,20 @@ export class PurchaseDraftService {
 function normalizeCurrency(input: string | undefined): string {
   const candidate = input?.trim().toUpperCase();
   return candidate && candidate.length > 0 ? candidate : "RUB";
+}
+
+function resolveDraftValidation(
+  lottery: NonNullable<Awaited<ReturnType<LotteryRegistryService["getLotteryByCode"]>>>,
+  input: PreparePurchaseDraftInput
+): PurchaseDraftValidationResult {
+  if (lottery.formSchemaVersion === "v3-big8-live") {
+    return validateBig8PurchaseDraft(input.structuredPayload);
+  }
+
+  return validatePurchaseDraftFields(lottery.formFields, input.rawFieldValues ?? {});
+}
+
+function resolveTicketCount(payload: PurchaseDraftPayload): number {
+  const tickets = payload.tickets;
+  return Array.isArray(tickets) ? tickets.length : 1;
 }

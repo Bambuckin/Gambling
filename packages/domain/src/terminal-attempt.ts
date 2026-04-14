@@ -1,6 +1,6 @@
 import type { RequestState } from "./request-state.js";
 
-export type TerminalAttemptOutcome = Extract<RequestState, "success" | "retrying" | "error">;
+export type TerminalAttemptOutcome = Extract<RequestState, "added_to_cart" | "success" | "retrying" | "error">;
 
 export interface NormalizeTerminalAttemptInput {
   readonly requestId: string;
@@ -67,7 +67,12 @@ export function formatTerminalAttemptJournalNote(attempt: NormalizedTerminalAtte
 }
 
 function normalizeOutcome(outcome: TerminalAttemptOutcome): TerminalAttemptOutcome {
-  if (outcome !== "success" && outcome !== "retrying" && outcome !== "error") {
+  if (
+    outcome !== "added_to_cart" &&
+    outcome !== "success" &&
+    outcome !== "retrying" &&
+    outcome !== "error"
+  ) {
     throw new TerminalAttemptValidationError(`unsupported terminal attempt outcome "${String(outcome)}"`);
   }
 

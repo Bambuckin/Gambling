@@ -40,12 +40,12 @@ Expected outcome:
 
 ## Step 3: Verify Draw Freshness Badges And Purchase Gating
 
-1. Open `http://localhost:3000/lottery/demo-lottery` with `tester` / `tester`.
+1. Open `http://localhost:3000/lottery/mechtallion` with `tester` / `tester`.
 2. Confirm draw state is `fresh` and purchase control is active.
-3. Open `http://localhost:3000/lottery/gosloto-6x45`.
+3. Open `http://localhost:3000/lottery/bolshaya-8`.
 4. Confirm draw state is `stale` and purchase control is blocked.
-5. In `/admin`, enable `archive-lottery` if disabled.
-6. Open `http://localhost:3000/lottery/archive-lottery`.
+5. In `/admin`, enable `mechtallion-charity` if disabled.
+6. Open `http://localhost:3000/lottery/mechtallion-charity`.
 7. Confirm draw state is `missing` and purchase control is blocked.
 
 Expected outcome:

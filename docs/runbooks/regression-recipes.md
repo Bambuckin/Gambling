@@ -7,7 +7,7 @@ Run from repository root and stop on first hard failure.
 
 1. `corepack pnpm --filter @lottery/application test -- purchase-draft-service purchase-request-service purchase-orchestration-service`
 2. `corepack pnpm --filter @lottery/web build`
-3. Manual spot-check: create draft and confirm request at `/lottery/demo-lottery`.
+3. Manual spot-check: create draft and confirm request at `/lottery/mechtallion`.
 
 Expected outcome:
 - draft reaches `ready`;
@@ -17,7 +17,7 @@ Expected outcome:
 ## Recipe 2: Reserve Release On Cancellation
 
 1. `corepack pnpm --filter @lottery/application test -- purchase-orchestration-service wallet-ledger-service`
-2. Manual spot-check: cancel queued request in `/lottery/demo-lottery`.
+2. Manual spot-check: cancel queued request in `/lottery/mechtallion`.
 
 Expected outcome:
 - request transitions to `reserve_released`;

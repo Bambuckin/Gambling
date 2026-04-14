@@ -9,14 +9,19 @@ This file is intentionally short and explicit for another model/account.
 - Database schema bootstrap and seed script.
 - Deployment templates for server/terminal/client IP mapping.
 - Runtime preflight validator for `.env` (`scripts/runtime-preflight.ts`).
+- Big 8 live draw sync from National Lottery tab (Chrome remote debugging).
+- Big 8 real add-to-cart handler in worker (`apps/terminal-worker/src/lib/big8-terminal-cart-handler.ts`).
+- Honest cart-stage request lifecycle (`added_to_cart`), preventing false ticket persistence.
+- Realtime polling APIs/widgets for cashier and admin execution visibility.
 
 ## Remaining Gaps (Expected)
 
-1. Final customer-facing purchase UI implementation in:
-   - `apps/web/src/app/lottery/[lotteryCode]/page.tsx`
-2. Terminal integration logic for real operator flow:
-   - `apps/terminal-worker/src/lib/terminal-handler-runtime.ts`
-3. Optional security hardening (password hashing algorithm upgrade, TLS/proxy, RBAC expansion).
+1. Final checkout/payment stage is not automated yet (Phase 12+ scope).
+2. Optional security hardening (password hashing algorithm upgrade, TLS/proxy, RBAC expansion).
+3. If NLoto active catalog changes, refresh seed list in:
+   - `packages/infrastructure/src/seeds/default-lottery-catalog.ts`
+   - `apps/web/src/lib/ui/lottery-presentation.ts`
+4. Selector hardening with additional terminal artifacts (HAR/DOM dumps) for long-term DOM drift resistance.
 
 ## Minimal Input Needed From Operator
 

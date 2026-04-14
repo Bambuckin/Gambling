@@ -19,3 +19,4 @@ export * from "./postgres/postgres-registry-draw-store.js";
 export * from "./postgres/postgres-ledger-store.js";
 export * from "./postgres/postgres-purchase-store.js";
 export * from "./postgres/postgres-operations-audit-log.js";
+export * from "./seeds/default-lottery-catalog.js";

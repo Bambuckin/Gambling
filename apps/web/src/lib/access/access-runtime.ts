@@ -1,5 +1,5 @@
 import type { AccessIdentity, AccessIdentityStatus, SessionRole } from "@lottery/domain";
-import { normalizeIdentityLogin } from "@lottery/domain";
+import { normalizeIdentityLogin, normalizeIdentityPhone } from "@lottery/domain";
 import {
   AccessService,
   SystemTimeSource,
@@ -38,6 +38,7 @@ interface AccessIdentitySeed {
   readonly role: SessionRole;
   readonly status?: AccessIdentityStatus;
   readonly displayName?: string;
+  readonly phone: string;
 }
 
 let runtimeFactory: AccessRuntimeFactory = createDefaultAccessRuntimeFactory();
@@ -106,6 +107,7 @@ function buildSeededIdentities(): AccessIdentity[] {
     role: seed.role,
     status: seed.status ?? "active",
     displayName: seed.displayName ?? seed.login,
+    phone: normalizeIdentityPhone(seed.phone),
     createdAt: nowIso,
     updatedAt: nowIso
   }));
@@ -145,8 +147,9 @@ function sanitizeIdentitySeed(input: unknown): AccessIdentitySeed | null {
   const role = record.role === "admin" ? "admin" : record.role === "user" ? "user" : null;
   const status = record.status === "disabled" ? "disabled" : record.status === "active" ? "active" : undefined;
   const displayName = typeof record.displayName === "string" ? record.displayName : undefined;
+  const phone = typeof record.phone === "string" ? record.phone : "";
 
-  if (!identityId || !login || !password || !role) {
+  if (!identityId || !login || !password || !role || !phone) {
     return null;
   }
 
@@ -155,6 +158,7 @@ function sanitizeIdentitySeed(input: unknown): AccessIdentitySeed | null {
     login,
     password,
     role,
+    phone,
     ...(status ? { status } : {}),
     ...(displayName ? { displayName } : {})
   };
@@ -168,7 +172,8 @@ function defaultIdentitySeeds(): AccessIdentitySeed[] {
       password: "operator",
       role: "user",
       status: "active",
-      displayName: "Operator User"
+      displayName: "Operator User",
+      phone: "79990000001"
     },
     {
       identityId: "seed-admin",
@@ -176,7 +181,8 @@ function defaultIdentitySeeds(): AccessIdentitySeed[] {
       password: "admin",
       role: "admin",
       status: "active",
-      displayName: "Administrator"
+      displayName: "Administrator",
+      phone: "79990000002"
     },
     {
       identityId: "seed-tester",
@@ -184,7 +190,8 @@ function defaultIdentitySeeds(): AccessIdentitySeed[] {
       password: "tester",
       role: "user",
       status: "active",
-      displayName: "Tester User"
+      displayName: "Tester User",
+      phone: "79990000003"
     }
   ];
 }

@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "node -e \"console.log('web lint is not configured yet')\"",
     "typecheck": "tsc -p tsconfig.json --pretty false",
-    "test": "node -e \"console.log('web tests are not configured yet')\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@lottery/application": "workspace:*",

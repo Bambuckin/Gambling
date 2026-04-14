@@ -202,6 +202,10 @@ function validateWorkerConfig(issues: PreflightIssue[], env: NodeJS.ProcessEnv):
 
   validatePositiveInteger(issues, env, "LOTTERY_TERMINAL_LOCK_TTL_SECONDS", 1);
   validatePositiveInteger(issues, env, "LOTTERY_TERMINAL_POLL_INTERVAL_MS", 250);
+  validatePositiveInteger(issues, env, "LOTTERY_BIG8_DRAW_SYNC_INTERVAL_MS", 1000);
+  validatePositiveInteger(issues, env, "LOTTERY_BIG8_DRAW_MODAL_WAIT_MS", 250);
+  validatePositiveInteger(issues, env, "LOTTERY_BIG8_DRAW_TTL_SECONDS", 1);
+  validatePositiveInteger(issues, env, "LOTTERY_BIG8_ACTION_TIMEOUT_MS", 1000);
 
   const handlers = (env.LOTTERY_TERMINAL_HANDLER_CODES ?? "")
     .split(",")
@@ -213,6 +217,26 @@ function validateWorkerConfig(issues: PreflightIssue[], env: NodeJS.ProcessEnv):
       message: "must contain at least one lottery code"
     });
   }
+
+  const liveDrawSyncEnabled = (env.LOTTERY_BIG8_LIVE_DRAW_SYNC_ENABLED ?? "true").trim().toLowerCase() !== "false";
+  const cartAutomationEnabled =
+    (env.LOTTERY_BIG8_CART_AUTOMATION_ENABLED ?? "true").trim().toLowerCase() !== "false";
+  const terminalMode = (env.LOTTERY_BIG8_TERMINAL_MODE ?? "real").trim().toLowerCase();
+
+  if (!liveDrawSyncEnabled && !cartAutomationEnabled) {
+    return;
+  }
+
+  if (terminalMode === "mock") {
+    return;
+  }
+
+  validateRequired(issues, env, "LOTTERY_TERMINAL_BROWSER_URL");
+  validateRequired(issues, env, "LOTTERY_TERMINAL_PAGE_URL");
+  validateNoPlaceholder(issues, env, "LOTTERY_TERMINAL_BROWSER_URL");
+  validateNoPlaceholder(issues, env, "LOTTERY_TERMINAL_PAGE_URL");
+  validateHttpUrl(issues, env, "LOTTERY_TERMINAL_BROWSER_URL");
+  validateHttpUrl(issues, env, "LOTTERY_TERMINAL_PAGE_URL");
 }
 
 function validateRequired(issues: PreflightIssue[], env: NodeJS.ProcessEnv, key: string): void {
@@ -254,6 +278,28 @@ function validatePositiveInteger(
     issues.push({
       key,
       message: `must be integer >= ${minimum}`
+    });
+  }
+}
+
+function validateHttpUrl(issues: PreflightIssue[], env: NodeJS.ProcessEnv, key: string): void {
+  const value = (env[key] ?? "").trim();
+  if (!value) {
+    return;
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (!(parsed.protocol === "http:" || parsed.protocol === "https:")) {
+      issues.push({
+        key,
+        message: "must use http or https"
+      });
+    }
+  } catch {
+    issues.push({
+      key,
+      message: "must be a valid URL"
     });
   }
 }

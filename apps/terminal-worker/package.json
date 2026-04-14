@@ -14,9 +14,8 @@
     "@lottery/application": "workspace:*",
     "@lottery/infrastructure": "workspace:*",
     "@lottery/lottery-handlers": "workspace:*",
-    "pg-boss": "^10.1.6"
-  },
-  "devDependencies": {
+    "pg-boss": "^10.1.6",
+    "puppeteer-core": "^24.9.0",
     "tsx": "^4.19.2"
   }
 }

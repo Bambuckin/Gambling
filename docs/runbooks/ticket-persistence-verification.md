@@ -80,7 +80,7 @@ corepack pnpm --filter @lottery/web build
 ```
 
 Then manually open:
-- `/lottery/demo-lottery` (user view ticket outcomes section)
+- `/lottery/mechtallion` (user view ticket outcomes section)
 - `/debug/ticket-lab` (verification-only ticket snapshot contour)
 
 Expected outcome:

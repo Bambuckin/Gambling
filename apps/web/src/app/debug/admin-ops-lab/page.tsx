@@ -195,6 +195,9 @@ export default async function AdminOpsLabPage(): Promise<ReactElement> {
         <Link href="/debug/purchase-lab">Open Purchase Lab</Link>
       </p>
       <p>
+        <Link href="/debug/mock-terminal">Open Mock Terminal Inbox</Link>
+      </p>
+      <p>
         <Link href="/">Back to shell</Link>
       </p>
     </section>
