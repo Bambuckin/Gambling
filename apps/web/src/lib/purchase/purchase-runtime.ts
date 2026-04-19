@@ -3,9 +3,12 @@ import {
   AdminOperationsQueryService,
   AdminQueueService,
   AdminTestResetService,
+  type CanonicalDrawStore,
+  type CanonicalPurchaseStore,
   CashDeskService,
   DrawClosureService,
   NotificationService,
+  type PurchaseAttemptStore,
   PurchaseOrchestrationService,
   type PurchaseQueueStore,
   type PurchaseRequestStore,
@@ -17,17 +20,23 @@ import {
   WinningsCreditService
 } from "@lottery/application";
 import {
+  InMemoryCanonicalDrawStore,
+  InMemoryCanonicalPurchaseStore,
   InMemoryCashDeskRequestStore,
   InMemoryDrawClosureStore,
   InMemoryNotificationStore,
+  InMemoryPurchaseAttemptStore,
   InMemoryPurchaseQueueStore,
   InMemoryPurchaseRequestStore,
   InMemoryTerminalExecutionLock,
   InMemoryTicketStore,
   InMemoryWinningsCreditJobStore,
+  PostgresCanonicalDrawStore,
+  PostgresCanonicalPurchaseStore,
   PostgresCashDeskRequestStore,
   PostgresDrawClosureStore,
   PostgresNotificationStore,
+  PostgresPurchaseAttemptStore,
   PostgresPurchaseQueueStore,
   PostgresPurchaseRequestStore,
   PostgresTerminalExecutionLock,
@@ -50,6 +59,18 @@ const queueStore: PurchaseQueueStore =
   storageBackend === "postgres" && postgresPool
     ? new PostgresPurchaseQueueStore(postgresPool)
     : new InMemoryPurchaseQueueStore();
+const canonicalPurchaseStore: CanonicalPurchaseStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresCanonicalPurchaseStore(postgresPool)
+    : new InMemoryCanonicalPurchaseStore();
+const canonicalDrawStore: CanonicalDrawStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresCanonicalDrawStore(postgresPool)
+    : new InMemoryCanonicalDrawStore();
+const purchaseAttemptStore: PurchaseAttemptStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresPurchaseAttemptStore(postgresPool)
+    : new InMemoryPurchaseAttemptStore();
 const ticketStore: TicketStore =
   storageBackend === "postgres" && postgresPool
     ? new PostgresTicketStore(postgresPool)
@@ -110,7 +131,9 @@ export function getPurchaseRequestQueryService(): PurchaseRequestQueryService {
   if (!cachedQueryService) {
     cachedQueryService = new PurchaseRequestQueryService({
       requestStore,
-      queueStore
+      queueStore,
+      canonicalPurchaseStore,
+      purchaseAttemptStore
     });
   }
 
@@ -134,6 +157,8 @@ export function getAdminOperationsQueryService(): AdminOperationsQueryService {
     cachedAdminOperationsQueryService = new AdminOperationsQueryService({
       requestStore,
       queueStore,
+      canonicalPurchaseStore,
+      purchaseAttemptStore,
       timeSource: new SystemTimeSource()
     });
   }
@@ -144,11 +169,17 @@ export function getAdminOperationsQueryService(): AdminOperationsQueryService {
 export function getPurchaseRuntimeStores(): {
   readonly requestStore: PurchaseRequestStore;
   readonly queueStore: PurchaseQueueStore;
+  readonly canonicalPurchaseStore: CanonicalPurchaseStore;
+  readonly canonicalDrawStore: CanonicalDrawStore;
+  readonly purchaseAttemptStore: PurchaseAttemptStore;
   readonly ticketStore: TicketStore;
 } {
   return {
     requestStore,
     queueStore,
+    canonicalPurchaseStore,
+    canonicalDrawStore,
+    purchaseAttemptStore,
     ticketStore
   };
 }
@@ -233,6 +264,9 @@ export function getAdminTestResetService(): AdminTestResetService {
       drawStore: getDrawStoreInstance(),
       requestStore,
       queueStore,
+      canonicalPurchaseStore,
+      canonicalDrawStore,
+      purchaseAttemptStore,
       ticketStore,
       ledgerStore: getLedgerStoreInstance(),
       notificationStore,

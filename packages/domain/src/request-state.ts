@@ -15,7 +15,26 @@ export const REQUEST_STATES = [
 export type RequestState = (typeof REQUEST_STATES)[number];
 export const CANCELABLE_REQUEST_STATES = ["queued", "retrying"] as const;
 
+export const CANONICAL_PURCHASE_STATUSES = [
+  "submitted",
+  "queued",
+  "processing",
+  "purchase_failed_retryable",
+  "purchase_failed_final",
+  "purchased",
+  "awaiting_draw_close",
+  "settled",
+  "canceled"
+] as const;
+
+export const PURCHASE_RESULT_STATUSES = ["pending", "lose", "win"] as const;
+export const PURCHASE_RESULT_VISIBILITIES = ["hidden", "visible"] as const;
+
 export type RequestTransitionMap = Record<RequestState, readonly RequestState[]>;
+export type CanonicalPurchaseStatus = (typeof CANONICAL_PURCHASE_STATUSES)[number];
+export type PurchaseResultStatus = (typeof PURCHASE_RESULT_STATUSES)[number];
+export type PurchaseResultVisibility = (typeof PURCHASE_RESULT_VISIBILITIES)[number];
+export type CanonicalPurchaseTransitionMap = Record<CanonicalPurchaseStatus, readonly CanonicalPurchaseStatus[]>;
 
 export const REQUEST_TRANSITIONS: RequestTransitionMap = {
   created: ["awaiting_confirmation", "canceled"],
@@ -29,6 +48,18 @@ export const REQUEST_TRANSITIONS: RequestTransitionMap = {
   canceled: ["reserve_released"],
   error: ["reserve_released"],
   reserve_released: []
+};
+
+export const CANONICAL_PURCHASE_TRANSITIONS: CanonicalPurchaseTransitionMap = {
+  submitted: ["queued", "canceled"],
+  queued: ["processing", "canceled"],
+  processing: ["purchase_failed_retryable", "purchase_failed_final", "purchased"],
+  purchase_failed_retryable: ["queued", "processing", "purchase_failed_final", "canceled"],
+  purchase_failed_final: [],
+  purchased: ["awaiting_draw_close"],
+  awaiting_draw_close: ["settled"],
+  settled: [],
+  canceled: []
 };
 
 export interface TransitionCheckResult {
@@ -59,6 +90,40 @@ export function applyRequestStateTransition(from: RequestState, to: RequestState
   const check = canTransitionRequestState(from, to);
   if (!check.allowed) {
     throw new Error(check.reason ?? "invalid request state transition");
+  }
+
+  return to;
+}
+
+export function canTransitionCanonicalPurchaseStatus(
+  from: CanonicalPurchaseStatus,
+  to: CanonicalPurchaseStatus
+): TransitionCheckResult {
+  if (from === to) {
+    return {
+      allowed: false,
+      reason: "canonical purchase status cannot transition to itself"
+    };
+  }
+
+  const allowedTargets = CANONICAL_PURCHASE_TRANSITIONS[from];
+  if (allowedTargets.includes(to)) {
+    return { allowed: true };
+  }
+
+  return {
+    allowed: false,
+    reason: `transition from ${from} to ${to} is not allowed`
+  };
+}
+
+export function applyCanonicalPurchaseStatusTransition(
+  from: CanonicalPurchaseStatus,
+  to: CanonicalPurchaseStatus
+): CanonicalPurchaseStatus {
+  const check = canTransitionCanonicalPurchaseStatus(from, to);
+  if (!check.allowed) {
+    throw new Error(check.reason ?? "invalid canonical purchase status transition");
   }
 
   return to;

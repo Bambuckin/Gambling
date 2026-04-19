@@ -19,8 +19,8 @@ The main safety rule is preserved across all modules: at any time only one reque
 
 ### Shared packages
 
-1. `packages/domain` - pure state and type contracts (requests, ledger, registry, ticket lifecycle).
-2. `packages/application` - use-case services and ports for access, registry/draw, purchase, queue/terminal, ticket verification, audit/alerts.
+1. `packages/domain` - pure state and type contracts (requests, canonical purchase/draw/attempt truth, ledger, registry, ticket lifecycle).
+2. `packages/application` - use-case services and ports for access, registry/draw, purchase, canonical persistence seams, queue/terminal, ticket verification, audit/alerts.
 3. `packages/infrastructure` - adapter implementations for ports (`in-memory` + `postgres` backends).
 4. `packages/lottery-handlers` - deterministic purchase/result handler contracts and registry.
 5. `packages/test-kit` - fake terminal and handler adapters for smoke coverage.
@@ -35,6 +35,18 @@ Detailed ownership and import constraints live in `docs/modules/boundary-catalog
 - Registry metadata is the source of truth for lottery visibility, forms, and handler bindings.
 - Terminal execution uses predefined handlers by lottery code; runtime-generated execution logic from user payload is forbidden.
 
+## Truth Model During Migration
+
+Phases 18-19 introduce an additive canonical truth layer without cutting over the live Big 8 contour:
+
+- Canonical write models are `purchase`, `draw`, and durable `purchase_attempt`.
+- Canonical `purchase` separates execution lifecycle, result state, and result visibility.
+- Canonical `draw` uses explicit `open -> closed -> settled` lifecycle instead of closure-only semantics.
+- Current request, ticket, and admin query services project canonical purchase/attempt truth when it exists, while preserving the legacy read shapes expected by the web surface.
+- Test reset clears both legacy and canonical runtime stores so local startup remains safe against the additive schema.
+- Legacy `purchase_request`, `ticket`, `ticket_verification_job`, `draw_closure`, and TTL execution lock remain in place as compatibility surfaces until later phases.
+- Postgres groundwork for canonical tables is additive-only in this phase; no legacy write model is deleted or renamed.
+
 ## Primary Data Flows
 
 ### Purchase Flow
@@ -47,6 +59,8 @@ Detailed ownership and import constraints live in `docs/modules/boundary-catalog
 6. `apps/terminal-worker` reserves next request through `PurchaseExecutionQueueService` with execution lock.
 7. Handler result is persisted via `TerminalExecutionAttemptService`; retry policy is applied by `TerminalRetryService`.
 8. Final status, ticket persistence, and ledger finalize/release are reflected for user/admin projections.
+
+During Phases 18-19, runtime execution still flows through the legacy request and ticket contour. Canonical purchase/draw/attempt storage now sits beside it and feeds explicit compatibility projections so later phases can cut storage and worker behavior over without a big-bang rewrite.
 
 ### Ticket Verification And Winnings Flow
 

@@ -1,12 +1,21 @@
-import type { RequestState } from "@lottery/domain";
+import type { CanonicalPurchaseRecord, PurchaseAttemptRecord, RequestState } from "@lottery/domain";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
+import type { PurchaseAttemptStore } from "../ports/purchase-attempt-store.js";
 import type { PurchaseQueuePriority, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TimeSource } from "../ports/time-source.js";
+import {
+  buildCanonicalAttemptMap,
+  isCanonicalPurchaseProblem,
+  projectCanonicalRequest
+} from "./canonical-compatibility.js";
 import { TerminalHealthService, type TerminalHealthSnapshot } from "./terminal-health-service.js";
 
 export interface AdminOperationsQueryServiceDependencies {
   readonly requestStore: PurchaseRequestStore;
   readonly queueStore: PurchaseQueueStore;
+  readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
+  readonly purchaseAttemptStore?: PurchaseAttemptStore;
   readonly timeSource: TimeSource;
   readonly staleExecutingThresholdMs?: number;
 }
@@ -44,6 +53,8 @@ export interface AdminOperationsSnapshot {
 export class AdminOperationsQueryService {
   private readonly requestStore: PurchaseRequestStore;
   private readonly queueStore: PurchaseQueueStore;
+  private readonly canonicalPurchaseStore: CanonicalPurchaseStore | null;
+  private readonly purchaseAttemptStore: PurchaseAttemptStore | null;
   private readonly timeSource: TimeSource;
   private readonly terminalHealthService: TerminalHealthService;
   private readonly staleExecutingThresholdMs: number;
@@ -51,6 +62,8 @@ export class AdminOperationsQueryService {
   constructor(dependencies: AdminOperationsQueryServiceDependencies) {
     this.requestStore = dependencies.requestStore;
     this.queueStore = dependencies.queueStore;
+    this.canonicalPurchaseStore = dependencies.canonicalPurchaseStore ?? null;
+    this.purchaseAttemptStore = dependencies.purchaseAttemptStore ?? null;
     this.timeSource = dependencies.timeSource;
     this.terminalHealthService = new TerminalHealthService({
       requestStore: dependencies.requestStore,
@@ -62,14 +75,20 @@ export class AdminOperationsQueryService {
 
   async getSnapshot(): Promise<AdminOperationsSnapshot> {
     const nowIso = this.timeSource.nowIso();
-    const [terminal, queueItems, requests] = await Promise.all([
+    const [terminal, queueItems, requests, canonicalPurchases] = await Promise.all([
       this.terminalHealthService.getStateSnapshot(),
       this.queueStore.listQueueItems(),
-      this.requestStore.listRequests()
+      this.requestStore.listRequests(),
+      this.canonicalPurchaseStore?.listPurchases() ?? Promise.resolve([])
     ]);
 
     const queueByRequestId = new Map(queueItems.map((item) => [item.requestId, item] as const));
     const queuedItems = queueItems.filter((item) => item.status === "queued");
+    const attemptsByPurchaseId = buildCanonicalAttemptMap(await this.listCanonicalAttempts(canonicalPurchases));
+    const canonicalByRequestId = new Map(
+      canonicalPurchases.map((purchase) => [purchase.snapshot.legacyRequestId ?? purchase.snapshot.purchaseId, purchase])
+    );
+    const coveredRequestIds = new Set<string>();
 
     return {
       terminal,
@@ -81,10 +100,48 @@ export class AdminOperationsQueryService {
         regularQueuedCount: queuedItems.filter((item) => item.priority === "regular").length
       },
       problemRequests: requests
-        .map((record) => toProblemRequestView(record, queueByRequestId.get(record.snapshot.requestId), nowIso, this.staleExecutingThresholdMs))
+        .map((record) => {
+          coveredRequestIds.add(record.snapshot.requestId);
+          const canonicalPurchase = canonicalByRequestId.get(record.snapshot.requestId);
+          return toProblemRequestView(
+            record,
+            queueByRequestId.get(record.snapshot.requestId),
+            nowIso,
+            this.staleExecutingThresholdMs,
+            canonicalPurchase,
+            canonicalPurchase ? attemptsByPurchaseId.get(canonicalPurchase.snapshot.purchaseId) : undefined
+          );
+        })
+        .concat(
+          canonicalPurchases
+            .filter((purchase) => !coveredRequestIds.has(purchase.snapshot.legacyRequestId ?? purchase.snapshot.purchaseId))
+            .map((purchase) =>
+              toCanonicalProblemRequestView(
+                purchase,
+                queueByRequestId.get(purchase.snapshot.legacyRequestId ?? purchase.snapshot.purchaseId),
+                nowIso,
+                this.staleExecutingThresholdMs,
+                attemptsByPurchaseId.get(purchase.snapshot.purchaseId)
+              )
+            )
+        )
         .filter((view): view is AdminProblemRequestView => view !== null)
         .sort(compareProblemRequests)
     };
+  }
+
+  private async listCanonicalAttempts(
+    purchases: readonly CanonicalPurchaseRecord[]
+  ): Promise<readonly PurchaseAttemptRecord[]> {
+    if (!this.purchaseAttemptStore || purchases.length === 0) {
+      return [];
+    }
+
+    const attempts = await Promise.all(
+      purchases.map((purchase) => this.purchaseAttemptStore!.listAttemptsByPurchaseId(purchase.snapshot.purchaseId))
+    );
+
+    return attempts.flat();
   }
 }
 
@@ -94,27 +151,64 @@ function toProblemRequestView(
   record: Awaited<ReturnType<PurchaseRequestStore["listRequests"]>>[number],
   queueItem: Awaited<ReturnType<PurchaseQueueStore["listQueueItems"]>>[number] | undefined,
   nowIso: string,
-  staleExecutingThresholdMs: number
+  staleExecutingThresholdMs: number,
+  canonicalPurchase?: CanonicalPurchaseRecord,
+  canonicalAttempts: readonly PurchaseAttemptRecord[] = []
 ): AdminProblemRequestView | null {
-  const anomalyHint = resolveAnomalyHint(record, nowIso, staleExecutingThresholdMs);
+  const projected = canonicalPurchase ? projectCanonicalRequest(canonicalPurchase, canonicalAttempts) : null;
+  const anomalyHint = projected
+    ? resolveProjectedAnomalyHint(projected.status, projected.updatedAt, nowIso, staleExecutingThresholdMs)
+    : resolveAnomalyHint(record, nowIso, staleExecutingThresholdMs);
   if (!anomalyHint) {
     return null;
   }
 
-  const updatedAt = record.journal.at(-1)?.occurredAt ?? record.snapshot.createdAt;
+  const updatedAt = projected?.updatedAt ?? record.journal.at(-1)?.occurredAt ?? record.snapshot.createdAt;
 
   return {
     requestId: record.snapshot.requestId,
     userId: record.snapshot.userId,
     lotteryCode: record.snapshot.lotteryCode,
     drawId: record.snapshot.drawId,
-    status: record.state,
+    status: projected?.status ?? record.state,
     queueStatus: queueItem?.status ?? "missing",
     queuePriority: queueItem?.priority ?? null,
     anomalyHint,
-    attemptCount: queueItem?.attemptCount ?? deriveAttemptCount(record.journal),
+    attemptCount: projected?.attemptCount ?? queueItem?.attemptCount ?? deriveAttemptCount(record.journal),
     updatedAt,
-    lastError: resolveLastError(record.journal)
+    lastError: projected?.finalResult ?? resolveLastError(record.journal)
+  };
+}
+
+function toCanonicalProblemRequestView(
+  purchase: CanonicalPurchaseRecord,
+  queueItem: Awaited<ReturnType<PurchaseQueueStore["listQueueItems"]>>[number] | undefined,
+  nowIso: string,
+  staleExecutingThresholdMs: number,
+  canonicalAttempts: readonly PurchaseAttemptRecord[] = []
+): AdminProblemRequestView | null {
+  if (!isCanonicalPurchaseProblem(purchase, nowIso, staleExecutingThresholdMs)) {
+    return null;
+  }
+
+  const projected = projectCanonicalRequest(purchase, canonicalAttempts);
+  const anomalyHint = resolveProjectedAnomalyHint(projected.status, projected.updatedAt, nowIso, staleExecutingThresholdMs);
+  if (!anomalyHint) {
+    return null;
+  }
+
+  return {
+    requestId: projected.requestId,
+    userId: purchase.snapshot.userId,
+    lotteryCode: purchase.snapshot.lotteryCode,
+    drawId: purchase.snapshot.drawId,
+    status: projected.status,
+    queueStatus: queueItem?.status ?? "missing",
+    queuePriority: queueItem?.priority ?? null,
+    anomalyHint,
+    attemptCount: queueItem?.attemptCount ?? projected.attemptCount,
+    updatedAt: projected.updatedAt,
+    lastError: projected.finalResult
   };
 }
 
@@ -131,11 +225,32 @@ function resolveAnomalyHint(
     return "error";
   }
 
-  if (record.state === "executing" && isStaleExecuting(record, nowIso, staleExecutingThresholdMs)) {
+  if (record.state === "executing" && isStaleExecuting(record.journal.at(-1)?.occurredAt ?? record.snapshot.createdAt, nowIso, staleExecutingThresholdMs)) {
     return "stale-executing";
   }
 
   return null;
+}
+
+function resolveProjectedAnomalyHint(
+  status: RequestState,
+  updatedAt: string,
+  nowIso: string,
+  staleExecutingThresholdMs: number
+): AdminProblemAnomalyHint | null {
+  if (status === "retrying") {
+    return "retrying";
+  }
+
+  if (status === "error") {
+    return "error";
+  }
+
+  if (status !== "executing") {
+    return null;
+  }
+
+  return isStaleExecuting(updatedAt, nowIso, staleExecutingThresholdMs) ? "stale-executing" : null;
 }
 
 function deriveAttemptCount(
@@ -160,12 +275,7 @@ function resolveLastError(
   return null;
 }
 
-function isStaleExecuting(
-  record: Awaited<ReturnType<PurchaseRequestStore["listRequests"]>>[number],
-  nowIso: string,
-  staleExecutingThresholdMs: number
-): boolean {
-  const updatedAt = record.journal.at(-1)?.occurredAt ?? record.snapshot.createdAt;
+function isStaleExecuting(updatedAt: string, nowIso: string, staleExecutingThresholdMs: number): boolean {
   const updatedTimestamp = Date.parse(updatedAt);
   const nowTimestamp = Date.parse(nowIso);
 

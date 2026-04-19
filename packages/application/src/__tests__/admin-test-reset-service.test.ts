@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   appendPurchaseRequestTransition,
+  type CanonicalDrawRecord,
+  type CanonicalPurchaseRecord,
   createAwaitingConfirmationRequest,
   type AccessSession,
   type CashDeskRequest,
@@ -9,10 +11,13 @@ import {
   type LedgerEntry,
   type NotificationRecord,
   type PurchaseRequestRecord,
+  type PurchaseAttemptRecord,
   type TicketRecord,
   type WinningsCreditJob
 } from "@lottery/domain";
 import type {
+  CanonicalDrawStore,
+  CanonicalPurchaseStore,
   CashDeskRequestStore,
   DrawClosureStore,
   DrawStore,
@@ -20,6 +25,7 @@ import type {
   NotificationStore,
   PurchaseQueueItem,
   PurchaseQueueStore,
+  PurchaseAttemptStore,
   PurchaseRequestStore,
   SessionStore,
   TerminalExecutionLock,
@@ -49,6 +55,9 @@ describe("admin test reset service", () => {
         status: "queued"
       }
     ]);
+    const canonicalPurchaseStore = new MemoryCanonicalPurchaseStore([]);
+    const canonicalDrawStore = new MemoryCanonicalDrawStore([]);
+    const purchaseAttemptStore = new MemoryPurchaseAttemptStore([]);
     const ticketStore = new MemoryTicketStore([]);
     const ledgerStore = new MemoryLedgerStore([]);
     const notificationStore = new MemoryNotificationStore([]);
@@ -93,6 +102,9 @@ describe("admin test reset service", () => {
       drawStore,
       requestStore,
       queueStore,
+      canonicalPurchaseStore,
+      canonicalDrawStore,
+      purchaseAttemptStore,
       ticketStore,
       ledgerStore,
       notificationStore,
@@ -142,6 +154,9 @@ describe("admin test reset service", () => {
         status: "queued"
       }
     ]);
+    const canonicalPurchaseStore = new MemoryCanonicalPurchaseStore([{} as CanonicalPurchaseRecord]);
+    const canonicalDrawStore = new MemoryCanonicalDrawStore([{} as CanonicalDrawRecord]);
+    const purchaseAttemptStore = new MemoryPurchaseAttemptStore([{} as PurchaseAttemptRecord]);
     const ticketStore = new MemoryTicketStore([{} as TicketRecord]);
     const ledgerStore = new MemoryLedgerStore([{} as LedgerEntry]);
     const notificationStore = new MemoryNotificationStore([{} as NotificationRecord]);
@@ -164,6 +179,9 @@ describe("admin test reset service", () => {
       drawStore,
       requestStore,
       queueStore,
+      canonicalPurchaseStore,
+      canonicalDrawStore,
+      purchaseAttemptStore,
       ticketStore,
       ledgerStore,
       notificationStore,
@@ -180,9 +198,15 @@ describe("admin test reset service", () => {
 
     expect(result.clearedDraws).toBe(true);
     expect(result.clearedExecutionLocks).toBe(true);
+    expect(result.clearedCanonicalPurchases).toBe(true);
+    expect(result.clearedCanonicalDraws).toBe(true);
+    expect(result.clearedPurchaseAttempts).toBe(true);
     expect((await drawStore.listSnapshots())).toHaveLength(0);
     expect((await requestStore.listRequests())).toHaveLength(0);
     expect((await queueStore.listQueueItems())).toHaveLength(0);
+    expect((await canonicalPurchaseStore.listPurchases())).toHaveLength(0);
+    expect((await canonicalDrawStore.listDraws())).toHaveLength(0);
+    expect((await purchaseAttemptStore.listAttemptsByPurchaseId("missing"))).toHaveLength(0);
     expect((await ticketStore.listTickets())).toHaveLength(0);
     expect((await ledgerStore.listEntries())).toHaveLength(0);
     expect((await drawClosureStore.listClosures())).toHaveLength(0);
@@ -272,6 +296,89 @@ class MemoryRequestStore implements PurchaseRequestStore {
 
   async clearAll(): Promise<void> {
     this.requests = [];
+  }
+}
+
+class MemoryCanonicalPurchaseStore implements CanonicalPurchaseStore {
+  private records: CanonicalPurchaseRecord[];
+
+  constructor(initialRecords: readonly CanonicalPurchaseRecord[]) {
+    this.records = [...initialRecords];
+  }
+
+  async listPurchases(): Promise<readonly CanonicalPurchaseRecord[]> {
+    return [...this.records];
+  }
+
+  async getPurchaseById(purchaseId: string): Promise<CanonicalPurchaseRecord | null> {
+    return this.records.find((record) => record.snapshot.purchaseId === purchaseId) ?? null;
+  }
+
+  async getPurchaseByLegacyRequestId(legacyRequestId: string): Promise<CanonicalPurchaseRecord | null> {
+    return this.records.find((record) => record.snapshot.legacyRequestId === legacyRequestId) ?? null;
+  }
+
+  async savePurchase(record: CanonicalPurchaseRecord): Promise<void> {
+    this.records = [...this.records.filter((entry) => entry.snapshot.purchaseId !== record.snapshot.purchaseId), record];
+  }
+
+  async clearAll(): Promise<void> {
+    this.records = [];
+  }
+}
+
+class MemoryCanonicalDrawStore implements CanonicalDrawStore {
+  private records: CanonicalDrawRecord[];
+
+  constructor(initialRecords: readonly CanonicalDrawRecord[]) {
+    this.records = [...initialRecords];
+  }
+
+  async listDraws(lotteryCode?: string): Promise<readonly CanonicalDrawRecord[]> {
+    return lotteryCode ? this.records.filter((record) => record.lotteryCode === lotteryCode) : [...this.records];
+  }
+
+  async getDraw(lotteryCode: string, drawId: string): Promise<CanonicalDrawRecord | null> {
+    return this.records.find((record) => record.lotteryCode === lotteryCode && record.drawId === drawId) ?? null;
+  }
+
+  async saveDraw(record: CanonicalDrawRecord): Promise<void> {
+    this.records = [
+      ...this.records.filter((entry) => !(entry.lotteryCode === record.lotteryCode && entry.drawId === record.drawId)),
+      record
+    ];
+  }
+
+  async clearAll(): Promise<void> {
+    this.records = [];
+  }
+}
+
+class MemoryPurchaseAttemptStore implements PurchaseAttemptStore {
+  private records: PurchaseAttemptRecord[];
+
+  constructor(initialRecords: readonly PurchaseAttemptRecord[]) {
+    this.records = [...initialRecords];
+  }
+
+  async listAttemptsByPurchaseId(purchaseId: string): Promise<readonly PurchaseAttemptRecord[]> {
+    return this.records.filter((record) => record.purchaseId === purchaseId);
+  }
+
+  async listAttemptsByLegacyRequestId(legacyRequestId: string): Promise<readonly PurchaseAttemptRecord[]> {
+    return this.records.filter((record) => record.legacyRequestId === legacyRequestId);
+  }
+
+  async getAttemptById(attemptId: string): Promise<PurchaseAttemptRecord | null> {
+    return this.records.find((record) => record.attemptId === attemptId) ?? null;
+  }
+
+  async saveAttempt(record: PurchaseAttemptRecord): Promise<void> {
+    this.records = [...this.records.filter((entry) => entry.attemptId !== record.attemptId), record];
+  }
+
+  async clearAll(): Promise<void> {
+    this.records = [];
   }
 }
 

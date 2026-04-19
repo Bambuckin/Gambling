@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createPurchaseAttemptRecord,
   formatTerminalAttemptJournalNote,
   normalizeTerminalAttempt,
   TerminalAttemptValidationError
@@ -81,5 +82,30 @@ describe("formatTerminalAttemptJournalNote", () => {
     expect(note).toContain("attempt=1");
     expect(note).toContain("outcome=success");
     expect(note).toContain("rawOutput=[terminal] ok");
+  });
+});
+
+describe("createPurchaseAttemptRecord", () => {
+  it("creates a durable attempt record separate from legacy journal-note formatting", () => {
+    const attempt = createPurchaseAttemptRecord({
+      purchaseId: "purchase-500",
+      legacyRequestId: "req-500",
+      attemptNumber: 3,
+      outcome: "success",
+      startedAt: "2026-04-19T12:00:00.000Z",
+      finishedAt: "2026-04-19T12:00:01.500Z",
+      rawOutput: "[terminal] purchase success",
+      externalTicketReference: "ext-500"
+    });
+
+    expect(attempt).toMatchObject({
+      attemptId: "purchase-500:attempt:3",
+      purchaseId: "purchase-500",
+      legacyRequestId: "req-500",
+      attemptNumber: 3,
+      outcome: "success",
+      durationMs: 1500,
+      externalTicketReference: "ext-500"
+    });
   });
 });

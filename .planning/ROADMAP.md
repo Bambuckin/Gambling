@@ -38,8 +38,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 15: Winning Actions, Credit, and Cash Desk** - split winning fulfillment into hidden balance credit or visible cash-desk payout flow. (completed 2026-04-16)
 - [x] **Phase 16: Admin User Management and Manual Finance** - add full user drill-down, edits, block/unblock, and manual balance adjustments. (completed 2026-04-16)
 - [x] **Phase 17: User Cabinet Stats and Test Reset Tools** - add cross-lottery cabinet summaries plus admin queue cleanup and full test-runtime reset. (completed 2026-04-16)
-- [ ] **Phase 18: Canonical Purchase and Draw Contracts** - collapse split ticket/draw truth into additive canonical contracts for `purchase`, `draw`, and `purchase_attempt`.
-- [ ] **Phase 19: Canonical Storage and Compatibility Projections** - add additive storage and compatibility projections so current surfaces can read from the new truth safely.
+- [x] **Phase 18: Canonical Purchase and Draw Contracts** - collapse split ticket/draw truth into additive canonical contracts for `purchase`, `draw`, and `purchase_attempt`. (completed 2026-04-19)
+- [x] **Phase 19: Canonical Storage and Compatibility Projections** - add additive storage and compatibility projections so current surfaces can read from the new truth safely. (completed 2026-04-19)
 - [ ] **Phase 20: Purchase Submission and Worker Cutover** - move submit/queue/worker execution onto the canonical purchase model and durable attempt journal.
 - [ ] **Phase 21: Draw Closure, Settlement, and Result Publication** - split draw control into explicit create/close/mark/settle operations with audit-first result publication.
 - [ ] **Phase 22: Winning Fulfillment and Ledger Rebase** - re-anchor credit and cash-desk flows on canonical purchase/draw result state.
@@ -253,8 +253,8 @@ Phase 12 remains a parallel packaging track anchored to Phase 11 and does not ga
 | 15. Winning Actions, Credit, and Cash Desk | 1/1 | Complete | 2026-04-16 |
 | 16. Admin User Management and Manual Finance | 1/1 | Complete | 2026-04-16 |
 | 17. User Cabinet Stats and Test Reset Tools | 1/1 | Complete | 2026-04-16 |
-| 18. Canonical Purchase and Draw Contracts | 0/1 | Planned | - |
-| 19. Canonical Storage and Compatibility Projections | 0/0 | Not planned | - |
+| 18. Canonical Purchase and Draw Contracts | 1/1 | Complete    | 2026-04-19 |
+| 19. Canonical Storage and Compatibility Projections | 1/1 | Complete    | 2026-04-19 |
 | 20. Purchase Submission and Worker Cutover | 0/0 | Not planned | - |
 | 21. Draw Closure, Settlement, and Result Publication | 0/0 | Not planned | - |
 | 22. Winning Fulfillment and Ledger Rebase | 0/0 | Not planned | - |
@@ -406,10 +406,10 @@ Plans:
   2. Draw lifecycle supports `open`, `closed`, and `settled` without relying on implicit closure-only semantics.
   3. Terminal attempt history is modeled explicitly as durable `purchase_attempt` records rather than only as journal-note text.
   4. Additive schema groundwork exists without deleting or renaming current legacy tables.
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 18-01: Introduce canonical purchase/draw contracts, additive schema, and invariant coverage.
+- [x] 18-01: Introduce canonical purchase/draw contracts, additive schema, and invariant coverage.
 
 ### Phase 19: Canonical Storage and Compatibility Projections
 
@@ -422,10 +422,10 @@ Plans:
   2. Compatibility projections or views keep current request/ticket/admin queries functioning during the migration.
   3. Existing runtime can be seeded and started against additive schema with no destructive data rewrite.
   4. Backfill/replay path is documented and testable locally.
-**Plans:** 0 plans
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 19 to break down)
+- [x] 19-01: Make canonical storage usable and add compatibility projections for current read surfaces.
 
 ### Phase 20: Purchase Submission and Worker Cutover
 

@@ -10,6 +10,8 @@ export type TicketVerificationJobState = (typeof TICKET_VERIFICATION_JOB_STATES)
 export type TicketAdminResultMark = (typeof TICKET_ADMIN_RESULT_MARKS)[number];
 export type TicketClaimState = (typeof TICKET_CLAIM_STATES)[number];
 
+// Ticket remains a compatibility read model while canonical purchase and draw
+// truth are introduced alongside the current runtime contour.
 export interface TicketRecord {
   readonly ticketId: string;
   readonly requestId: string;

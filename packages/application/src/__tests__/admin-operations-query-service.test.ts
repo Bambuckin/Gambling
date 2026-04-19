@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { PurchaseRequestRecord, RequestState } from "@lottery/domain";
-import { appendPurchaseRequestTransition, createAwaitingConfirmationRequest } from "@lottery/domain";
+import type { CanonicalPurchaseRecord, PurchaseAttemptRecord, PurchaseRequestRecord, RequestState } from "@lottery/domain";
+import {
+  appendCanonicalPurchaseTransition,
+  appendPurchaseRequestTransition,
+  createAwaitingConfirmationRequest,
+  createPurchaseAttemptRecord,
+  createSubmittedCanonicalPurchase
+} from "@lottery/domain";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
+import type { PurchaseAttemptStore } from "../ports/purchase-attempt-store.js";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TimeSource } from "../ports/time-source.js";
@@ -82,16 +90,86 @@ describe("AdminOperationsQueryService", () => {
     expect(snapshot.problemRequests[2]?.attemptCount).toBe(3);
     expect(snapshot.problemRequests[0]?.lastError).toContain("outcome=error");
   });
+
+  it("uses canonical projections for overlayed and canonical-only problem requests", async () => {
+    const service = createService({
+      nowIso: "2026-04-05T21:10:00.000Z",
+      requests: [createQueuedRequest("req-604", "2026-04-05T21:01:00.000Z")],
+      queueItems: [
+        createQueueItem({
+          requestId: "req-604",
+          status: "queued",
+          priority: "regular",
+          attemptCount: 1,
+          enqueuedAt: "2026-04-05T21:01:00.000Z"
+        })
+      ],
+      canonicalPurchases: [
+        createCanonicalRetryingPurchase("purchase-604", "req-604", "2026-04-05T21:05:00.000Z"),
+        createCanonicalProcessingPurchase("purchase-605", "req-605", "2026-04-05T21:02:00.000Z")
+      ],
+      attempts: [
+        createPurchaseAttemptRecord({
+          purchaseId: "purchase-604",
+          legacyRequestId: "req-604",
+          attemptNumber: 1,
+          outcome: "retrying",
+          startedAt: "2026-04-05T21:03:00.000Z",
+          finishedAt: "2026-04-05T21:03:01.000Z",
+          rawOutput: "retry one"
+        }),
+        createPurchaseAttemptRecord({
+          purchaseId: "purchase-604",
+          legacyRequestId: "req-604",
+          attemptNumber: 2,
+          outcome: "retrying",
+          startedAt: "2026-04-05T21:05:00.000Z",
+          finishedAt: "2026-04-05T21:05:01.000Z",
+          rawOutput: "retry two"
+        }),
+        createPurchaseAttemptRecord({
+          purchaseId: "purchase-605",
+          legacyRequestId: "req-605",
+          attemptNumber: 1,
+          outcome: "retrying",
+          startedAt: "2026-04-05T21:02:00.000Z",
+          finishedAt: "2026-04-05T21:02:01.000Z",
+          rawOutput: "processing"
+        })
+      ]
+    });
+
+    const snapshot = await service.getSnapshot();
+
+    expect(snapshot.problemRequests.map((item) => item.requestId)).toEqual(["req-604", "req-605"]);
+    expect(snapshot.problemRequests.map((item) => item.anomalyHint)).toEqual(["retrying", "stale-executing"]);
+    expect(snapshot.problemRequests[0]).toMatchObject({
+      requestId: "req-604",
+      status: "retrying",
+      attemptCount: 2,
+      queueStatus: "queued"
+    });
+    expect(snapshot.problemRequests[1]).toMatchObject({
+      requestId: "req-605",
+      status: "executing",
+      attemptCount: 1,
+      queueStatus: "missing"
+    });
+  });
 });
 
 function createService(input: {
   readonly nowIso: string;
   readonly requests: readonly PurchaseRequestRecord[];
   readonly queueItems: readonly PurchaseQueueItem[];
+  readonly canonicalPurchases?: readonly CanonicalPurchaseRecord[];
+  readonly attempts?: readonly PurchaseAttemptRecord[];
 }): AdminOperationsQueryService {
   return new AdminOperationsQueryService({
     requestStore: new InMemoryPurchaseRequestStore(input.requests),
     queueStore: new InMemoryPurchaseQueueStore(input.queueItems),
+    canonicalPurchaseStore: new InMemoryCanonicalPurchaseStore(input.canonicalPurchases ?? []),
+    purchaseAttemptStore: new InMemoryPurchaseAttemptStore(input.attempts ?? []),
     timeSource: {
       nowIso() {
         return input.nowIso;
@@ -208,6 +286,81 @@ function createQueueItem(input: {
   };
 }
 
+function createCanonicalRetryingPurchase(
+  purchaseId: string,
+  legacyRequestId: string,
+  retryingAt: string
+): CanonicalPurchaseRecord {
+  return appendCanonicalPurchaseTransition(
+    appendCanonicalPurchaseTransition(
+      appendCanonicalPurchaseTransition(
+        createSubmittedCanonicalPurchase({
+          purchaseId,
+          legacyRequestId,
+          userId: "seed-user",
+          lotteryCode: "demo-lottery",
+          drawId: "draw-800",
+          payload: {
+            draw_count: 1
+          },
+          costMinor: 100,
+          currency: "RUB",
+          submittedAt: "2026-04-05T21:00:00.000Z"
+        }),
+        "queued",
+        {
+          eventId: `${purchaseId}:queued`,
+          occurredAt: "2026-04-05T21:00:40.000Z"
+        }
+      ),
+      "processing",
+      {
+        eventId: `${purchaseId}:processing`,
+        occurredAt: "2026-04-05T21:03:00.000Z"
+      }
+    ),
+    "purchase_failed_retryable",
+    {
+      eventId: `${purchaseId}:retryable`,
+      occurredAt: retryingAt
+    }
+  );
+}
+
+function createCanonicalProcessingPurchase(
+  purchaseId: string,
+  legacyRequestId: string,
+  processingAt: string
+): CanonicalPurchaseRecord {
+  return appendCanonicalPurchaseTransition(
+    appendCanonicalPurchaseTransition(
+      createSubmittedCanonicalPurchase({
+        purchaseId,
+        legacyRequestId,
+        userId: "seed-user",
+        lotteryCode: "demo-lottery",
+        drawId: "draw-800",
+        payload: {
+          draw_count: 1
+        },
+        costMinor: 100,
+        currency: "RUB",
+        submittedAt: "2026-04-05T21:00:00.000Z"
+      }),
+      "queued",
+      {
+        eventId: `${purchaseId}:queued`,
+        occurredAt: "2026-04-05T21:01:00.000Z"
+      }
+    ),
+    "processing",
+    {
+      eventId: `${purchaseId}:processing`,
+      occurredAt: processingAt
+    }
+  );
+}
+
 class InMemoryPurchaseRequestStore implements PurchaseRequestStore {
   private records: PurchaseRequestRecord[];
 
@@ -260,6 +413,63 @@ class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
   async clearAll(): Promise<void> {}
 }
 
+class InMemoryCanonicalPurchaseStore implements CanonicalPurchaseStore {
+  private readonly records: CanonicalPurchaseRecord[];
+
+  constructor(initialRecords: readonly CanonicalPurchaseRecord[]) {
+    this.records = initialRecords.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async listPurchases(): Promise<readonly CanonicalPurchaseRecord[]> {
+    return this.records.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async getPurchaseById(purchaseId: string): Promise<CanonicalPurchaseRecord | null> {
+    const found = this.records.find((record) => record.snapshot.purchaseId === purchaseId) ?? null;
+    return found ? cloneCanonicalPurchaseRecord(found) : null;
+  }
+
+  async getPurchaseByLegacyRequestId(legacyRequestId: string): Promise<CanonicalPurchaseRecord | null> {
+    const found = this.records.find((record) => record.snapshot.legacyRequestId === legacyRequestId) ?? null;
+    return found ? cloneCanonicalPurchaseRecord(found) : null;
+  }
+
+  async savePurchase(record: CanonicalPurchaseRecord): Promise<void> {
+    void record;
+    throw new Error("read-only test double");
+  }
+
+  async clearAll(): Promise<void> {}
+}
+
+class InMemoryPurchaseAttemptStore implements PurchaseAttemptStore {
+  private readonly records: PurchaseAttemptRecord[];
+
+  constructor(initialRecords: readonly PurchaseAttemptRecord[]) {
+    this.records = initialRecords.map((record) => ({ ...record }));
+  }
+
+  async listAttemptsByPurchaseId(purchaseId: string): Promise<readonly PurchaseAttemptRecord[]> {
+    return this.records.filter((record) => record.purchaseId === purchaseId).map((record) => ({ ...record }));
+  }
+
+  async listAttemptsByLegacyRequestId(legacyRequestId: string): Promise<readonly PurchaseAttemptRecord[]> {
+    return this.records.filter((record) => record.legacyRequestId === legacyRequestId).map((record) => ({ ...record }));
+  }
+
+  async getAttemptById(attemptId: string): Promise<PurchaseAttemptRecord | null> {
+    const found = this.records.find((record) => record.attemptId === attemptId) ?? null;
+    return found ? { ...found } : null;
+  }
+
+  async saveAttempt(record: PurchaseAttemptRecord): Promise<void> {
+    void record;
+    throw new Error("read-only test double");
+  }
+
+  async clearAll(): Promise<void> {}
+}
+
 function cloneRequestRecord(record: PurchaseRequestRecord): PurchaseRequestRecord {
   return {
     snapshot: {
@@ -267,6 +477,22 @@ function cloneRequestRecord(record: PurchaseRequestRecord): PurchaseRequestRecor
       payload: { ...record.snapshot.payload }
     },
     state: record.state,
+    journal: record.journal.map((entry) => ({ ...entry }))
+  };
+}
+
+function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): CanonicalPurchaseRecord {
+  return {
+    snapshot: {
+      ...record.snapshot,
+      payload: { ...record.snapshot.payload }
+    },
+    status: record.status,
+    resultStatus: record.resultStatus,
+    resultVisibility: record.resultVisibility,
+    purchasedAt: record.purchasedAt,
+    settledAt: record.settledAt,
+    externalTicketReference: record.externalTicketReference,
     journal: record.journal.map((entry) => ({ ...entry }))
   };
 }

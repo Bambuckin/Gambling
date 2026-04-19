@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { RequestState } from "../request-state.js";
+import type { CanonicalPurchaseStatus, RequestState } from "../request-state.js";
 import {
+  applyCanonicalPurchaseStatusTransition,
   applyRequestStateTransition,
   assertCancelableRequestState,
   canCancelRequestState,
+  canTransitionCanonicalPurchaseStatus,
   canTransitionRequestState
 } from "../request-state.js";
 
@@ -54,6 +56,35 @@ describe("request state machine", () => {
     expect(canCancelRequestState("added_to_cart").allowed).toBe(false);
     expect(() => assertCancelableRequestState("success")).toThrow(
       "request in state success cannot be canceled"
+    );
+  });
+});
+
+describe("canonical purchase state machine", () => {
+  it("allows the additive purchase happy path through draw settlement", () => {
+    let status: CanonicalPurchaseStatus = "submitted";
+    status = applyCanonicalPurchaseStatusTransition(status, "queued");
+    status = applyCanonicalPurchaseStatusTransition(status, "processing");
+    status = applyCanonicalPurchaseStatusTransition(status, "purchased");
+    status = applyCanonicalPurchaseStatusTransition(status, "awaiting_draw_close");
+    status = applyCanonicalPurchaseStatusTransition(status, "settled");
+
+    expect(status).toBe("settled");
+  });
+
+  it("allows retryable failure to re-enter the queue but blocks rewinding from purchased", () => {
+    expect(canTransitionCanonicalPurchaseStatus("processing", "purchase_failed_retryable").allowed).toBe(true);
+    expect(canTransitionCanonicalPurchaseStatus("purchase_failed_retryable", "queued").allowed).toBe(true);
+    expect(canTransitionCanonicalPurchaseStatus("purchased", "processing").allowed).toBe(false);
+  });
+
+  it("rejects invalid canonical transition directly from submitted to purchased", () => {
+    expect(canTransitionCanonicalPurchaseStatus("submitted", "purchased")).toEqual({
+      allowed: false,
+      reason: "transition from submitted to purchased is not allowed"
+    });
+    expect(() => applyCanonicalPurchaseStatusTransition("submitted", "purchased")).toThrow(
+      "transition from submitted to purchased is not allowed"
     );
   });
 });

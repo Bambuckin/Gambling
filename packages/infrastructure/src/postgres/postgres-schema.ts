@@ -56,6 +56,23 @@ create table if not exists lottery_draw_closures (
 create index if not exists lottery_draw_closures_status_idx on lottery_draw_closures(status);
 create index if not exists lottery_draw_closures_closed_at_idx on lottery_draw_closures(closed_at);
 
+create table if not exists lottery_draws (
+  lottery_code text not null,
+  draw_id text not null,
+  draw_at timestamptz not null,
+  status text not null,
+  result_visibility text not null,
+  opened_at timestamptz not null,
+  closed_at timestamptz null,
+  settled_at timestamptz null,
+  updated_at timestamptz not null,
+  record jsonb not null,
+  primary key (lottery_code, draw_id)
+);
+create index if not exists lottery_draws_status_idx on lottery_draws(status);
+create index if not exists lottery_draws_draw_at_idx on lottery_draws(draw_at);
+create index if not exists lottery_draws_updated_at_idx on lottery_draws(updated_at);
+
 create table if not exists lottery_ledger_entries (
   entry_id text primary key,
   user_id text not null,
@@ -78,6 +95,26 @@ create index if not exists lottery_purchase_requests_user_id_idx on lottery_purc
 create index if not exists lottery_purchase_requests_state_idx on lottery_purchase_requests(state);
 create index if not exists lottery_purchase_requests_created_at_idx on lottery_purchase_requests(created_at);
 
+create table if not exists lottery_purchases (
+  purchase_id text primary key,
+  legacy_request_id text null unique,
+  user_id text not null,
+  lottery_code text not null,
+  draw_id text not null,
+  status text not null,
+  result_status text not null,
+  result_visibility text not null,
+  submitted_at timestamptz not null,
+  updated_at timestamptz not null,
+  purchased_at timestamptz null,
+  settled_at timestamptz null,
+  record jsonb not null
+);
+create index if not exists lottery_purchases_user_id_idx on lottery_purchases(user_id);
+create index if not exists lottery_purchases_status_idx on lottery_purchases(status);
+create index if not exists lottery_purchases_draw_idx on lottery_purchases(lottery_code, draw_id);
+create index if not exists lottery_purchases_updated_at_idx on lottery_purchases(updated_at);
+
 create table if not exists lottery_purchase_queue_items (
   request_id text primary key,
   status text not null,
@@ -88,6 +125,24 @@ create table if not exists lottery_purchase_queue_items (
 create index if not exists lottery_purchase_queue_items_status_idx on lottery_purchase_queue_items(status);
 create index if not exists lottery_purchase_queue_items_priority_idx on lottery_purchase_queue_items(priority);
 create index if not exists lottery_purchase_queue_items_enqueued_at_idx on lottery_purchase_queue_items(enqueued_at);
+
+create table if not exists lottery_purchase_attempts (
+  attempt_id text primary key,
+  purchase_id text not null,
+  legacy_request_id text null,
+  attempt_number integer not null,
+  outcome text not null,
+  started_at timestamptz not null,
+  finished_at timestamptz not null,
+  external_ticket_reference text null,
+  error_message text null,
+  record jsonb not null,
+  unique (purchase_id, attempt_number)
+);
+create index if not exists lottery_purchase_attempts_purchase_id_idx on lottery_purchase_attempts(purchase_id);
+create index if not exists lottery_purchase_attempts_legacy_request_id_idx on lottery_purchase_attempts(legacy_request_id);
+create index if not exists lottery_purchase_attempts_outcome_idx on lottery_purchase_attempts(outcome);
+create index if not exists lottery_purchase_attempts_finished_at_idx on lottery_purchase_attempts(finished_at);
 
 create table if not exists lottery_tickets (
   ticket_id text primary key,

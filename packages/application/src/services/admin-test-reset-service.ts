@@ -1,6 +1,9 @@
 import { appendPurchaseRequestTransition, type PurchaseRequestRecord } from "@lottery/domain";
+import type { CanonicalDrawStore } from "../ports/canonical-draw-store.js";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { DrawStore } from "../ports/draw-store.js";
 import type { TimeSource } from "../ports/time-source.js";
+import type { PurchaseAttemptStore } from "../ports/purchase-attempt-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
@@ -17,6 +20,9 @@ export interface AdminTestResetServiceDependencies {
   readonly drawStore: DrawStore;
   readonly requestStore: PurchaseRequestStore;
   readonly queueStore: PurchaseQueueStore;
+  readonly canonicalPurchaseStore: CanonicalPurchaseStore;
+  readonly canonicalDrawStore: CanonicalDrawStore;
+  readonly purchaseAttemptStore: PurchaseAttemptStore;
   readonly ticketStore: TicketStore;
   readonly ledgerStore: LedgerStore;
   readonly notificationStore: NotificationStore;
@@ -39,6 +45,9 @@ export interface ResetTestDataResult {
   readonly clearedDraws: boolean;
   readonly clearedRequests: boolean;
   readonly clearedQueue: boolean;
+  readonly clearedCanonicalPurchases: boolean;
+  readonly clearedCanonicalDraws: boolean;
+  readonly clearedPurchaseAttempts: boolean;
   readonly clearedTickets: boolean;
   readonly clearedLedger: boolean;
   readonly clearedNotifications: boolean;
@@ -53,6 +62,9 @@ export class AdminTestResetService {
   private readonly drawStore: DrawStore;
   private readonly requestStore: PurchaseRequestStore;
   private readonly queueStore: PurchaseQueueStore;
+  private readonly canonicalPurchaseStore: CanonicalPurchaseStore;
+  private readonly canonicalDrawStore: CanonicalDrawStore;
+  private readonly purchaseAttemptStore: PurchaseAttemptStore;
   private readonly ticketStore: TicketStore;
   private readonly ledgerStore: LedgerStore;
   private readonly notificationStore: NotificationStore;
@@ -68,6 +80,9 @@ export class AdminTestResetService {
     this.drawStore = dependencies.drawStore;
     this.requestStore = dependencies.requestStore;
     this.queueStore = dependencies.queueStore;
+    this.canonicalPurchaseStore = dependencies.canonicalPurchaseStore;
+    this.canonicalDrawStore = dependencies.canonicalDrawStore;
+    this.purchaseAttemptStore = dependencies.purchaseAttemptStore;
     this.ticketStore = dependencies.ticketStore;
     this.ledgerStore = dependencies.ledgerStore;
     this.notificationStore = dependencies.notificationStore;
@@ -124,6 +139,9 @@ export class AdminTestResetService {
     await this.drawStore.clearAll();
     await this.requestStore.clearAll();
     await this.queueStore.clearAll();
+    await this.canonicalPurchaseStore.clearAll();
+    await this.canonicalDrawStore.clearAll();
+    await this.purchaseAttemptStore.clearAll();
     await this.ticketStore.clearAll();
     await this.ledgerStore.clearAll();
     await this.notificationStore.clearAll();
@@ -137,6 +155,9 @@ export class AdminTestResetService {
       clearedDraws: true,
       clearedRequests: true,
       clearedQueue: true,
+      clearedCanonicalPurchases: true,
+      clearedCanonicalDraws: true,
+      clearedPurchaseAttempts: true,
       clearedTickets: true,
       clearedLedger: true,
       clearedNotifications: true,

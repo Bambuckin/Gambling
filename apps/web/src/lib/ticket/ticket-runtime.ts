@@ -7,7 +7,8 @@ export function getTicketQueryService(): TicketQueryService {
   if (!cachedTicketQueryService) {
     const stores = getPurchaseRuntimeStores();
     cachedTicketQueryService = new TicketQueryService({
-      ticketStore: stores.ticketStore
+      ticketStore: stores.ticketStore,
+      canonicalPurchaseStore: stores.canonicalPurchaseStore
     });
   }
 

@@ -1,8 +1,11 @@
-import type { TicketRecord } from "@lottery/domain";
+import type { CanonicalPurchaseRecord, TicketRecord } from "@lottery/domain";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
+import { mapCanonicalPurchaseStatusToRequestState } from "./canonical-compatibility.js";
 
 export interface TicketQueryServiceDependencies {
   readonly ticketStore: TicketStore;
+  readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
 }
 
 export interface TicketView {
@@ -23,9 +26,11 @@ export interface TicketView {
 
 export class TicketQueryService {
   private readonly ticketStore: TicketStore;
+  private readonly canonicalPurchaseStore: CanonicalPurchaseStore | null;
 
   constructor(dependencies: TicketQueryServiceDependencies) {
     this.ticketStore = dependencies.ticketStore;
+    this.canonicalPurchaseStore = dependencies.canonicalPurchaseStore ?? null;
   }
 
   async listUserTickets(userId: string): Promise<TicketView[]> {
@@ -34,16 +39,39 @@ export class TicketQueryService {
       return [];
     }
 
-    const tickets = await this.ticketStore.listTickets();
+    const [tickets, canonicalPurchases] = await Promise.all([
+      this.ticketStore.listTickets(),
+      this.canonicalPurchaseStore?.listPurchases() ?? Promise.resolve([])
+    ]);
+    const ticketRequestIds = new Set(tickets.map((ticket) => ticket.requestId));
     return tickets
       .filter((ticket) => ticket.userId === normalizedUserId)
       .map((ticket) => toTicketView(ticket))
+      .concat(
+        canonicalPurchases
+          .filter((purchase) => purchase.snapshot.userId === normalizedUserId)
+          .filter((purchase) => shouldProjectCanonicalTicket(purchase))
+          .filter((purchase) => !ticketRequestIds.has(purchase.snapshot.legacyRequestId ?? purchase.snapshot.purchaseId))
+          .map((purchase) => toCanonicalTicketView(purchase))
+      )
       .sort((left, right) => compareTicketViews(left, right));
   }
 
   async listAllTickets(): Promise<TicketView[]> {
-    const tickets = await this.ticketStore.listTickets();
-    return tickets.map((ticket) => toTicketView(ticket)).sort((left, right) => compareTicketViews(left, right));
+    const [tickets, canonicalPurchases] = await Promise.all([
+      this.ticketStore.listTickets(),
+      this.canonicalPurchaseStore?.listPurchases() ?? Promise.resolve([])
+    ]);
+    const ticketRequestIds = new Set(tickets.map((ticket) => ticket.requestId));
+    return tickets
+      .map((ticket) => toTicketView(ticket))
+      .concat(
+        canonicalPurchases
+          .filter((purchase) => shouldProjectCanonicalTicket(purchase))
+          .filter((purchase) => !ticketRequestIds.has(purchase.snapshot.legacyRequestId ?? purchase.snapshot.purchaseId))
+          .map((purchase) => toCanonicalTicketView(purchase))
+      )
+      .sort((left, right) => compareTicketViews(left, right));
   }
 }
 
@@ -63,6 +91,32 @@ function toTicketView(ticket: TicketRecord): TicketView {
     resultSource: ticket.resultSource,
     claimState: ticket.claimState
   };
+}
+
+function toCanonicalTicketView(purchase: CanonicalPurchaseRecord): TicketView {
+  const requestId = purchase.snapshot.legacyRequestId ?? purchase.snapshot.purchaseId;
+  const verifiedAt = purchase.resultVisibility === "visible" ? purchase.settledAt : null;
+
+  return {
+    ticketId: `canonical:${purchase.snapshot.purchaseId}`,
+    requestId,
+    userId: purchase.snapshot.userId,
+    lotteryCode: purchase.snapshot.lotteryCode,
+    drawId: purchase.snapshot.drawId,
+    verificationStatus: purchase.resultVisibility === "visible" ? "verified" : "pending",
+    adminResultMark: null,
+    winningAmountMinor: null,
+    verifiedAt,
+    externalReference: purchase.externalTicketReference ?? `canonical:${purchase.snapshot.purchaseId}`,
+    purchasedAt: purchase.purchasedAt ?? purchase.snapshot.submittedAt,
+    resultSource: null,
+    claimState: "unclaimed"
+  };
+}
+
+function shouldProjectCanonicalTicket(purchase: CanonicalPurchaseRecord): boolean {
+  const projectedStatus = mapCanonicalPurchaseStatusToRequestState(purchase);
+  return projectedStatus === "success";
 }
 
 function compareTicketViews(left: TicketView, right: TicketView): number {

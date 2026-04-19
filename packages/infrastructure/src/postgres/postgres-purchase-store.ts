@@ -1,6 +1,9 @@
 import type {
+  CanonicalDrawStore,
+  CanonicalPurchaseStore,
   CashDeskRequestStore,
   NotificationStore,
+  PurchaseAttemptStore,
   PurchaseQueueItem,
   PurchaseQueueStore,
   PurchaseRequestStore,
@@ -9,9 +12,13 @@ import type {
   TicketVerificationJobStore
 } from "@lottery/application";
 import {
+  type CanonicalDrawRecord,
+  type CanonicalPurchaseJournalEntry,
+  type CanonicalPurchaseRecord,
   normalizeLotteryCode,
   type CashDeskRequest,
   type NotificationRecord,
+  type PurchaseAttemptRecord,
   type PurchaseRequestRecord,
   type TicketRecord,
   type TicketVerificationJob
@@ -89,6 +96,322 @@ export class PostgresPurchaseRequestStore implements PurchaseRequestStore {
 
   async clearAll(): Promise<void> {
     await this.pool.query("delete from lottery_purchase_requests");
+  }
+}
+
+export class PostgresCanonicalPurchaseStore implements CanonicalPurchaseStore {
+  private readonly pool: Pool;
+
+  constructor(pool: Pool) {
+    this.pool = pool;
+  }
+
+  async listPurchases(): Promise<readonly CanonicalPurchaseRecord[]> {
+    const result = await this.pool.query(
+      `
+        select record
+        from lottery_purchases
+        order by submitted_at asc, purchase_id asc
+      `
+    );
+
+    return result.rows.map((row: { record: CanonicalPurchaseRecord }) => deepClone(row.record));
+  }
+
+  async getPurchaseById(purchaseId: string): Promise<CanonicalPurchaseRecord | null> {
+    const normalizedPurchaseId = normalizeText(purchaseId, "purchaseId");
+    const result = await this.pool.query(
+      `
+        select record
+        from lottery_purchases
+        where purchase_id = $1
+        limit 1
+      `,
+      [normalizedPurchaseId]
+    );
+
+    const row = result.rows[0];
+    return row ? deepClone(row.record as CanonicalPurchaseRecord) : null;
+  }
+
+  async getPurchaseByLegacyRequestId(legacyRequestId: string): Promise<CanonicalPurchaseRecord | null> {
+    const normalizedLegacyRequestId = normalizeText(legacyRequestId, "legacyRequestId");
+    const result = await this.pool.query(
+      `
+        select record
+        from lottery_purchases
+        where legacy_request_id = $1
+        limit 1
+      `,
+      [normalizedLegacyRequestId]
+    );
+
+    const row = result.rows[0];
+    return row ? deepClone(row.record as CanonicalPurchaseRecord) : null;
+  }
+
+  async savePurchase(record: CanonicalPurchaseRecord): Promise<void> {
+    const normalizedRecord = normalizeCanonicalPurchaseRecord(record);
+    const updatedAt =
+      last(normalizedRecord.journal)?.occurredAt ??
+      normalizedRecord.settledAt ??
+      normalizedRecord.purchasedAt ??
+      normalizedRecord.snapshot.submittedAt;
+
+    await this.pool.query(
+      `
+        insert into lottery_purchases (
+          purchase_id,
+          legacy_request_id,
+          user_id,
+          lottery_code,
+          draw_id,
+          status,
+          result_status,
+          result_visibility,
+          submitted_at,
+          updated_at,
+          purchased_at,
+          settled_at,
+          record
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
+        on conflict (purchase_id)
+        do update
+          set legacy_request_id = excluded.legacy_request_id,
+              user_id = excluded.user_id,
+              lottery_code = excluded.lottery_code,
+              draw_id = excluded.draw_id,
+              status = excluded.status,
+              result_status = excluded.result_status,
+              result_visibility = excluded.result_visibility,
+              submitted_at = excluded.submitted_at,
+              updated_at = excluded.updated_at,
+              purchased_at = excluded.purchased_at,
+              settled_at = excluded.settled_at,
+              record = excluded.record
+      `,
+      [
+        normalizedRecord.snapshot.purchaseId,
+        normalizedRecord.snapshot.legacyRequestId,
+        normalizedRecord.snapshot.userId,
+        normalizedRecord.snapshot.lotteryCode,
+        normalizedRecord.snapshot.drawId,
+        normalizedRecord.status,
+        normalizedRecord.resultStatus,
+        normalizedRecord.resultVisibility,
+        normalizedRecord.snapshot.submittedAt,
+        updatedAt,
+        normalizedRecord.purchasedAt,
+        normalizedRecord.settledAt,
+        JSON.stringify(normalizedRecord)
+      ]
+    );
+  }
+
+  async clearAll(): Promise<void> {
+    await this.pool.query("delete from lottery_purchases");
+  }
+}
+
+export class PostgresCanonicalDrawStore implements CanonicalDrawStore {
+  private readonly pool: Pool;
+
+  constructor(pool: Pool) {
+    this.pool = pool;
+  }
+
+  async listDraws(lotteryCode?: string): Promise<readonly CanonicalDrawRecord[]> {
+    if (typeof lotteryCode === "string" && lotteryCode.trim()) {
+      const normalizedLotteryCode = normalizeLotteryCode(lotteryCode);
+      const result = await this.pool.query(
+        `
+          select record
+          from lottery_draws
+          where lottery_code = $1
+          order by draw_at asc, draw_id asc
+        `,
+        [normalizedLotteryCode]
+      );
+
+      return result.rows.map((row: { record: CanonicalDrawRecord }) => deepClone(row.record));
+    }
+
+    const result = await this.pool.query(
+      `
+        select record
+        from lottery_draws
+        order by draw_at asc, lottery_code asc, draw_id asc
+      `
+    );
+
+    return result.rows.map((row: { record: CanonicalDrawRecord }) => deepClone(row.record));
+  }
+
+  async getDraw(lotteryCode: string, drawId: string): Promise<CanonicalDrawRecord | null> {
+    const normalizedLotteryCode = normalizeLotteryCode(lotteryCode);
+    const normalizedDrawId = normalizeText(drawId, "drawId");
+    const result = await this.pool.query(
+      `
+        select record
+        from lottery_draws
+        where lottery_code = $1 and draw_id = $2
+        limit 1
+      `,
+      [normalizedLotteryCode, normalizedDrawId]
+    );
+
+    const row = result.rows[0];
+    return row ? deepClone(row.record as CanonicalDrawRecord) : null;
+  }
+
+  async saveDraw(record: CanonicalDrawRecord): Promise<void> {
+    const normalizedRecord = normalizeCanonicalDrawRecord(record);
+    const updatedAt = normalizedRecord.settledAt ?? normalizedRecord.closedAt ?? normalizedRecord.openedAt;
+
+    await this.pool.query(
+      `
+        insert into lottery_draws (
+          lottery_code,
+          draw_id,
+          draw_at,
+          status,
+          result_visibility,
+          opened_at,
+          closed_at,
+          settled_at,
+          updated_at,
+          record
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+        on conflict (lottery_code, draw_id)
+        do update
+          set draw_at = excluded.draw_at,
+              status = excluded.status,
+              result_visibility = excluded.result_visibility,
+              opened_at = excluded.opened_at,
+              closed_at = excluded.closed_at,
+              settled_at = excluded.settled_at,
+              updated_at = excluded.updated_at,
+              record = excluded.record
+      `,
+      [
+        normalizedRecord.lotteryCode,
+        normalizedRecord.drawId,
+        normalizedRecord.drawAt,
+        normalizedRecord.status,
+        normalizedRecord.resultVisibility,
+        normalizedRecord.openedAt,
+        normalizedRecord.closedAt,
+        normalizedRecord.settledAt,
+        updatedAt,
+        JSON.stringify(normalizedRecord)
+      ]
+    );
+  }
+
+  async clearAll(): Promise<void> {
+    await this.pool.query("delete from lottery_draws");
+  }
+}
+
+export class PostgresPurchaseAttemptStore implements PurchaseAttemptStore {
+  private readonly pool: Pool;
+
+  constructor(pool: Pool) {
+    this.pool = pool;
+  }
+
+  async listAttemptsByPurchaseId(purchaseId: string): Promise<readonly PurchaseAttemptRecord[]> {
+    const normalizedPurchaseId = normalizeText(purchaseId, "purchaseId");
+    const result = await this.pool.query(
+      `
+        select record
+        from lottery_purchase_attempts
+        where purchase_id = $1
+        order by attempt_number asc, attempt_id asc
+      `,
+      [normalizedPurchaseId]
+    );
+
+    return result.rows.map((row: { record: PurchaseAttemptRecord }) => deepClone(row.record));
+  }
+
+  async listAttemptsByLegacyRequestId(legacyRequestId: string): Promise<readonly PurchaseAttemptRecord[]> {
+    const normalizedLegacyRequestId = normalizeText(legacyRequestId, "legacyRequestId");
+    const result = await this.pool.query(
+      `
+        select record
+        from lottery_purchase_attempts
+        where legacy_request_id = $1
+        order by attempt_number asc, attempt_id asc
+      `,
+      [normalizedLegacyRequestId]
+    );
+
+    return result.rows.map((row: { record: PurchaseAttemptRecord }) => deepClone(row.record));
+  }
+
+  async getAttemptById(attemptId: string): Promise<PurchaseAttemptRecord | null> {
+    const normalizedAttemptId = normalizeText(attemptId, "attemptId");
+    const result = await this.pool.query(
+      `
+        select record
+        from lottery_purchase_attempts
+        where attempt_id = $1
+        limit 1
+      `,
+      [normalizedAttemptId]
+    );
+
+    const row = result.rows[0];
+    return row ? deepClone(row.record as PurchaseAttemptRecord) : null;
+  }
+
+  async saveAttempt(record: PurchaseAttemptRecord): Promise<void> {
+    const normalizedRecord = normalizePurchaseAttemptRecord(record);
+
+    await this.pool.query(
+      `
+        insert into lottery_purchase_attempts (
+          attempt_id,
+          purchase_id,
+          legacy_request_id,
+          attempt_number,
+          outcome,
+          started_at,
+          finished_at,
+          external_ticket_reference,
+          error_message,
+          record
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+        on conflict (attempt_id)
+        do update
+          set purchase_id = excluded.purchase_id,
+              legacy_request_id = excluded.legacy_request_id,
+              attempt_number = excluded.attempt_number,
+              outcome = excluded.outcome,
+              started_at = excluded.started_at,
+              finished_at = excluded.finished_at,
+              external_ticket_reference = excluded.external_ticket_reference,
+              error_message = excluded.error_message,
+              record = excluded.record
+      `,
+      [
+        normalizedRecord.attemptId,
+        normalizedRecord.purchaseId,
+        normalizedRecord.legacyRequestId,
+        normalizedRecord.attemptNumber,
+        normalizedRecord.outcome,
+        normalizedRecord.startedAt,
+        normalizedRecord.finishedAt,
+        normalizedRecord.externalTicketReference,
+        normalizedRecord.errorMessage,
+        JSON.stringify(normalizedRecord)
+      ]
+    );
+  }
+
+  async clearAll(): Promise<void> {
+    await this.pool.query("delete from lottery_purchase_attempts");
   }
 }
 
@@ -619,6 +942,76 @@ function normalizePurchaseRequestRecord(record: PurchaseRequestRecord): Purchase
       eventId: normalizeText(entry.eventId, "record.journal.eventId"),
       occurredAt: toIsoString(entry.occurredAt)
     }))
+  };
+}
+
+function normalizeCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): CanonicalPurchaseRecord {
+  const cloned = deepClone(record);
+
+  return {
+    ...cloned,
+    snapshot: {
+      ...cloned.snapshot,
+      purchaseId: normalizeText(cloned.snapshot.purchaseId, "record.snapshot.purchaseId"),
+      legacyRequestId: optionalNormalizedText(cloned.snapshot.legacyRequestId) ?? null,
+      userId: normalizeText(cloned.snapshot.userId, "record.snapshot.userId"),
+      lotteryCode: normalizeLotteryCode(cloned.snapshot.lotteryCode),
+      drawId: normalizeText(cloned.snapshot.drawId, "record.snapshot.drawId"),
+      currency: normalizeText(cloned.snapshot.currency, "record.snapshot.currency").toUpperCase(),
+      submittedAt: toIsoString(cloned.snapshot.submittedAt),
+      payload: deepClone(cloned.snapshot.payload)
+    },
+    purchasedAt: optionalNormalizedText(cloned.purchasedAt) ? toIsoString(cloned.purchasedAt!) : null,
+    settledAt: optionalNormalizedText(cloned.settledAt) ? toIsoString(cloned.settledAt!) : null,
+    externalTicketReference: optionalNormalizedText(cloned.externalTicketReference) ?? null,
+    journal: cloned.journal.map(normalizeCanonicalPurchaseJournalEntry)
+  };
+}
+
+function normalizeCanonicalPurchaseJournalEntry(entry: CanonicalPurchaseJournalEntry): CanonicalPurchaseJournalEntry {
+  const nextValue = normalizeText(entry.nextValue, "record.journal.nextValue");
+  const previousValue = optionalNormalizedText(entry.previousValue) ?? null;
+  const note = optionalNormalizedText(entry.note);
+
+  return {
+    eventId: normalizeText(entry.eventId, "record.journal.eventId"),
+    kind: entry.kind,
+    previousValue,
+    nextValue,
+    occurredAt: toIsoString(entry.occurredAt),
+    ...(note ? { note } : {})
+  };
+}
+
+function normalizeCanonicalDrawRecord(record: CanonicalDrawRecord): CanonicalDrawRecord {
+  const cloned = deepClone(record);
+
+  return {
+    ...cloned,
+    lotteryCode: normalizeLotteryCode(cloned.lotteryCode),
+    drawId: normalizeText(cloned.drawId, "record.drawId"),
+    drawAt: toIsoString(cloned.drawAt),
+    openedAt: toIsoString(cloned.openedAt),
+    closedAt: optionalNormalizedText(cloned.closedAt) ? toIsoString(cloned.closedAt!) : null,
+    settledAt: optionalNormalizedText(cloned.settledAt) ? toIsoString(cloned.settledAt!) : null,
+    closedBy: optionalNormalizedText(cloned.closedBy) ?? null,
+    settledBy: optionalNormalizedText(cloned.settledBy) ?? null
+  };
+}
+
+function normalizePurchaseAttemptRecord(record: PurchaseAttemptRecord): PurchaseAttemptRecord {
+  const cloned = deepClone(record);
+
+  return {
+    ...cloned,
+    attemptId: normalizeText(cloned.attemptId, "record.attemptId"),
+    purchaseId: normalizeText(cloned.purchaseId, "record.purchaseId"),
+    legacyRequestId: optionalNormalizedText(cloned.legacyRequestId) ?? null,
+    attemptNumber: Math.max(1, Math.trunc(cloned.attemptNumber)),
+    startedAt: toIsoString(cloned.startedAt),
+    finishedAt: toIsoString(cloned.finishedAt),
+    externalTicketReference: optionalNormalizedText(cloned.externalTicketReference) ?? null,
+    errorMessage: optionalNormalizedText(cloned.errorMessage) ?? null
   };
 }
 
