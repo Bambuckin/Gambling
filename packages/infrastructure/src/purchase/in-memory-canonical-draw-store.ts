@@ -33,6 +33,14 @@ export class InMemoryCanonicalDrawStore implements CanonicalDrawStore {
     this.records = [...filtered, cloneRecord(record)];
   }
 
+  async deleteDraw(lotteryCode: string, drawId: string): Promise<void> {
+    const normalizedLotteryCode = lotteryCode.trim().toLowerCase();
+    const normalizedDrawId = drawId.trim();
+    this.records = this.records.filter(
+      (entry) => !(entry.lotteryCode === normalizedLotteryCode && entry.drawId === normalizedDrawId)
+    );
+  }
+
   async clearAll(): Promise<void> {
     this.records = [];
   }

@@ -1,4 +1,5 @@
 import {
+  type CanonicalDrawStore,
   type CanonicalPurchaseStore,
   DrawRefreshService,
   PurchaseCompletionService,
@@ -25,6 +26,7 @@ import type { LotteryPurchaseCompletionMode } from "@lottery/domain";
 import {
   createDefaultLotteryRegistryEntries,
   InMemoryCanonicalPurchaseStore,
+  InMemoryCanonicalDrawStore,
   InMemoryDrawClosureStore,
   InMemoryDrawStore,
   InMemoryLedgerStore,
@@ -41,6 +43,7 @@ import {
   PostgresLedgerStore,
   PostgresNotificationStore,
   PostgresCanonicalPurchaseStore,
+  PostgresCanonicalDrawStore,
   PostgresPurchaseAttemptStore,
   PostgresPurchaseQueueStore,
   PostgresPurchaseRequestStore,
@@ -80,6 +83,10 @@ const requestStore: PurchaseRequestStore =
   storageBackend === "postgres" && postgresPool
     ? new PostgresPurchaseRequestStore(postgresPool)
     : new InMemoryPurchaseRequestStore();
+const canonicalDrawStore: CanonicalDrawStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresCanonicalDrawStore(postgresPool)
+    : new InMemoryCanonicalDrawStore();
 const canonicalPurchaseStore: CanonicalPurchaseStore =
   storageBackend === "postgres" && postgresPool
     ? new PostgresCanonicalPurchaseStore(postgresPool)
@@ -160,6 +167,7 @@ const verificationQueueService = new TicketVerificationQueueService({
   ticketStore,
   jobStore: verificationJobStore,
   drawClosureStore,
+  canonicalDrawStore,
   timeSource
 });
 const verificationResultService = new TicketVerificationResultService({

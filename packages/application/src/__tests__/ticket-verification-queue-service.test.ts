@@ -1,6 +1,7 @@
-import type { DrawClosureRecord, TicketRecord, TicketVerificationJob } from "@lottery/domain";
-import { closeDrawClosure, createOpenDrawClosure, createPurchasedTicketRecord } from "@lottery/domain";
+import type { CanonicalDrawRecord, DrawClosureRecord, TicketRecord, TicketVerificationJob } from "@lottery/domain";
+import { closeDrawClosure, createOpenCanonicalDraw, createOpenDrawClosure, createPurchasedTicketRecord } from "@lottery/domain";
 import { describe, expect, it } from "vitest";
+import type { CanonicalDrawStore } from "../ports/canonical-draw-store.js";
 import type { DrawClosureStore } from "../ports/draw-closure-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
 import type { TicketVerificationJobStore } from "../ports/ticket-verification-job-store.js";
@@ -115,6 +116,32 @@ describe("TicketVerificationQueueService", () => {
     expect(result.skippedCount).toBe(0);
     expect((await jobStore.listJobs()).length).toBe(0);
   });
+
+  it("skips legacy verification jobs for draws already managed by canonical settlement", async () => {
+    const ticketStore = new InMemoryTicketStore([createTicket("req-975", "pending")]);
+    const jobStore = new InMemoryTicketVerificationJobStore();
+    const service = new TicketVerificationQueueService({
+      ticketStore,
+      jobStore,
+      drawClosureStore: new InMemoryDrawClosureStore([createClosedDrawClosure("demo-lottery", "draw-975")]),
+      canonicalDrawStore: new InMemoryCanonicalDrawStore([
+        createOpenCanonicalDraw({
+          lotteryCode: "demo-lottery",
+          drawId: "draw-975",
+          drawAt: "2026-04-06T00:20:00.000Z",
+          openedAt: "2026-04-06T00:05:00.000Z"
+        })
+      ]),
+      timeSource: new FixedTimeSource("2026-04-06T00:13:00.000Z")
+    });
+
+    const result = await service.enqueuePendingVerificationTickets();
+
+    expect(result.pendingCount).toBe(1);
+    expect(result.enqueuedCount).toBe(0);
+    expect(result.skippedCount).toBe(1);
+    expect((await jobStore.listJobs())).toHaveLength(0);
+  });
 });
 
 function createTicket(requestId: string, verificationStatus: "pending" | "verified"): TicketRecord {
@@ -206,6 +233,35 @@ class InMemoryDrawClosureStore implements DrawClosureStore {
   }
 
   async deleteClosure(): Promise<void> {
+    throw new Error("read-only test double");
+  }
+
+  async clearAll(): Promise<void> {}
+}
+
+class InMemoryCanonicalDrawStore implements CanonicalDrawStore {
+  private readonly draws: CanonicalDrawRecord[];
+
+  constructor(draws: readonly CanonicalDrawRecord[]) {
+    this.draws = draws.map((draw) => ({ ...draw }));
+  }
+
+  async listDraws(lotteryCode?: string): Promise<readonly CanonicalDrawRecord[]> {
+    return this.draws
+      .filter((draw) => !lotteryCode || draw.lotteryCode === lotteryCode)
+      .map((draw) => ({ ...draw }));
+  }
+
+  async getDraw(lotteryCode: string, drawId: string): Promise<CanonicalDrawRecord | null> {
+    const draw = this.draws.find((entry) => entry.lotteryCode === lotteryCode && entry.drawId === drawId) ?? null;
+    return draw ? { ...draw } : null;
+  }
+
+  async saveDraw(): Promise<void> {
+    throw new Error("read-only test double");
+  }
+
+  async deleteDraw(): Promise<void> {
     throw new Error("read-only test double");
   }
 

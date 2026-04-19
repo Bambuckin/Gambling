@@ -192,6 +192,8 @@ export function getDrawClosureService(): DrawClosureService {
   if (!cachedDrawClosureService) {
     cachedDrawClosureService = new DrawClosureService({
       ticketStore,
+      canonicalDrawStore,
+      canonicalPurchaseStore,
       drawClosureStore,
       notificationStore,
       timeSource: new SystemTimeSource()

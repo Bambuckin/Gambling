@@ -19,8 +19,9 @@ interface AdminDraw {
   readonly drawId: string;
   readonly drawAt: string;
   readonly fetchedAt: string;
-  readonly status: "open" | "closed";
+  readonly status: "open" | "closed" | "settled";
   readonly closedAt: string | null;
+  readonly settledAt: string | null;
   readonly tickets: readonly AdminDrawTicket[];
 }
 
@@ -30,8 +31,9 @@ interface AdminDrawsResponse {
 }
 
 interface AdminDrawMonitorProps {
-  readonly onMarkTicket: (ticketId: string, mark: "win" | "lose") => Promise<void>;
-  readonly onCloseDraw: (lotteryCode: string, drawId: string) => Promise<void>;
+  readonly onMarkTicket: (requestId: string, mark: "win" | "lose") => Promise<void>;
+  readonly onCloseDraw: (lotteryCode: string, drawId: string, drawAt: string) => Promise<void>;
+  readonly onSettleDraw: (lotteryCode: string, drawId: string) => Promise<void>;
   readonly onDeleteDraw: (lotteryCode: string, drawId: string) => Promise<string>;
   readonly onClearQueue: () => Promise<string>;
   readonly onResetAll: () => Promise<string>;
@@ -73,11 +75,9 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
     let cancelled = false;
 
     const wrappedRefresh = async (): Promise<void> => {
-      if (cancelled) {
-        return;
+      if (!cancelled) {
+        await refresh();
       }
-
-      await refresh();
     };
 
     void wrappedRefresh();
@@ -91,21 +91,21 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
     };
   }, [refresh]);
 
-  const handleMark = async (ticketId: string, mark: "win" | "lose"): Promise<void> => {
+  const handleMark = async (requestId: string, mark: "win" | "lose"): Promise<void> => {
     setActionError(null);
     setActionMessage(null);
 
     try {
-      await props.onMarkTicket(ticketId, mark);
-      setActionMessage(mark === "win" ? "Билет помечен как выигрышный." : "Билет помечен как проигрышный.");
+      await props.onMarkTicket(requestId, mark);
+      setActionMessage(mark === "win" ? "Результат помечен как выигрыш." : "Результат помечен как проигрыш.");
       await refresh();
     } catch (actionFailure) {
       setActionError(actionFailure instanceof Error ? actionFailure.message : String(actionFailure));
     }
   };
 
-  const handleClose = async (lotteryCode: string, drawId: string): Promise<void> => {
-    const confirmed = window.confirm("Закрыть тираж? Все непомеченные билеты уйдут в проигрыш.");
+  const handleClose = async (lotteryCode: string, drawId: string, drawAt: string): Promise<void> => {
+    const confirmed = window.confirm("Закрыть тираж? После этого можно только помечать результаты и публиковать settlement.");
     if (!confirmed) {
       return;
     }
@@ -114,8 +114,26 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
     setActionMessage(null);
 
     try {
-      await props.onCloseDraw(lotteryCode, drawId);
+      await props.onCloseDraw(lotteryCode, drawId, drawAt);
       setActionMessage(`Тираж ${drawId} закрыт.`);
+      await refresh();
+    } catch (actionFailure) {
+      setActionError(actionFailure instanceof Error ? actionFailure.message : String(actionFailure));
+    }
+  };
+
+  const handleSettle = async (lotteryCode: string, drawId: string): Promise<void> => {
+    const confirmed = window.confirm("Опубликовать settlement? После этого результат станет видимым пользователю.");
+    if (!confirmed) {
+      return;
+    }
+
+    setActionError(null);
+    setActionMessage(null);
+
+    try {
+      await props.onSettleDraw(lotteryCode, drawId);
+      setActionMessage(`Тираж ${drawId} опубликован.`);
       await refresh();
     } catch (actionFailure) {
       setActionError(actionFailure instanceof Error ? actionFailure.message : String(actionFailure));
@@ -162,7 +180,7 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
   };
 
   const handleDelete = async (lotteryCode: string, drawId: string): Promise<void> => {
-    const confirmed = window.confirm(`Удалить тираж ${drawId}? Удаление разрешено только для пустого тестового тиража.`);
+    const confirmed = window.confirm(`Удалить тираж ${drawId}? Разрешено только для пустого тестового тиража.`);
     if (!confirmed) {
       return;
     }
@@ -180,7 +198,7 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
   };
 
   const handleClearQueue = async (): Promise<void> => {
-    const confirmed = window.confirm("Очистить текущую очередь и снять зависшие pending-заявки?");
+    const confirmed = window.confirm("Очистить очередь и снять зависшие pending-заявки?");
     if (!confirmed) {
       return;
     }
@@ -225,6 +243,7 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
 
   const openDraws = draws.filter((draw) => draw.status === "open");
   const closedDraws = draws.filter((draw) => draw.status === "closed");
+  const settledDraws = draws.filter((draw) => draw.status === "settled");
 
   return (
     <article className="panel">
@@ -320,46 +339,80 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
         </form>
       </details>
 
-      <h3>Открытые тиражи ({openDraws.length})</h3>
-      {openDraws.length === 0 ? (
-        <p className="muted">Открытых тиражей нет.</p>
-      ) : (
-        openDraws.map((draw) => (
-          <DrawSection
-            key={`${draw.lotteryCode}:${draw.drawId}`}
-            draw={draw}
-            onMark={handleMark}
-            onClose={handleClose}
-            onDelete={handleDelete}
-          />
-        ))
-      )}
+      <DrawGroup
+        title={`Открытые тиражи (${openDraws.length})`}
+        emptyText="Открытых тиражей нет."
+        draws={openDraws}
+        onMark={handleMark}
+        onClose={handleClose}
+        onSettle={handleSettle}
+        onDelete={handleDelete}
+      />
 
-      {closedDraws.length > 0 ? (
-        <>
-          <h3>Закрытые тиражи ({closedDraws.length})</h3>
-          {closedDraws.map((draw) => (
-            <DrawSection
-              key={`${draw.lotteryCode}:${draw.drawId}`}
-              draw={draw}
-              onMark={handleMark}
-              onClose={handleClose}
-              onDelete={handleDelete}
-            />
-          ))}
-        </>
+      <DrawGroup
+        title={`Закрытые, ждут settlement (${closedDraws.length})`}
+        emptyText="Закрытых тиражей без публикации нет."
+        draws={closedDraws}
+        onMark={handleMark}
+        onClose={handleClose}
+        onSettle={handleSettle}
+        onDelete={handleDelete}
+      />
+
+      {settledDraws.length > 0 ? (
+        <DrawGroup
+          title={`Опубликованные тиражи (${settledDraws.length})`}
+          emptyText=""
+          draws={settledDraws}
+          onMark={handleMark}
+          onClose={handleClose}
+          onSettle={handleSettle}
+          onDelete={handleDelete}
+        />
       ) : null}
     </article>
   );
 }
 
-function DrawSection(props: {
-  readonly draw: AdminDraw;
-  readonly onMark: (ticketId: string, mark: "win" | "lose") => Promise<void>;
-  readonly onClose: (lotteryCode: string, drawId: string) => Promise<void>;
+function DrawGroup(props: {
+  readonly title: string;
+  readonly emptyText: string;
+  readonly draws: readonly AdminDraw[];
+  readonly onMark: (requestId: string, mark: "win" | "lose") => Promise<void>;
+  readonly onClose: (lotteryCode: string, drawId: string, drawAt: string) => Promise<void>;
+  readonly onSettle: (lotteryCode: string, drawId: string) => Promise<void>;
   readonly onDelete: (lotteryCode: string, drawId: string) => Promise<void>;
 }): ReactElement {
-  const { draw, onMark, onClose, onDelete } = props;
+  return (
+    <>
+      <h3>{props.title}</h3>
+      {props.draws.length === 0 ? (
+        props.emptyText ? <p className="muted">{props.emptyText}</p> : <></>
+      ) : (
+        props.draws.map((draw) => (
+          <DrawSection
+            key={`${draw.lotteryCode}:${draw.drawId}`}
+            draw={draw}
+            onMark={props.onMark}
+            onClose={props.onClose}
+            onSettle={props.onSettle}
+            onDelete={props.onDelete}
+          />
+        ))
+      )}
+    </>
+  );
+}
+
+function DrawSection(props: {
+  readonly draw: AdminDraw;
+  readonly onMark: (requestId: string, mark: "win" | "lose") => Promise<void>;
+  readonly onClose: (lotteryCode: string, drawId: string, drawAt: string) => Promise<void>;
+  readonly onSettle: (lotteryCode: string, drawId: string) => Promise<void>;
+  readonly onDelete: (lotteryCode: string, drawId: string) => Promise<void>;
+}): ReactElement {
+  const { draw, onMark, onClose, onSettle, onDelete } = props;
+  const showRowActions = draw.status === "closed";
 
   return (
     <section
@@ -386,13 +439,12 @@ function DrawSection(props: {
           <p className="muted" style={{ margin: "0.35rem 0 0" }}>
             Тираж: {formatIso(draw.drawAt) ?? draw.drawAt}
             {draw.closedAt ? ` | Закрыт: ${formatIso(draw.closedAt)}` : ""}
+            {draw.settledAt ? ` | Settlement: ${formatIso(draw.settledAt)}` : ""}
           </p>
         </div>
 
         <div className="actions-row">
-          <span className={`badge ${draw.status === "closed" ? "success" : "warning"}`}>
-            {draw.status === "closed" ? "Закрыт" : "Открыт"}
-          </span>
+          <span className={`badge ${resolveDrawBadgeClass(draw.status)}`}>{formatDrawStatus(draw.status)}</span>
           <button
             type="button"
             onClick={() => {
@@ -406,10 +458,21 @@ function DrawSection(props: {
               type="button"
               className="btn-danger"
               onClick={() => {
-                void onClose(draw.lotteryCode, draw.drawId);
+                void onClose(draw.lotteryCode, draw.drawId, draw.drawAt);
               }}
             >
               Закрыть тираж
+            </button>
+          ) : null}
+          {draw.status === "closed" ? (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => {
+                void onSettle(draw.lotteryCode, draw.drawId);
+              }}
+            >
+              Опубликовать settlement
             </button>
           ) : null}
         </div>
@@ -429,9 +492,9 @@ function DrawSection(props: {
                 <th>Пользователь</th>
                 <th>Куплен</th>
                 <th>Проверка</th>
-                <th>Пометка до закрытия</th>
+                <th>Пометка</th>
                 <th>Итог</th>
-                {draw.status === "open" ? <th>Действие</th> : null}
+                {showRowActions ? <th>Действие</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -444,14 +507,14 @@ function DrawSection(props: {
                   <td>{formatVerificationStatus(ticket.verificationStatus)}</td>
                   <td>{formatAdminMark(ticket.adminResultMark)}</td>
                   <td>{formatTicketOutcome(ticket)}</td>
-                  {draw.status === "open" ? (
+                  {showRowActions ? (
                     <td>
                       <div className="actions-row">
                         <button
                           type="button"
                           className="btn-primary"
                           onClick={() => {
-                            void onMark(ticket.ticketId, "win");
+                            void onMark(ticket.requestId, "win");
                           }}
                         >
                           Выигрыш
@@ -459,7 +522,7 @@ function DrawSection(props: {
                         <button
                           type="button"
                           onClick={() => {
-                            void onMark(ticket.ticketId, "lose");
+                            void onMark(ticket.requestId, "lose");
                           }}
                         >
                           Проигрыш
@@ -475,6 +538,28 @@ function DrawSection(props: {
       )}
     </section>
   );
+}
+
+function formatDrawStatus(status: AdminDraw["status"]): string {
+  switch (status) {
+    case "open":
+      return "Открыт";
+    case "closed":
+      return "Закрыт";
+    case "settled":
+      return "Опубликован";
+  }
+}
+
+function resolveDrawBadgeClass(status: AdminDraw["status"]): string {
+  switch (status) {
+    case "open":
+      return "warning";
+    case "closed":
+      return "warning";
+    case "settled":
+      return "success";
+  }
 }
 
 function formatIso(value: string | null | undefined): string | null {
@@ -500,9 +585,9 @@ function formatIso(value: string | null | undefined): string | null {
 function formatVerificationStatus(status: AdminDrawTicket["verificationStatus"]): string {
   switch (status) {
     case "pending":
-      return "Ожидает закрытия";
+      return "Скрыт до settlement";
     case "verified":
-      return "Проверен";
+      return "Опубликован";
     case "failed":
       return "Ошибка проверки";
     default:
@@ -540,7 +625,7 @@ function formatTicketOutcome(ticket: AdminDrawTicket): string {
   }
 
   if (ticket.resultSource === "admin_emulated") {
-    return "Проигрыш по решению администратора";
+    return "Проигрыш по settlement";
   }
 
   return "Проигрыш";

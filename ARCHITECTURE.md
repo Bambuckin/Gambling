@@ -37,12 +37,15 @@ Detailed ownership and import constraints live in `docs/modules/boundary-catalog
 
 ## Truth Model During Migration
 
-Phases 18-19 introduce an additive canonical truth layer without cutting over the live Big 8 contour:
+Phases 18-21 introduce an additive canonical truth layer without cutting over the live Big 8 contour all at once:
 
 - Canonical write models are `purchase`, `draw`, and durable `purchase_attempt`.
 - Canonical `purchase` separates execution lifecycle, result state, and result visibility.
 - Canonical `draw` uses explicit `open -> closed -> settled` lifecycle instead of closure-only semantics.
+- Phase 20 makes canonical purchase and purchase-attempt state primary for submit and worker execution.
+- Phase 21 makes canonical draw settlement primary for published result visibility in the current admin and user contours.
 - Current request, ticket, and admin query services project canonical purchase/attempt truth when it exists, while preserving the legacy read shapes expected by the web surface.
+- Current ticket and admin result reads now project canonical result visibility onto legacy ticket rows, and legacy verification jobs are skipped for canonical-managed draws.
 - Test reset clears both legacy and canonical runtime stores so local startup remains safe against the additive schema.
 - Legacy `purchase_request`, `ticket`, `ticket_verification_job`, `draw_closure`, and TTL execution lock remain in place as compatibility surfaces until later phases.
 - Postgres groundwork for canonical tables is additive-only in this phase; no legacy write model is deleted or renamed.
@@ -64,11 +67,14 @@ During Phases 18-19, runtime execution still flows through the legacy request an
 
 ### Ticket Verification And Winnings Flow
 
-1. Pending verified tickets are queued by `TicketVerificationQueueService`.
-2. Worker resolves result handler and executes deterministic verify call.
-3. Result is normalized by `TicketVerificationResultService`.
-4. Winning credit is applied through `WalletLedgerService.creditWinnings`.
-5. Ticket/result and audit projections become visible in user/admin surfaces.
+1. Canonical draw settlement publishes visible win/lose result state through `DrawClosureService` and `TicketQueryService` projections.
+2. Pending verified tickets are still queued by `TicketVerificationQueueService` only for the remaining legacy compatibility contour.
+3. Worker resolves result handler and executes deterministic verify call when a legacy verification job still exists.
+4. Result is normalized by `TicketVerificationResultService`.
+5. Winning credit is applied through `WalletLedgerService.creditWinnings`.
+6. Ticket/result and audit projections become visible in user/admin surfaces.
+
+Winning fulfillment still follows the legacy credit/claim contour until Phase 22 rebases money-side effects onto canonical purchase/draw result truth.
 
 ## Documentation Anchors
 

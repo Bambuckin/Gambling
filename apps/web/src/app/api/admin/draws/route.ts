@@ -23,8 +23,9 @@ type AdminDrawRow = {
   readonly drawId: string;
   readonly drawAt: string;
   readonly fetchedAt: string;
-  readonly status: "open" | "closed";
+  readonly status: "open" | "closed" | "settled";
   readonly closedAt: string | null;
+  readonly settledAt: string | null;
   readonly tickets: readonly AdminTicketRow[];
 };
 
@@ -34,10 +35,11 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const [snapshots, allTickets, closures] = await Promise.all([
+  const [snapshots, allTickets, closures, canonicalDraws] = await Promise.all([
     getDrawRefreshService().listSnapshots(),
     getTicketQueryService().listAllTickets(),
-    getDrawClosureService().listDrawClosures()
+    getDrawClosureService().listDrawClosures(),
+    getDrawClosureService().listDraws()
   ]);
 
   const ticketMap = new Map<string, AdminTicketRow[]>();
@@ -52,11 +54,16 @@ export async function GET(): Promise<NextResponse> {
   for (const closure of closures) {
     closureMap.set(`${closure.lotteryCode}:${closure.drawId}`, closure);
   }
+  const canonicalDrawMap = new Map<string, (typeof canonicalDraws)[number]>();
+  for (const draw of canonicalDraws) {
+    canonicalDrawMap.set(`${draw.lotteryCode}:${draw.drawId}`, draw);
+  }
   const drawRows = new Map<string, AdminDrawRow>();
 
   for (const snapshot of snapshots) {
     for (const draw of listSnapshotDrawOptions(snapshot)) {
       const key = `${snapshot.lotteryCode}:${draw.drawId}`;
+      const canonicalDraw = canonicalDrawMap.get(key);
       const closure = closureMap.get(key);
 
       drawRows.set(key, {
@@ -64,11 +71,30 @@ export async function GET(): Promise<NextResponse> {
         drawId: draw.drawId,
         drawAt: draw.drawAt,
         fetchedAt: snapshot.fetchedAt,
-        status: closure?.status ?? "open",
-        closedAt: closure?.closedAt ?? null,
+        status: canonicalDraw?.status ?? closure?.status ?? "open",
+        closedAt: canonicalDraw?.closedAt ?? closure?.closedAt ?? null,
+        settledAt: canonicalDraw?.settledAt ?? null,
         tickets: ticketMap.get(key) ?? []
       });
     }
+  }
+
+  for (const canonicalDraw of canonicalDraws) {
+    const key = `${canonicalDraw.lotteryCode}:${canonicalDraw.drawId}`;
+    if (drawRows.has(key)) {
+      continue;
+    }
+
+    drawRows.set(key, {
+      lotteryCode: canonicalDraw.lotteryCode,
+      drawId: canonicalDraw.drawId,
+      drawAt: canonicalDraw.drawAt,
+      fetchedAt: canonicalDraw.openedAt,
+      status: canonicalDraw.status,
+      closedAt: canonicalDraw.closedAt,
+      settledAt: canonicalDraw.settledAt,
+      tickets: ticketMap.get(key) ?? []
+    });
   }
 
   const draws = [...drawRows.values()].sort(compareAdminDrawRows);
@@ -116,6 +142,11 @@ export async function POST(request: Request): Promise<NextResponse> {
         }
       ]
     });
+    await getDrawClosureService().createDraw({
+      lotteryCode,
+      drawId,
+      drawAt
+    });
 
     return NextResponse.json({ ok: true, lotteryCode, drawId });
   } catch (error) {
@@ -140,7 +171,7 @@ function mapTicketRow(ticket: Awaited<ReturnType<ReturnType<typeof getTicketQuer
 
 function compareAdminDrawRows(left: AdminDrawRow, right: AdminDrawRow): number {
   if (left.status !== right.status) {
-    return left.status === "open" ? -1 : 1;
+    return rankDrawStatus(left.status) - rankDrawStatus(right.status);
   }
 
   const timeDiff = Date.parse(left.drawAt) - Date.parse(right.drawAt);
@@ -154,6 +185,17 @@ function compareAdminDrawRows(left: AdminDrawRow, right: AdminDrawRow): number {
   }
 
   return left.drawId.localeCompare(right.drawId);
+}
+
+function rankDrawStatus(status: AdminDrawRow["status"]): number {
+  switch (status) {
+    case "open":
+      return 0;
+    case "closed":
+      return 1;
+    case "settled":
+      return 2;
+  }
 }
 
 function buildManualDrawLabel(drawId: string, drawAt: string): string {

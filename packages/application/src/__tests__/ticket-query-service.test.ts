@@ -129,6 +129,90 @@ describe("TicketQueryService", () => {
       })
     ]);
   });
+
+  it("hides legacy verified result until canonical settlement is published", async () => {
+    const legacyVerified = applyTicketVerificationOutcome(
+      createPurchasedTicketRecord({
+        ticketId: "req-996:ticket",
+        requestId: "req-996",
+        userId: "seed-user",
+        lotteryCode: "demo-lottery",
+        drawId: "draw-996",
+        purchasedAt: "2026-04-06T02:00:00.000Z",
+        externalReference: "ext-996"
+      }),
+      {
+        verificationStatus: "verified",
+        verificationEventId: "req-996:verify:1",
+        verifiedAt: "2026-04-06T02:10:00.000Z",
+        rawTerminalOutput: "[result] win",
+        winningAmountMinor: 500
+      }
+    );
+    const service = new TicketQueryService({
+      ticketStore: new InMemoryTicketStore([legacyVerified]),
+      canonicalPurchaseStore: new InMemoryCanonicalPurchaseStore([
+        createCanonicalHiddenResultRecord({
+          purchaseId: "purchase-996",
+          legacyRequestId: "req-996",
+          userId: "seed-user",
+          drawId: "draw-996",
+          resultStatus: "win"
+        })
+      ])
+    });
+
+    const tickets = await service.listAllTickets();
+
+    expect(tickets).toEqual([
+      expect.objectContaining({
+        ticketId: "req-996:ticket",
+        verificationStatus: "pending",
+        adminResultMark: "win",
+        winningAmountMinor: null,
+        verifiedAt: null,
+        resultSource: null
+      })
+    ]);
+  });
+
+  it("overlays canonical published result on top of legacy pending ticket", async () => {
+    const legacyPending = createPurchasedTicketRecord({
+      ticketId: "req-997:ticket",
+      requestId: "req-997",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-997",
+      purchasedAt: "2026-04-06T02:00:00.000Z",
+      externalReference: "ext-997"
+    });
+    const service = new TicketQueryService({
+      ticketStore: new InMemoryTicketStore([legacyPending]),
+      canonicalPurchaseStore: new InMemoryCanonicalPurchaseStore([
+        createCanonicalVisibleResultRecord({
+          purchaseId: "purchase-997",
+          legacyRequestId: "req-997",
+          userId: "seed-user",
+          drawId: "draw-997",
+          resultStatus: "lose",
+          settledAt: "2026-04-06T02:20:00.000Z"
+        })
+      ])
+    });
+
+    const tickets = await service.listAllTickets();
+
+    expect(tickets).toEqual([
+      expect.objectContaining({
+        ticketId: "req-997:ticket",
+        verificationStatus: "verified",
+        adminResultMark: "lose",
+        winningAmountMinor: 0,
+        verifiedAt: "2026-04-06T02:20:00.000Z",
+        resultSource: "admin_emulated"
+      })
+    ]);
+  });
 });
 
 function createCanonicalPurchasedRecord(input: {
@@ -199,6 +283,62 @@ function createCanonicalSettledRecord(input: {
   });
 
   return setCanonicalPurchaseResultVisibility(resolved, {
+    eventId: `${input.purchaseId}:visible`,
+    occurredAt: input.settledAt,
+    resultVisibility: "visible"
+  });
+}
+
+function createCanonicalHiddenResultRecord(input: {
+  readonly purchaseId: string;
+  readonly legacyRequestId: string;
+  readonly userId: string;
+  readonly drawId: string;
+  readonly resultStatus: "win" | "lose";
+}): CanonicalPurchaseRecord {
+  const purchased = createCanonicalPurchasedRecord({
+    purchaseId: input.purchaseId,
+    legacyRequestId: input.legacyRequestId,
+    userId: input.userId,
+    purchasedAt: "2026-04-06T02:15:00.000Z"
+  });
+  const awaitingDrawClose = appendCanonicalPurchaseTransition(
+    {
+      ...purchased,
+      snapshot: {
+        ...purchased.snapshot,
+        drawId: input.drawId
+      }
+    },
+    "awaiting_draw_close",
+    {
+      eventId: `${input.purchaseId}:awaiting-draw-close`,
+      occurredAt: "2026-04-06T02:16:00.000Z"
+    }
+  );
+
+  return applyCanonicalPurchaseResult(awaitingDrawClose, {
+    eventId: `${input.purchaseId}:result`,
+    occurredAt: "2026-04-06T02:17:00.000Z",
+    resultStatus: input.resultStatus
+  });
+}
+
+function createCanonicalVisibleResultRecord(input: {
+  readonly purchaseId: string;
+  readonly legacyRequestId: string;
+  readonly userId: string;
+  readonly drawId: string;
+  readonly resultStatus: "win" | "lose";
+  readonly settledAt: string;
+}): CanonicalPurchaseRecord {
+  const hidden = createCanonicalHiddenResultRecord(input);
+  const settled = appendCanonicalPurchaseTransition(hidden, "settled", {
+    eventId: `${input.purchaseId}:settled`,
+    occurredAt: input.settledAt
+  });
+
+  return setCanonicalPurchaseResultVisibility(settled, {
     eventId: `${input.purchaseId}:visible`,
     occurredAt: input.settledAt,
     resultVisibility: "visible"

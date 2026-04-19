@@ -7,6 +7,7 @@ import {
   reserveTicketVerificationJob,
   type TicketVerificationJob
 } from "@lottery/domain";
+import type { CanonicalDrawStore } from "../ports/canonical-draw-store.js";
 import type { DrawClosureStore } from "../ports/draw-closure-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
 import type { TicketVerificationJobStore } from "../ports/ticket-verification-job-store.js";
@@ -16,6 +17,7 @@ export interface TicketVerificationQueueServiceDependencies {
   readonly ticketStore: TicketStore;
   readonly jobStore: TicketVerificationJobStore;
   readonly drawClosureStore: DrawClosureStore;
+  readonly canonicalDrawStore?: CanonicalDrawStore;
   readonly timeSource: TimeSource;
 }
 
@@ -33,22 +35,33 @@ export class TicketVerificationQueueService {
   private readonly ticketStore: TicketStore;
   private readonly jobStore: TicketVerificationJobStore;
   private readonly drawClosureStore: DrawClosureStore;
+  private readonly canonicalDrawStore: CanonicalDrawStore | null;
   private readonly timeSource: TimeSource;
 
   constructor(dependencies: TicketVerificationQueueServiceDependencies) {
     this.ticketStore = dependencies.ticketStore;
     this.jobStore = dependencies.jobStore;
     this.drawClosureStore = dependencies.drawClosureStore;
+    this.canonicalDrawStore = dependencies.canonicalDrawStore ?? null;
     this.timeSource = dependencies.timeSource;
   }
 
   async enqueuePendingVerificationTickets(): Promise<EnqueuePendingVerificationTicketsResult> {
-    const tickets = await this.ticketStore.listTickets();
+    const [tickets, canonicalDraws] = await Promise.all([
+      this.ticketStore.listTickets(),
+      this.canonicalDrawStore?.listDraws() ?? Promise.resolve([])
+    ]);
+    const canonicalDrawKeys = new Set(canonicalDraws.map((draw) => `${draw.lotteryCode}:${draw.drawId}`));
     const pendingTickets = tickets.filter((ticket) => isTicketPendingVerification(ticket));
     let enqueuedCount = 0;
     let skippedCount = 0;
 
     for (const ticket of pendingTickets) {
+      if (canonicalDrawKeys.has(`${ticket.lotteryCode}:${ticket.drawId}`)) {
+        skippedCount += 1;
+        continue;
+      }
+
       const drawClosure = await this.drawClosureStore.getClosure(ticket.lotteryCode, ticket.drawId);
       if (!isDrawClosed(drawClosure)) {
         continue;

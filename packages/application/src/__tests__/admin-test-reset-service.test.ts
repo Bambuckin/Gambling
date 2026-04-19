@@ -349,6 +349,10 @@ class MemoryCanonicalDrawStore implements CanonicalDrawStore {
     ];
   }
 
+  async deleteDraw(lotteryCode: string, drawId: string): Promise<void> {
+    this.records = this.records.filter((entry) => !(entry.lotteryCode === lotteryCode && entry.drawId === drawId));
+  }
+
   async clearAll(): Promise<void> {
     this.records = [];
   }

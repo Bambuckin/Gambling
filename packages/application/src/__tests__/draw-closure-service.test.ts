@@ -1,5 +1,17 @@
-import { createPurchasedTicketRecord, type DrawClosureRecord, type NotificationRecord, type TicketRecord } from "@lottery/domain";
+import {
+  appendCanonicalPurchaseTransition,
+  createOpenCanonicalDraw,
+  createPurchasedTicketRecord,
+  createSubmittedCanonicalPurchase,
+  type CanonicalDrawRecord,
+  type CanonicalPurchaseRecord,
+  type DrawClosureRecord,
+  type NotificationRecord,
+  type TicketRecord
+} from "@lottery/domain";
 import { describe, expect, it } from "vitest";
+import type { CanonicalDrawStore } from "../ports/canonical-draw-store.js";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { DrawClosureStore } from "../ports/draw-closure-store.js";
 import type { NotificationStore } from "../ports/notification-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
@@ -7,146 +19,327 @@ import type { TimeSource } from "../ports/time-source.js";
 import { DrawClosureService } from "../services/draw-closure-service.js";
 
 describe("DrawClosureService", () => {
-  it("creates an explicit losing notification when the draw closes", async () => {
+  it("creates and closes canonical draw without publishing results", async () => {
+    const service = createService();
+
+    const created = await service.createDraw({
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-100",
+      drawAt: "2026-04-20T10:00:00.000Z"
+    });
+    const closed = await service.closeDraw({
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-100",
+      drawAt: "2026-04-20T10:00:00.000Z",
+      closedBy: "admin-1"
+    });
+
+    expect(created.alreadyExists).toBe(false);
+    expect(closed.alreadyClosed).toBe(false);
+    expect(closed.draw).toMatchObject({
+      status: "closed",
+      resultVisibility: "hidden",
+      closedBy: "admin-1",
+      settledAt: null
+    });
+  });
+
+  it("marks canonical result and settles draw into published compatibility outcome", async () => {
+    const canonicalPurchaseStore = new StubCanonicalPurchaseStore([
+      createAwaitingDrawClosePurchase({
+        requestId: "req-200",
+        drawId: "draw-200"
+      })
+    ]);
     const ticketStore = new StubTicketStore([
       createPurchasedTicketRecord({
-        ticketId: "ticket-lose",
-        requestId: "req-lose",
+        ticketId: "ticket-200",
+        requestId: "req-200",
         userId: "seed-user",
         lotteryCode: "bolshaya-8",
-        drawId: "draw-lose",
+        drawId: "draw-200",
         purchasedAt: "2026-04-18T10:00:00.000Z",
-        externalReference: "ext-lose"
+        externalReference: "ext-200"
       })
     ]);
     const notificationStore = new StubNotificationStore();
-    const service = new DrawClosureService({
+    const service = createService({
+      canonicalPurchaseStore,
       ticketStore,
-      drawClosureStore: new StubDrawClosureStore(),
-      notificationStore,
-      timeSource: new StubTimeSource()
+      notificationStore
     });
 
-    const result = await service.closeDraw({
+    await service.createDraw({
       lotteryCode: "bolshaya-8",
-      drawId: "draw-lose",
+      drawId: "draw-200",
+      drawAt: "2026-04-20T10:00:00.000Z"
+    });
+    await service.closeDraw({
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-200",
+      drawAt: "2026-04-20T10:00:00.000Z",
       closedBy: "admin-1"
     });
-
-    expect(result.alreadyClosed).toBe(false);
-    expect(result.notifications).toHaveLength(1);
-    expect(result.notifications[0]).toMatchObject({
-      type: "draw_closed_result_ready",
-      title: "Тираж закрыт: билет не выиграл",
-      body: "Тираж draw-lose закрыт. Билет ticket-lose не выиграл."
+    await service.markTicketResult({
+      requestId: "req-200",
+      mark: "win",
+      markedBy: "admin-1"
     });
+
+    const settled = await service.settleDraw({
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-200",
+      settledBy: "admin-1"
+    });
+
+    expect(settled.alreadySettled).toBe(false);
+    expect(settled.draw).toMatchObject({
+      status: "settled",
+      resultVisibility: "visible",
+      settledBy: "admin-1"
+    });
+    await expect(canonicalPurchaseStore.getPurchaseByLegacyRequestId("req-200")).resolves.toMatchObject({
+      status: "settled",
+      resultStatus: "win",
+      resultVisibility: "visible"
+    });
+    await expect(ticketStore.getTicketByRequestId("req-200")).resolves.toMatchObject({
+      verificationStatus: "verified",
+      winningAmountMinor: 50_000,
+      resultSource: "admin_emulated",
+      adminResultMark: "win"
+    });
+    expect(settled.notifications).toHaveLength(2);
+    expect((await notificationStore.listUserNotifications("seed-user")).length).toBe(2);
   });
 
-  it("creates explicit win notification and winning actions notification for winners", async () => {
-    const ticketStore = new StubTicketStore([
-      {
-        ...createPurchasedTicketRecord({
-          ticketId: "ticket-win",
-          requestId: "req-win",
-          userId: "seed-user",
-          lotteryCode: "bolshaya-8",
-          drawId: "draw-win",
-          purchasedAt: "2026-04-18T10:00:00.000Z",
-          externalReference: "ext-win"
-        }),
-        adminResultMark: "win"
-      }
-    ]);
-    const notificationStore = new StubNotificationStore();
-    const service = new DrawClosureService({
-      ticketStore,
-      drawClosureStore: new StubDrawClosureStore(),
-      notificationStore,
-      timeSource: new StubTimeSource()
+  it("rejects settlement while canonical purchases are still unmarked", async () => {
+    const service = createService({
+      canonicalPurchaseStore: new StubCanonicalPurchaseStore([
+        createAwaitingDrawClosePurchase({
+          requestId: "req-300",
+          drawId: "draw-300"
+        })
+      ])
     });
 
-    const result = await service.closeDraw({
+    await service.createDraw({
       lotteryCode: "bolshaya-8",
-      drawId: "draw-win",
+      drawId: "draw-300",
+      drawAt: "2026-04-20T10:00:00.000Z"
+    });
+    await service.closeDraw({
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-300",
+      drawAt: "2026-04-20T10:00:00.000Z",
       closedBy: "admin-1"
     });
 
-    expect(result.notifications).toHaveLength(2);
-    expect(result.notifications[0]).toMatchObject({
-      type: "draw_closed_result_ready",
-      title: "Тираж закрыт: билет выиграл",
-      body: "Тираж draw-win закрыт. Билет ticket-win выиграл 500.00 RUB."
-    });
-    expect(result.notifications[1]).toMatchObject({
-      type: "winning_actions_available",
-      title: "Выигрыш доступен",
-      body: "Ваш билет выиграл. Сумма: 500.00 RUB. Выберите способ получения."
-    });
+    await expect(
+      service.settleDraw({
+        lotteryCode: "bolshaya-8",
+        drawId: "draw-300",
+        settledBy: "admin-1"
+      })
+    ).rejects.toThrow(/must be marked win\/lose before settlement/i);
   });
 });
 
+function createService(input?: {
+  readonly canonicalDrawStore?: CanonicalDrawStore;
+  readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
+  readonly ticketStore?: TicketStore;
+  readonly drawClosureStore?: DrawClosureStore;
+  readonly notificationStore?: NotificationStore;
+}): DrawClosureService {
+  return new DrawClosureService({
+    ticketStore: input?.ticketStore ?? new StubTicketStore(),
+    canonicalDrawStore: input?.canonicalDrawStore ?? new StubCanonicalDrawStore(),
+    canonicalPurchaseStore: input?.canonicalPurchaseStore ?? new StubCanonicalPurchaseStore(),
+    drawClosureStore: input?.drawClosureStore ?? new StubDrawClosureStore(),
+    notificationStore: input?.notificationStore ?? new StubNotificationStore(),
+    timeSource: new StubTimeSource()
+  });
+}
+
+function createAwaitingDrawClosePurchase(input: {
+  readonly requestId: string;
+  readonly drawId: string;
+}): CanonicalPurchaseRecord {
+  return appendCanonicalPurchaseTransition(
+    appendCanonicalPurchaseTransition(
+      appendCanonicalPurchaseTransition(
+        appendCanonicalPurchaseTransition(
+          createSubmittedCanonicalPurchase({
+            purchaseId: input.requestId,
+            legacyRequestId: input.requestId,
+            userId: "seed-user",
+            lotteryCode: "bolshaya-8",
+            drawId: input.drawId,
+            payload: { draw_count: 1 },
+            costMinor: 10_000,
+            currency: "RUB",
+            submittedAt: "2026-04-18T09:55:00.000Z"
+          }),
+          "queued",
+          {
+            eventId: `${input.requestId}:queued`,
+            occurredAt: "2026-04-18T09:56:00.000Z"
+          }
+        ),
+        "processing",
+        {
+          eventId: `${input.requestId}:processing`,
+          occurredAt: "2026-04-18T09:57:00.000Z"
+        }
+      ),
+      "purchased",
+      {
+        eventId: `${input.requestId}:purchased`,
+        occurredAt: "2026-04-18T09:58:00.000Z",
+        externalTicketReference: `ext-${input.requestId}`
+      }
+    ),
+    "awaiting_draw_close",
+    {
+      eventId: `${input.requestId}:awaiting_draw_close`,
+      occurredAt: "2026-04-18T10:00:00.000Z"
+    }
+  );
+}
+
 class StubTimeSource implements TimeSource {
   nowIso(): string {
-    return "2026-04-18T12:00:00.000Z";
+    return "2026-04-20T12:00:00.000Z";
   }
 }
 
 class StubTicketStore implements TicketStore {
-  private readonly tickets = new Map<string, TicketRecord>();
+  private tickets: TicketRecord[];
 
-  constructor(initialTickets: readonly TicketRecord[]) {
-    for (const ticket of initialTickets) {
-      this.tickets.set(ticket.ticketId, { ...ticket });
-    }
+  constructor(initialTickets: readonly TicketRecord[] = []) {
+    this.tickets = initialTickets.map((ticket) => ({ ...ticket }));
   }
 
   async listTickets(): Promise<readonly TicketRecord[]> {
-    return [...this.tickets.values()].map((ticket) => ({ ...ticket }));
+    return this.tickets.map((ticket) => ({ ...ticket }));
   }
 
   async getTicketById(ticketId: string): Promise<TicketRecord | null> {
-    const ticket = this.tickets.get(ticketId) ?? null;
+    const ticket = this.tickets.find((entry) => entry.ticketId === ticketId) ?? null;
     return ticket ? { ...ticket } : null;
   }
 
   async getTicketByRequestId(requestId: string): Promise<TicketRecord | null> {
-    const ticket = [...this.tickets.values()].find((entry) => entry.requestId === requestId) ?? null;
+    const ticket = this.tickets.find((entry) => entry.requestId === requestId) ?? null;
     return ticket ? { ...ticket } : null;
   }
 
   async saveTicket(ticket: TicketRecord): Promise<void> {
-    this.tickets.set(ticket.ticketId, { ...ticket });
+    const filtered = this.tickets.filter((entry) => entry.ticketId !== ticket.ticketId);
+    this.tickets = [...filtered, { ...ticket }];
   }
 
   async clearAll(): Promise<void> {}
 }
 
+class StubCanonicalDrawStore implements CanonicalDrawStore {
+  private draws: CanonicalDrawRecord[];
+
+  constructor(initialDraws: readonly CanonicalDrawRecord[] = []) {
+    this.draws = initialDraws.map((draw) => ({ ...draw }));
+  }
+
+  async listDraws(lotteryCode?: string): Promise<readonly CanonicalDrawRecord[]> {
+    return this.draws
+      .filter((draw) => !lotteryCode || draw.lotteryCode === lotteryCode)
+      .map((draw) => ({ ...draw }));
+  }
+
+  async getDraw(lotteryCode: string, drawId: string): Promise<CanonicalDrawRecord | null> {
+    const draw = this.draws.find((entry) => entry.lotteryCode === lotteryCode && entry.drawId === drawId) ?? null;
+    return draw ? { ...draw } : null;
+  }
+
+  async saveDraw(record: CanonicalDrawRecord): Promise<void> {
+    const filtered = this.draws.filter(
+      (entry) => !(entry.lotteryCode === record.lotteryCode && entry.drawId === record.drawId)
+    );
+    this.draws = [...filtered, { ...record }];
+  }
+
+  async deleteDraw(lotteryCode: string, drawId: string): Promise<void> {
+    this.draws = this.draws.filter((entry) => !(entry.lotteryCode === lotteryCode && entry.drawId === drawId));
+  }
+
+  async clearAll(): Promise<void> {
+    this.draws = [];
+  }
+}
+
+class StubCanonicalPurchaseStore implements CanonicalPurchaseStore {
+  private purchases: CanonicalPurchaseRecord[];
+
+  constructor(initialPurchases: readonly CanonicalPurchaseRecord[] = []) {
+    this.purchases = initialPurchases.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async listPurchases(): Promise<readonly CanonicalPurchaseRecord[]> {
+    return this.purchases.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async getPurchaseById(purchaseId: string): Promise<CanonicalPurchaseRecord | null> {
+    const purchase = this.purchases.find((entry) => entry.snapshot.purchaseId === purchaseId) ?? null;
+    return purchase ? cloneCanonicalPurchaseRecord(purchase) : null;
+  }
+
+  async getPurchaseByLegacyRequestId(legacyRequestId: string): Promise<CanonicalPurchaseRecord | null> {
+    const purchase = this.purchases.find((entry) => entry.snapshot.legacyRequestId === legacyRequestId) ?? null;
+    return purchase ? cloneCanonicalPurchaseRecord(purchase) : null;
+  }
+
+  async savePurchase(record: CanonicalPurchaseRecord): Promise<void> {
+    const filtered = this.purchases.filter((entry) => entry.snapshot.purchaseId !== record.snapshot.purchaseId);
+    this.purchases = [...filtered, cloneCanonicalPurchaseRecord(record)];
+  }
+
+  async clearAll(): Promise<void> {
+    this.purchases = [];
+  }
+}
+
 class StubDrawClosureStore implements DrawClosureStore {
-  private readonly closures = new Map<string, DrawClosureRecord>();
+  private closures: DrawClosureRecord[] = [];
 
   async getClosure(lotteryCode: string, drawId: string): Promise<DrawClosureRecord | null> {
-    const closure = this.closures.get(`${lotteryCode}:${drawId}`) ?? null;
+    const closure = this.closures.find((entry) => entry.lotteryCode === lotteryCode && entry.drawId === drawId) ?? null;
     return closure ? { ...closure } : null;
   }
 
   async saveClosure(record: DrawClosureRecord): Promise<void> {
-    this.closures.set(`${record.lotteryCode}:${record.drawId}`, { ...record });
+    const filtered = this.closures.filter(
+      (entry) => !(entry.lotteryCode === record.lotteryCode && entry.drawId === record.drawId)
+    );
+    this.closures = [...filtered, { ...record }];
   }
 
   async listClosures(lotteryCode?: string): Promise<readonly DrawClosureRecord[]> {
-    const closures = [...this.closures.values()].map((record) => ({ ...record }));
-    return lotteryCode ? closures.filter((record) => record.lotteryCode === lotteryCode) : closures;
+    return this.closures
+      .filter((closure) => !lotteryCode || closure.lotteryCode === lotteryCode)
+      .map((closure) => ({ ...closure }));
   }
 
   async deleteClosure(lotteryCode: string, drawId: string): Promise<void> {
-    this.closures.delete(`${lotteryCode}:${drawId}`);
+    this.closures = this.closures.filter((entry) => !(entry.lotteryCode === lotteryCode && entry.drawId === drawId));
   }
 
-  async clearAll(): Promise<void> {}
+  async clearAll(): Promise<void> {
+    this.closures = [];
+  }
 }
 
 class StubNotificationStore implements NotificationStore {
-  private readonly notifications: NotificationRecord[] = [];
+  private notifications: NotificationRecord[] = [];
 
   async saveNotification(notification: NotificationRecord): Promise<void> {
     this.notifications.push({ ...notification });
@@ -164,19 +357,30 @@ class StubNotificationStore implements NotificationStore {
   async markNotificationRead(notificationId: string): Promise<void> {
     const index = this.notifications.findIndex((entry) => entry.notificationId === notificationId);
     if (index >= 0) {
-      const current = this.notifications[index];
-      if (!current) {
-        return;
-      }
-
       this.notifications[index] = {
-        ...current,
+        ...this.notifications[index]!,
         read: true
       };
     }
   }
 
   async clearAll(): Promise<void> {
-    this.notifications.length = 0;
+    this.notifications = [];
   }
+}
+
+function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): CanonicalPurchaseRecord {
+  return {
+    snapshot: {
+      ...record.snapshot,
+      payload: { ...record.snapshot.payload }
+    },
+    status: record.status,
+    resultStatus: record.resultStatus,
+    resultVisibility: record.resultVisibility,
+    purchasedAt: record.purchasedAt,
+    settledAt: record.settledAt,
+    externalTicketReference: record.externalTicketReference,
+    journal: record.journal.map((entry) => ({ ...entry }))
+  };
 }

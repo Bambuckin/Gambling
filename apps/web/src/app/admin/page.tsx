@@ -177,6 +177,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps): Promi
       <AdminDrawMonitor
         onMarkTicket={adminMarkTicketAction}
         onCloseDraw={adminCloseDrawAction}
+        onSettleDraw={adminSettleDrawAction}
         onDeleteDraw={adminDeleteDrawAction}
         onClearQueue={adminClearQueueAction}
         onResetAll={adminResetAllAction}
@@ -192,24 +193,25 @@ async function logoutFromAdminAction(): Promise<void> {
   redirect("/login");
 }
 
-async function adminMarkTicketAction(ticketId: string, mark: "win" | "lose"): Promise<void> {
+async function adminMarkTicketAction(requestId: string, mark: "win" | "lose"): Promise<void> {
   "use server";
 
   const access = await requireAdminAccess("/admin");
   await getDrawClosureService().markTicketResult({
-    ticketId,
+    requestId,
     mark,
     markedBy: access.identity.identityId
   });
 }
 
-async function adminCloseDrawAction(lotteryCode: string, drawId: string): Promise<void> {
+async function adminCloseDrawAction(lotteryCode: string, drawId: string, drawAt: string): Promise<void> {
   "use server";
 
   const access = await requireAdminAccess("/admin");
   const result = await getDrawClosureService().closeDraw({
     lotteryCode,
     drawId,
+    drawAt,
     closedBy: access.identity.identityId
   });
 
@@ -218,15 +220,30 @@ async function adminCloseDrawAction(lotteryCode: string, drawId: string): Promis
   }
 }
 
+async function adminSettleDrawAction(lotteryCode: string, drawId: string): Promise<void> {
+  "use server";
+
+  const access = await requireAdminAccess("/admin");
+  const result = await getDrawClosureService().settleDraw({
+    lotteryCode,
+    drawId,
+    settledBy: access.identity.identityId
+  });
+
+  if (result.alreadySettled) {
+    throw new Error(`Тираж ${drawId} уже опубликован.`);
+  }
+}
+
 async function adminDeleteDrawAction(lotteryCode: string, drawId: string): Promise<string> {
   "use server";
 
   await requireAdminAccess("/admin");
 
-  const [tickets, requests, closure] = await Promise.all([
+  const [tickets, requests, draw] = await Promise.all([
     getTicketQueryService().listAllTickets(),
     getPurchaseRuntimeStores().requestStore.listRequests(),
-    getDrawClosureService().getDrawClosure(lotteryCode, drawId)
+    getDrawClosureService().getDraw(lotteryCode, drawId)
   ]);
 
   if (tickets.some((ticket) => ticket.lotteryCode === lotteryCode && ticket.drawId === drawId)) {
@@ -248,7 +265,7 @@ async function adminDeleteDrawAction(lotteryCode: string, drawId: string): Promi
   const removed = await getDrawRefreshService().removeDraw(lotteryCode, drawId);
   await getDrawClosureService().deleteDraw(lotteryCode, drawId);
 
-  if (!removed && !closure) {
+  if (!removed && !draw) {
     throw new Error(`Тираж ${drawId} не найден.`);
   }
 

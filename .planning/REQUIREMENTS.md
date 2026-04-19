@@ -121,7 +121,7 @@
 
 - [x] **CONS-04**: Migration to canonical purchase/draw storage is additive first and keeps current cashier, admin, and user flows working through compatibility read models or projections.
 - [x] **CONS-05**: Purchase submission and worker execution become idempotent and replay-safe around the canonical purchase aggregate.
-- [ ] **CONS-06**: Admin draw actions split into explicit create, close, mark-result, and settle operations, with audit trail and result visibility controlled by settlement.
+- [x] **CONS-06**: Admin draw actions split into explicit create, close, mark-result, and settle operations, with audit trail and result visibility controlled by settlement.
 
 ### Fulfillment and Operations
 
@@ -199,7 +199,7 @@
 | CONS-03 | Phase 18 | Complete |
 | CONS-04 | Phase 19 | Complete |
 | CONS-05 | Phase 20 | Complete |
-| CONS-06 | Phase 21 | Planned |
+| CONS-06 | Phase 21 | Complete |
 | CONS-07 | Phase 22 | Planned |
 | CONS-08 | Phase 23 | Planned |
 | CONS-09 | Phase 24 | Planned |
@@ -215,4 +215,4 @@
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-19 after completing Phase 19*
+*Last updated: 2026-04-19 after completing Phase 21*

@@ -1,4 +1,8 @@
-import type { CanonicalPurchaseRecord, TicketRecord } from "@lottery/domain";
+import {
+  ADMIN_EMULATED_WIN_AMOUNT_MINOR,
+  type CanonicalPurchaseRecord,
+  type TicketRecord
+} from "@lottery/domain";
 import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
 import { mapCanonicalPurchaseStatusToRequestState } from "./canonical-compatibility.js";
@@ -44,9 +48,12 @@ export class TicketQueryService {
       this.canonicalPurchaseStore?.listPurchases() ?? Promise.resolve([])
     ]);
     const ticketRequestIds = new Set(tickets.map((ticket) => ticket.requestId));
+    const canonicalByRequestId = new Map(
+      canonicalPurchases.map((purchase) => [purchase.snapshot.legacyRequestId ?? purchase.snapshot.purchaseId, purchase] as const)
+    );
     return tickets
       .filter((ticket) => ticket.userId === normalizedUserId)
-      .map((ticket) => toTicketView(ticket))
+      .map((ticket) => toTicketView(ticket, canonicalByRequestId.get(ticket.requestId)))
       .concat(
         canonicalPurchases
           .filter((purchase) => purchase.snapshot.userId === normalizedUserId)
@@ -63,8 +70,11 @@ export class TicketQueryService {
       this.canonicalPurchaseStore?.listPurchases() ?? Promise.resolve([])
     ]);
     const ticketRequestIds = new Set(tickets.map((ticket) => ticket.requestId));
+    const canonicalByRequestId = new Map(
+      canonicalPurchases.map((purchase) => [purchase.snapshot.legacyRequestId ?? purchase.snapshot.purchaseId, purchase] as const)
+    );
     return tickets
-      .map((ticket) => toTicketView(ticket))
+      .map((ticket) => toTicketView(ticket, canonicalByRequestId.get(ticket.requestId)))
       .concat(
         canonicalPurchases
           .filter((purchase) => shouldProjectCanonicalTicket(purchase))
@@ -75,20 +85,33 @@ export class TicketQueryService {
   }
 }
 
-function toTicketView(ticket: TicketRecord): TicketView {
+function toTicketView(ticket: TicketRecord, canonicalPurchase?: CanonicalPurchaseRecord): TicketView {
+  const canonicalAdminResultMark =
+    canonicalPurchase?.resultStatus === "win"
+      ? "win"
+      : canonicalPurchase?.resultStatus === "lose"
+        ? "lose"
+        : ticket.adminResultMark;
+  const canonicalVisible = canonicalPurchase?.resultVisibility === "visible";
+  const canonicalResultHidden = canonicalPurchase && canonicalPurchase.resultVisibility !== "visible";
+
   return {
     ticketId: ticket.ticketId,
     requestId: ticket.requestId,
     userId: ticket.userId,
     lotteryCode: ticket.lotteryCode,
     drawId: ticket.drawId,
-    verificationStatus: ticket.verificationStatus,
-    adminResultMark: ticket.adminResultMark,
-    winningAmountMinor: ticket.winningAmountMinor,
-    verifiedAt: ticket.verifiedAt,
+    verificationStatus: canonicalVisible ? "verified" : canonicalResultHidden ? "pending" : ticket.verificationStatus,
+    adminResultMark: canonicalAdminResultMark,
+    winningAmountMinor: canonicalVisible
+      ? resolveCanonicalWinningAmountMinor(ticket, canonicalPurchase)
+      : canonicalResultHidden
+        ? null
+        : ticket.winningAmountMinor,
+    verifiedAt: canonicalVisible ? canonicalPurchase?.settledAt ?? ticket.verifiedAt : canonicalResultHidden ? null : ticket.verifiedAt,
     externalReference: ticket.externalReference,
     purchasedAt: ticket.purchasedAt,
-    resultSource: ticket.resultSource,
+    resultSource: canonicalVisible ? ticket.resultSource ?? "admin_emulated" : canonicalResultHidden ? null : ticket.resultSource,
     claimState: ticket.claimState
   };
 }
@@ -96,6 +119,8 @@ function toTicketView(ticket: TicketRecord): TicketView {
 function toCanonicalTicketView(purchase: CanonicalPurchaseRecord): TicketView {
   const requestId = purchase.snapshot.legacyRequestId ?? purchase.snapshot.purchaseId;
   const verifiedAt = purchase.resultVisibility === "visible" ? purchase.settledAt : null;
+  const adminResultMark =
+    purchase.resultStatus === "win" ? "win" : purchase.resultStatus === "lose" ? "lose" : null;
 
   return {
     ticketId: `canonical:${purchase.snapshot.purchaseId}`,
@@ -104,12 +129,19 @@ function toCanonicalTicketView(purchase: CanonicalPurchaseRecord): TicketView {
     lotteryCode: purchase.snapshot.lotteryCode,
     drawId: purchase.snapshot.drawId,
     verificationStatus: purchase.resultVisibility === "visible" ? "verified" : "pending",
-    adminResultMark: null,
-    winningAmountMinor: null,
+    adminResultMark,
+    winningAmountMinor:
+      purchase.resultVisibility === "visible"
+        ? purchase.resultStatus === "win"
+          ? ADMIN_EMULATED_WIN_AMOUNT_MINOR
+          : purchase.resultStatus === "lose"
+            ? 0
+            : null
+        : null,
     verifiedAt,
     externalReference: purchase.externalTicketReference ?? `canonical:${purchase.snapshot.purchaseId}`,
     purchasedAt: purchase.purchasedAt ?? purchase.snapshot.submittedAt,
-    resultSource: null,
+    resultSource: purchase.resultVisibility === "visible" ? "admin_emulated" : null,
     claimState: "unclaimed"
   };
 }
@@ -128,4 +160,23 @@ function compareTicketViews(left: TicketView, right: TicketView): number {
   }
 
   return right.ticketId.localeCompare(left.ticketId);
+}
+
+function resolveCanonicalWinningAmountMinor(
+  ticket: TicketRecord,
+  purchase: CanonicalPurchaseRecord | undefined
+): number | null {
+  if (!purchase || purchase.resultVisibility !== "visible") {
+    return ticket.winningAmountMinor;
+  }
+
+  if (purchase.resultStatus === "win") {
+    return ticket.winningAmountMinor ?? ADMIN_EMULATED_WIN_AMOUNT_MINOR;
+  }
+
+  if (purchase.resultStatus === "lose") {
+    return 0;
+  }
+
+  return ticket.winningAmountMinor;
 }

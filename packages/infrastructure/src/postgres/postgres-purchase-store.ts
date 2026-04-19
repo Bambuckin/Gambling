@@ -308,6 +308,18 @@ export class PostgresCanonicalDrawStore implements CanonicalDrawStore {
     );
   }
 
+  async deleteDraw(lotteryCode: string, drawId: string): Promise<void> {
+    const normalizedLotteryCode = normalizeLotteryCode(lotteryCode);
+    const normalizedDrawId = normalizeText(drawId, "drawId");
+    await this.pool.query(
+      `
+        delete from lottery_draws
+        where lottery_code = $1 and draw_id = $2
+      `,
+      [normalizedLotteryCode, normalizedDrawId]
+    );
+  }
+
   async clearAll(): Promise<void> {
     await this.pool.query("delete from lottery_draws");
   }
