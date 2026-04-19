@@ -1,12 +1,19 @@
 import { appendPurchaseRequestTransition, rankQueueForExecution, type PurchaseRequestRecord } from "@lottery/domain";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TerminalExecutionLock } from "../ports/terminal-execution-lock.js";
 import type { TimeSource } from "../ports/time-source.js";
+import {
+  beginCanonicalPurchaseProcessing,
+  ensureCanonicalPurchaseForRequest,
+  queueCanonicalPurchase
+} from "./canonical-purchase-state.js";
 
 export interface PurchaseExecutionQueueServiceDependencies {
   readonly requestStore: PurchaseRequestStore;
   readonly queueStore: PurchaseQueueStore;
+  readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
   readonly executionLock: TerminalExecutionLock;
   readonly timeSource: TimeSource;
 }
@@ -24,12 +31,14 @@ export interface ReserveNextQueuedRequestResult {
 export class PurchaseExecutionQueueService {
   private readonly requestStore: PurchaseRequestStore;
   private readonly queueStore: PurchaseQueueStore;
+  private readonly canonicalPurchaseStore: CanonicalPurchaseStore | null;
   private readonly executionLock: TerminalExecutionLock;
   private readonly timeSource: TimeSource;
 
   constructor(dependencies: PurchaseExecutionQueueServiceDependencies) {
     this.requestStore = dependencies.requestStore;
     this.queueStore = dependencies.queueStore;
+    this.canonicalPurchaseStore = dependencies.canonicalPurchaseStore ?? null;
     this.executionLock = dependencies.executionLock;
     this.timeSource = dependencies.timeSource;
   }
@@ -43,7 +52,15 @@ export class PurchaseExecutionQueueService {
 
     let keepLock = false;
     try {
-      const queueItems = await this.queueStore.listQueueItems();
+      let queueItems = await this.queueStore.listQueueItems();
+      if (queueItems.some((item) => item.status === "executing")) {
+        const repairedQueueItems = await this.repairRecoveredExecutingItems(queueItems);
+        if (repairedQueueItems === null) {
+          return null;
+        }
+
+        queueItems = repairedQueueItems;
+      }
       if (queueItems.some((item) => item.status === "executing")) {
         return null;
       }
@@ -78,6 +95,22 @@ export class PurchaseExecutionQueueService {
           continue;
         }
 
+        let canonicalPurchase = this.canonicalPurchaseStore
+          ? await ensureCanonicalPurchaseForRequest(this.canonicalPurchaseStore, request)
+          : null;
+        if (canonicalPurchase) {
+          canonicalPurchase = queueCanonicalPurchase(canonicalPurchase, {
+            eventId: `${canonicalPurchase.snapshot.purchaseId}:queued:backfill`,
+            occurredAt: nowIso,
+            note: "canonical purchase backfilled from queued compatibility request"
+          });
+          canonicalPurchase = beginCanonicalPurchaseProcessing(canonicalPurchase, {
+            eventId: `${canonicalPurchase.snapshot.purchaseId}:processing:${queueItem.attemptCount + 1}`,
+            occurredAt: nowIso,
+            note: `purchase execution reserved by ${workerId}`
+          });
+          await this.canonicalPurchaseStore!.savePurchase(canonicalPurchase);
+        }
         const nextRequest = appendPurchaseRequestTransition(request, "executing", {
           eventId: `${request.snapshot.requestId}:executing:${queueItem.attemptCount + 1}`,
           occurredAt: nowIso,
@@ -111,6 +144,50 @@ export class PurchaseExecutionQueueService {
   async releaseExecutionLock(input: ReserveNextQueuedRequestInput): Promise<void> {
     const workerId = normalizeWorkerId(input.workerId);
     await this.executionLock.release(workerId);
+  }
+
+  private async repairRecoveredExecutingItems(
+    queueItems: readonly PurchaseQueueItem[]
+  ): Promise<readonly PurchaseQueueItem[] | null> {
+    if (!this.canonicalPurchaseStore) {
+      return null;
+    }
+
+    let changed = false;
+    for (const queueItem of queueItems.filter((item) => item.status === "executing")) {
+      const request = await this.requestStore.getRequestById(queueItem.requestId);
+      if (!request) {
+        await this.queueStore.removeQueueItem(queueItem.requestId);
+        changed = true;
+        continue;
+      }
+
+      const canonicalPurchase = await ensureCanonicalPurchaseForRequest(this.canonicalPurchaseStore, request);
+      if (canonicalPurchase.status === "purchase_failed_retryable") {
+        await this.queueStore.saveQueueItem({
+          ...queueItem,
+          status: "queued"
+        });
+        changed = true;
+        continue;
+      }
+
+      if (
+        canonicalPurchase.status === "purchase_failed_final" ||
+        canonicalPurchase.status === "purchased" ||
+        canonicalPurchase.status === "awaiting_draw_close" ||
+        canonicalPurchase.status === "settled" ||
+        canonicalPurchase.status === "canceled"
+      ) {
+        await this.queueStore.removeQueueItem(queueItem.requestId);
+        changed = true;
+        continue;
+      }
+
+      return null;
+    }
+
+    return changed ? this.queueStore.listQueueItems() : queueItems;
   }
 }
 

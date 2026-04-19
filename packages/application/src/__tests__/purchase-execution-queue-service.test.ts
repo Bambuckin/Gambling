@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { PurchaseRequestRecord } from "@lottery/domain";
+import type { CanonicalPurchaseRecord, PurchaseRequestRecord } from "@lottery/domain";
 import {
+  appendCanonicalPurchaseTransition,
   appendPurchaseRequestTransition,
-  createAwaitingConfirmationRequest
+  createAwaitingConfirmationRequest,
+  createSubmittedCanonicalPurchase
 } from "@lottery/domain";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TerminalExecutionLock } from "../ports/terminal-execution-lock.js";
@@ -129,16 +132,86 @@ describe("PurchaseExecutionQueueService", () => {
     expect(reserved).toBeNull();
     expect(lock.currentOwner()).toBeNull();
   });
+
+  it("moves canonical purchase into processing when reserving queued work", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([createQueuedRequest("req-504", "seed-user")]);
+    const queueStore = new InMemoryPurchaseQueueStore([
+      queueItem({
+        requestId: "req-504",
+        userId: "seed-user",
+        priority: "regular",
+        enqueuedAt: "2026-04-05T21:10:00.000Z"
+      })
+    ]);
+    const canonicalPurchaseStore = new InMemoryCanonicalPurchaseStore();
+    const lock = new InMemoryTerminalExecutionLock();
+    const service = createService({
+      requestStore,
+      queueStore,
+      canonicalPurchaseStore,
+      lock
+    });
+
+    await service.reserveNextQueuedRequest({
+      workerId: "terminal-worker"
+    });
+
+    await expect(canonicalPurchaseStore.getPurchaseByLegacyRequestId("req-504")).resolves.toMatchObject({
+      status: "processing"
+    });
+  });
+
+  it("repairs recovered executing item from canonical outcome before reserving the next request", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([
+      createExecutingRequest("req-stale", "seed-user"),
+      createQueuedRequest("req-fresh", "seed-user")
+    ]);
+    const queueStore = new InMemoryPurchaseQueueStore([
+      queueItem({
+        requestId: "req-stale",
+        userId: "seed-user",
+        priority: "regular",
+        enqueuedAt: "2026-04-05T21:00:00.000Z",
+        status: "executing",
+        attemptCount: 1
+      }),
+      queueItem({
+        requestId: "req-fresh",
+        userId: "seed-user",
+        priority: "admin-priority",
+        enqueuedAt: "2026-04-05T21:02:00.000Z"
+      })
+    ]);
+    const canonicalPurchaseStore = new InMemoryCanonicalPurchaseStore([
+      createCanonicalPurchasedPurchase("req-stale")
+    ]);
+    const lock = new InMemoryTerminalExecutionLock();
+    const service = createService({
+      requestStore,
+      queueStore,
+      canonicalPurchaseStore,
+      lock
+    });
+
+    const reserved = await service.reserveNextQueuedRequest({
+      workerId: "terminal-worker"
+    });
+
+    expect(reserved?.request.snapshot.requestId).toBe("req-fresh");
+    await expect(queueStore.getQueueItemByRequestId("req-stale")).resolves.toBeNull();
+  });
 });
 
 function createService(input: {
   readonly requestStore: PurchaseRequestStore;
   readonly queueStore: PurchaseQueueStore;
+  readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
   readonly lock: TerminalExecutionLock;
 }): PurchaseExecutionQueueService {
   return new PurchaseExecutionQueueService({
     requestStore: input.requestStore,
     queueStore: input.queueStore,
+    ...(input.canonicalPurchaseStore ? { canonicalPurchaseStore: input.canonicalPurchaseStore } : {}),
     executionLock: input.lock,
     timeSource: {
       nowIso() {
@@ -200,6 +273,42 @@ function queueItem(input: {
   };
 }
 
+function createCanonicalPurchasedPurchase(requestId: string): CanonicalPurchaseRecord {
+  return appendCanonicalPurchaseTransition(
+    appendCanonicalPurchaseTransition(
+      appendCanonicalPurchaseTransition(
+        createSubmittedCanonicalPurchase({
+          purchaseId: requestId,
+          legacyRequestId: requestId,
+          userId: "seed-user",
+          lotteryCode: "demo-lottery",
+          drawId: "draw-200",
+          payload: { draw_count: 1 },
+          costMinor: 120,
+          currency: "RUB",
+          submittedAt: "2026-04-05T21:00:00.000Z"
+        }),
+        "queued",
+        {
+          eventId: `${requestId}:queued`,
+          occurredAt: "2026-04-05T21:01:00.000Z"
+        }
+      ),
+      "processing",
+      {
+        eventId: `${requestId}:processing`,
+        occurredAt: "2026-04-05T21:01:15.000Z"
+      }
+    ),
+    "purchased",
+    {
+      eventId: `${requestId}:purchased`,
+      occurredAt: "2026-04-05T21:01:30.000Z",
+      externalTicketReference: "ext-stale"
+    }
+  );
+}
+
 class InMemoryPurchaseRequestStore implements PurchaseRequestStore {
   private records: PurchaseRequestRecord[];
 
@@ -222,6 +331,37 @@ class InMemoryPurchaseRequestStore implements PurchaseRequestStore {
   }
 
   async clearAll(): Promise<void> {}
+}
+
+class InMemoryCanonicalPurchaseStore implements CanonicalPurchaseStore {
+  private records: CanonicalPurchaseRecord[];
+
+  constructor(records: readonly CanonicalPurchaseRecord[] = []) {
+    this.records = records.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async listPurchases(): Promise<readonly CanonicalPurchaseRecord[]> {
+    return this.records.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async getPurchaseById(purchaseId: string): Promise<CanonicalPurchaseRecord | null> {
+    const record = this.records.find((entry) => entry.snapshot.purchaseId === purchaseId) ?? null;
+    return record ? cloneCanonicalPurchaseRecord(record) : null;
+  }
+
+  async getPurchaseByLegacyRequestId(legacyRequestId: string): Promise<CanonicalPurchaseRecord | null> {
+    const record = this.records.find((entry) => entry.snapshot.legacyRequestId === legacyRequestId) ?? null;
+    return record ? cloneCanonicalPurchaseRecord(record) : null;
+  }
+
+  async savePurchase(record: CanonicalPurchaseRecord): Promise<void> {
+    const filtered = this.records.filter((entry) => entry.snapshot.purchaseId !== record.snapshot.purchaseId);
+    this.records = [...filtered, cloneCanonicalPurchaseRecord(record)];
+  }
+
+  async clearAll(): Promise<void> {
+    this.records = [];
+  }
 }
 
 class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
@@ -292,6 +432,22 @@ function cloneRequestRecord(record: PurchaseRequestRecord): PurchaseRequestRecor
       payload: { ...record.snapshot.payload }
     },
     state: record.state,
+    journal: record.journal.map((entry) => ({ ...entry }))
+  };
+}
+
+function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): CanonicalPurchaseRecord {
+  return {
+    snapshot: {
+      ...record.snapshot,
+      payload: { ...record.snapshot.payload }
+    },
+    status: record.status,
+    resultStatus: record.resultStatus,
+    resultVisibility: record.resultVisibility,
+    purchasedAt: record.purchasedAt,
+    settledAt: record.settledAt,
+    externalTicketReference: record.externalTicketReference,
     journal: record.journal.map((entry) => ({ ...entry }))
   };
 }

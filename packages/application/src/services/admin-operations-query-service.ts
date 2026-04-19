@@ -174,7 +174,11 @@ function toProblemRequestView(
     queueStatus: queueItem?.status ?? "missing",
     queuePriority: queueItem?.priority ?? null,
     anomalyHint,
-    attemptCount: projected?.attemptCount ?? queueItem?.attemptCount ?? deriveAttemptCount(record.journal),
+    attemptCount: Math.max(
+      projected?.attemptCount ?? 0,
+      queueItem?.attemptCount ?? 0,
+      deriveAttemptCount(record.journal)
+    ),
     updatedAt,
     lastError: projected?.finalResult ?? resolveLastError(record.journal)
   };
@@ -206,7 +210,7 @@ function toCanonicalProblemRequestView(
     queueStatus: queueItem?.status ?? "missing",
     queuePriority: queueItem?.priority ?? null,
     anomalyHint,
-    attemptCount: queueItem?.attemptCount ?? projected.attemptCount,
+    attemptCount: Math.max(projected.attemptCount, queueItem?.attemptCount ?? 0),
     updatedAt: projected.updatedAt,
     lastError: projected.finalResult
   };

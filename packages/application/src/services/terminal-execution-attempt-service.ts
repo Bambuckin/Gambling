@@ -1,18 +1,29 @@
 import {
   appendPurchaseRequestTransition,
+  createPurchaseAttemptRecord,
   formatTerminalAttemptJournalNote,
   normalizeTerminalAttempt,
   type PurchaseRequestRecord,
+  type PurchaseAttemptRecord,
   type TicketRecord
 } from "@lottery/domain";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
+import type { PurchaseAttemptStore } from "../ports/purchase-attempt-store.js";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TerminalExecutionResult } from "../ports/terminal-executor.js";
+import {
+  applyCanonicalAttemptOutcome,
+  ensureCanonicalPurchaseForRequest,
+  markCanonicalPurchaseAwaitingDrawClose
+} from "./canonical-purchase-state.js";
 import type { TicketPersistenceService } from "./ticket-persistence-service.js";
 
 export interface TerminalExecutionAttemptServiceDependencies {
   readonly requestStore: PurchaseRequestStore;
   readonly queueStore: PurchaseQueueStore;
+  readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
+  readonly purchaseAttemptStore?: PurchaseAttemptStore;
   readonly ticketPersistenceService?: TicketPersistenceService;
 }
 
@@ -53,11 +64,15 @@ export class TerminalExecutionAttemptServiceError extends Error {
 export class TerminalExecutionAttemptService {
   private readonly requestStore: PurchaseRequestStore;
   private readonly queueStore: PurchaseQueueStore;
+  private readonly canonicalPurchaseStore: CanonicalPurchaseStore | null;
+  private readonly purchaseAttemptStore: PurchaseAttemptStore | null;
   private readonly ticketPersistenceService: TicketPersistenceService | null;
 
   constructor(dependencies: TerminalExecutionAttemptServiceDependencies) {
     this.requestStore = dependencies.requestStore;
     this.queueStore = dependencies.queueStore;
+    this.canonicalPurchaseStore = dependencies.canonicalPurchaseStore ?? null;
+    this.purchaseAttemptStore = dependencies.purchaseAttemptStore ?? null;
     this.ticketPersistenceService = dependencies.ticketPersistenceService ?? null;
   }
 
@@ -76,7 +91,16 @@ export class TerminalExecutionAttemptService {
       });
     }
 
-    if (request.state !== "executing") {
+    let canonicalPurchase = this.canonicalPurchaseStore
+      ? await ensureCanonicalPurchaseForRequest(this.canonicalPurchaseStore, request)
+      : null;
+    const existingAttempt =
+      this.purchaseAttemptStore && canonicalPurchase
+        ? await this.purchaseAttemptStore.getAttemptById(
+            `${canonicalPurchase.snapshot.purchaseId}:attempt:${Math.trunc(input.attempt)}`
+          )
+        : null;
+    if (request.state !== "executing" && !existingAttempt) {
       throw new TerminalExecutionAttemptServiceError(
         `request "${requestId}" cannot record terminal result from state "${request.state}"`,
         {
@@ -85,8 +109,8 @@ export class TerminalExecutionAttemptService {
       );
     }
 
-    const queueItem = await this.queueStore.getQueueItemByRequestId(requestId);
-    if (!queueItem) {
+    let queueItem = await this.queueStore.getQueueItemByRequestId(requestId);
+    if (!queueItem && !existingAttempt) {
       throw new TerminalExecutionAttemptServiceError(`queue item for request "${requestId}" not found`, {
         code: "queue_item_not_found"
       });
@@ -100,30 +124,65 @@ export class TerminalExecutionAttemptService {
       finishedAt: input.result.finishedAt,
       rawOutput: input.result.rawOutput
     });
+    const attemptRecord =
+      existingAttempt ??
+      createPurchaseAttemptRecord({
+        purchaseId: canonicalPurchase?.snapshot.purchaseId ?? request.snapshot.requestId,
+        legacyRequestId: request.snapshot.requestId,
+        attemptNumber: normalizedAttempt.attempt,
+        outcome: normalizedAttempt.outcome,
+        startedAt: normalizedAttempt.startedAt,
+        finishedAt: normalizedAttempt.finishedAt,
+        rawOutput: normalizedAttempt.rawOutput,
+        externalTicketReference: input.result.externalTicketReference ?? null,
+        errorMessage: normalizedAttempt.outcome === "error" ? normalizedAttempt.rawOutput : null
+      });
+    assertAttemptReplayMatches(attemptRecord, normalizedAttempt, input.result.externalTicketReference ?? null);
     const journalNote = formatTerminalAttemptJournalNote(normalizedAttempt);
-    const nextRequest = appendPurchaseRequestTransition(request, normalizedAttempt.outcome, {
-      eventId: `${requestId}:attempt:${normalizedAttempt.attempt}:${normalizedAttempt.outcome}`,
-      occurredAt: normalizedAttempt.finishedAt,
-      note: journalNote
-    });
+    if (!existingAttempt && this.purchaseAttemptStore) {
+      await this.purchaseAttemptStore.saveAttempt(attemptRecord);
+    }
+    if (canonicalPurchase) {
+      const nextCanonicalPurchase = applyCanonicalAttemptOutcome(canonicalPurchase, normalizedAttempt.outcome, {
+        eventId: `${canonicalPurchase.snapshot.purchaseId}:attempt:${normalizedAttempt.attempt}:${normalizedAttempt.outcome}`,
+        occurredAt: normalizedAttempt.finishedAt,
+        note: journalNote,
+        externalTicketReference: input.result.externalTicketReference ?? null
+      });
+      if (nextCanonicalPurchase !== canonicalPurchase) {
+        await this.canonicalPurchaseStore!.savePurchase(nextCanonicalPurchase);
+        canonicalPurchase = nextCanonicalPurchase;
+      }
+    }
 
-    await this.requestStore.saveRequest(nextRequest);
+    const nextRequest = transitionRequestForAttempt(request, normalizedAttempt, journalNote);
+    if (nextRequest !== request) {
+      await this.requestStore.saveRequest(nextRequest);
+    }
 
     if (normalizedAttempt.outcome === "retrying") {
-      const nextQueueItem: PurchaseQueueItem = {
-        ...queueItem,
-        status: "queued"
-      };
-      await this.queueStore.saveQueueItem(nextQueueItem);
+      const nextQueueItem: PurchaseQueueItem | null =
+        queueItem && queueItem.status !== "queued"
+          ? {
+              ...queueItem,
+              status: "queued"
+            }
+          : queueItem;
+      if (nextQueueItem) {
+        await this.queueStore.saveQueueItem(nextQueueItem);
+      }
       return {
         request: nextRequest,
-        queueItem: nextQueueItem,
+        queueItem: nextQueueItem ?? null,
         ticket: null,
         journalNote
       };
     }
 
-    await this.queueStore.removeQueueItem(requestId);
+    if (queueItem) {
+      await this.queueStore.removeQueueItem(requestId);
+      queueItem = null;
+    }
     let ticket: TicketRecord | null = null;
     if (normalizedAttempt.outcome === "success" && this.ticketPersistenceService) {
       const persisted = await this.ticketPersistenceService.persistSuccessfulPurchaseTicket({
@@ -132,6 +191,16 @@ export class TerminalExecutionAttemptService {
         externalReference: input.result.externalTicketReference ?? null
       });
       ticket = persisted.ticket;
+      if (canonicalPurchase) {
+        const nextCanonicalPurchase = markCanonicalPurchaseAwaitingDrawClose(canonicalPurchase, {
+          eventId: `${canonicalPurchase.snapshot.purchaseId}:awaiting_draw_close`,
+          occurredAt: normalizedAttempt.finishedAt,
+          note: "compatibility ticket persisted after successful purchase"
+        });
+        if (nextCanonicalPurchase !== canonicalPurchase) {
+          await this.canonicalPurchaseStore!.savePurchase(nextCanonicalPurchase);
+        }
+      }
     }
 
     return {
@@ -141,4 +210,52 @@ export class TerminalExecutionAttemptService {
       journalNote
     };
   }
+}
+
+function transitionRequestForAttempt(
+  request: PurchaseRequestRecord,
+  normalizedAttempt: ReturnType<typeof normalizeTerminalAttempt>,
+  journalNote: string
+): PurchaseRequestRecord {
+  if (request.state === normalizedAttempt.outcome) {
+    return request;
+  }
+
+  if (normalizedAttempt.outcome === "added_to_cart" && request.state === "success") {
+    return request;
+  }
+
+  if (request.state !== "executing") {
+    return request;
+  }
+
+  return appendPurchaseRequestTransition(request, normalizedAttempt.outcome, {
+    eventId: `${request.snapshot.requestId}:attempt:${normalizedAttempt.attempt}:${normalizedAttempt.outcome}`,
+    occurredAt: normalizedAttempt.finishedAt,
+    note: journalNote
+  });
+}
+
+function assertAttemptReplayMatches(
+  attemptRecord: PurchaseAttemptRecord,
+  normalizedAttempt: ReturnType<typeof normalizeTerminalAttempt>,
+  externalTicketReference: string | null
+): void {
+  if (
+    attemptRecord.attemptNumber === normalizedAttempt.attempt &&
+    attemptRecord.outcome === normalizedAttempt.outcome &&
+    attemptRecord.startedAt === normalizedAttempt.startedAt &&
+    attemptRecord.finishedAt === normalizedAttempt.finishedAt &&
+    attemptRecord.rawOutput === normalizedAttempt.rawOutput &&
+    (attemptRecord.externalTicketReference ?? null) === (externalTicketReference ?? null)
+  ) {
+    return;
+  }
+
+  throw new TerminalExecutionAttemptServiceError(
+    `attempt "${attemptRecord.attemptId}" already exists with different payload`,
+    {
+      code: "request_state_invalid"
+    }
+  );
 }

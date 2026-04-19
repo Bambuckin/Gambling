@@ -3,14 +3,21 @@ import {
   appendPurchaseRequestTransition,
   type PurchaseRequestRecord
 } from "@lottery/domain";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { TimeSource } from "../ports/time-source.js";
 import type { PurchaseQueueItem, PurchaseQueuePriority, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
+import {
+  ensureCanonicalPurchaseForRequest,
+  markCanonicalPurchaseCanceled,
+  queueCanonicalPurchase
+} from "./canonical-purchase-state.js";
 import type { WalletLedgerService } from "./wallet-ledger-service.js";
 
 export interface PurchaseOrchestrationServiceDependencies {
   readonly requestStore: PurchaseRequestStore;
   readonly queueStore: PurchaseQueueStore;
+  readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
   readonly walletLedgerService: WalletLedgerService;
   readonly timeSource: TimeSource;
 }
@@ -69,12 +76,14 @@ export class PurchaseOrchestrationServiceError extends Error {
 export class PurchaseOrchestrationService {
   private readonly requestStore: PurchaseRequestStore;
   private readonly queueStore: PurchaseQueueStore;
+  private readonly canonicalPurchaseStore: CanonicalPurchaseStore | null;
   private readonly walletLedgerService: WalletLedgerService;
   private readonly timeSource: TimeSource;
 
   constructor(dependencies: PurchaseOrchestrationServiceDependencies) {
     this.requestStore = dependencies.requestStore;
     this.queueStore = dependencies.queueStore;
+    this.canonicalPurchaseStore = dependencies.canonicalPurchaseStore ?? null;
     this.walletLedgerService = dependencies.walletLedgerService;
     this.timeSource = dependencies.timeSource;
   }
@@ -107,7 +116,20 @@ export class PurchaseOrchestrationService {
     }
 
     const queuedItem = await this.queueStore.getQueueItemByRequestId(requestId);
+    let canonicalPurchase = this.canonicalPurchaseStore
+      ? await ensureCanonicalPurchaseForRequest(this.canonicalPurchaseStore, existing)
+      : null;
     if (existing.state === "queued" && queuedItem) {
+      if (canonicalPurchase) {
+        const queuedCanonicalPurchase = queueCanonicalPurchase(canonicalPurchase, {
+          eventId: `${canonicalPurchase.snapshot.purchaseId}:queued`,
+          occurredAt: this.timeSource.nowIso(),
+          note: "canonical purchase aligned with queued compatibility request"
+        });
+        if (queuedCanonicalPurchase !== canonicalPurchase) {
+          await this.canonicalPurchaseStore!.savePurchase(queuedCanonicalPurchase);
+        }
+      }
       return {
         request: existing,
         queueItem: queuedItem,
@@ -135,6 +157,13 @@ export class PurchaseOrchestrationService {
 
     const nowIso = this.timeSource.nowIso();
     let nextRecord = cloneRecord(existing);
+    if (canonicalPurchase) {
+      canonicalPurchase = queueCanonicalPurchase(canonicalPurchase, {
+        eventId: `${canonicalPurchase.snapshot.purchaseId}:queued`,
+        occurredAt: nowIso,
+        note: "purchase inserted into compatibility queue"
+      });
+    }
 
     if (nextRecord.state === "awaiting_confirmation") {
       nextRecord = appendPurchaseRequestTransition(nextRecord, "confirmed", {
@@ -166,6 +195,9 @@ export class PurchaseOrchestrationService {
       };
 
     await this.requestStore.saveRequest(nextRecord);
+    if (canonicalPurchase) {
+      await this.canonicalPurchaseStore!.savePurchase(canonicalPurchase);
+    }
     await this.queueStore.saveQueueItem(queueItemToSave);
 
     return {
@@ -276,6 +308,17 @@ export class PurchaseOrchestrationService {
     }
 
     if (existing.state === "reserve_released") {
+      if (this.canonicalPurchaseStore) {
+        const canonicalPurchase = await ensureCanonicalPurchaseForRequest(this.canonicalPurchaseStore, existing);
+        const nextCanonicalPurchase = markCanonicalPurchaseCanceled(canonicalPurchase, {
+          eventId: `${canonicalPurchase.snapshot.purchaseId}:canceled`,
+          occurredAt: this.timeSource.nowIso(),
+          note: "purchase canceled before execution"
+        });
+        if (nextCanonicalPurchase !== canonicalPurchase) {
+          await this.canonicalPurchaseStore.savePurchase(nextCanonicalPurchase);
+        }
+      }
       await this.queueStore.removeQueueItem(requestId);
       return {
         request: existing,
@@ -285,8 +328,18 @@ export class PurchaseOrchestrationService {
 
     let nextRecord = cloneRecord(existing);
     const nowIso = this.timeSource.nowIso();
+    let canonicalPurchase = this.canonicalPurchaseStore
+      ? await ensureCanonicalPurchaseForRequest(this.canonicalPurchaseStore, existing)
+      : null;
 
     if (nextRecord.state === "canceled") {
+      if (canonicalPurchase) {
+        canonicalPurchase = markCanonicalPurchaseCanceled(canonicalPurchase, {
+          eventId: `${canonicalPurchase.snapshot.purchaseId}:canceled`,
+          occurredAt: nowIso,
+          note: "purchase canceled before execution"
+        });
+      }
       await this.walletLedgerService.releaseReservedFunds({
         userId: nextRecord.snapshot.userId,
         requestId: nextRecord.snapshot.requestId,
@@ -301,6 +354,9 @@ export class PurchaseOrchestrationService {
         note: "reserve released after cancellation"
       });
       await this.requestStore.saveRequest(nextRecord);
+      if (canonicalPurchase) {
+        await this.canonicalPurchaseStore!.savePurchase(canonicalPurchase);
+      }
       await this.queueStore.removeQueueItem(requestId);
       return {
         request: nextRecord,
@@ -319,6 +375,13 @@ export class PurchaseOrchestrationService {
       );
     }
 
+    if (canonicalPurchase) {
+      canonicalPurchase = markCanonicalPurchaseCanceled(canonicalPurchase, {
+        eventId: `${canonicalPurchase.snapshot.purchaseId}:canceled`,
+        occurredAt: nowIso,
+        note: "purchase canceled before execution"
+      });
+    }
     nextRecord = appendPurchaseRequestTransition(nextRecord, "canceled", {
       eventId: `${requestId}:canceled`,
       occurredAt: nowIso,
@@ -341,6 +404,9 @@ export class PurchaseOrchestrationService {
     });
 
     await this.requestStore.saveRequest(nextRecord);
+    if (canonicalPurchase) {
+      await this.canonicalPurchaseStore!.savePurchase(canonicalPurchase);
+    }
     await this.queueStore.removeQueueItem(requestId);
 
     return {

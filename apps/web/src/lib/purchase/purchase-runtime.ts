@@ -119,6 +119,7 @@ export function getPurchaseOrchestrationService(): PurchaseOrchestrationService 
     cachedOrchestrationService = new PurchaseOrchestrationService({
       requestStore,
       queueStore,
+      canonicalPurchaseStore,
       walletLedgerService: getWalletLedgerService(),
       timeSource: new SystemTimeSource()
     });

@@ -48,7 +48,7 @@ export function projectCanonicalRequest(
     status: mapCanonicalPurchaseStatusToRequestState(purchase),
     createdAt: purchase.snapshot.submittedAt,
     updatedAt,
-    finalResult: resolveCanonicalFinalResult(purchase),
+    finalResult: resolveCanonicalFinalResult(purchase, attempts),
     attemptCount: attempts.length
   };
 }
@@ -74,9 +74,12 @@ export function mapCanonicalPurchaseStatusToRequestState(purchase: CanonicalPurc
   }
 }
 
-export function resolveCanonicalFinalResult(purchase: CanonicalPurchaseRecord): string | null {
+export function resolveCanonicalFinalResult(
+  purchase: CanonicalPurchaseRecord,
+  attempts: readonly PurchaseAttemptRecord[] = []
+): string | null {
   if (purchase.status === "purchase_failed_final") {
-    return "canonical purchase failed";
+    return attempts.at(-1)?.rawOutput ?? "canonical purchase failed";
   }
 
   if (purchase.status === "canceled") {

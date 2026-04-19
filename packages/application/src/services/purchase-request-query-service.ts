@@ -106,7 +106,11 @@ function toStatusView(
   const latestEntry = record.journal.at(-1);
   const projected = canonicalPurchase ? projectCanonicalRequest(canonicalPurchase, canonicalAttempts) : null;
   const updatedAt = projected?.updatedAt ?? latestEntry?.occurredAt ?? record.snapshot.createdAt;
-  const attemptCount = projected?.attemptCount ?? queueItem?.attemptCount ?? deriveAttemptCount(record.journal);
+  const attemptCount = Math.max(
+    projected?.attemptCount ?? 0,
+    queueItem?.attemptCount ?? 0,
+    deriveAttemptCount(record.journal)
+  );
   const status = projected?.status ?? record.state;
   const finalResult = projected?.finalResult ?? resolveFinalResult(status, latestEntry?.note);
 

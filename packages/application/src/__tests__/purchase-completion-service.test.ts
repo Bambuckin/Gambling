@@ -1,5 +1,13 @@
-import { appendPurchaseRequestTransition, createAwaitingConfirmationRequest, type NotificationRecord } from "@lottery/domain";
+import {
+  appendCanonicalPurchaseTransition,
+  appendPurchaseRequestTransition,
+  createAwaitingConfirmationRequest,
+  createSubmittedCanonicalPurchase,
+  type CanonicalPurchaseRecord,
+  type NotificationRecord
+} from "@lottery/domain";
 import { describe, expect, it } from "vitest";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { NotificationStore } from "../ports/notification-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
@@ -75,14 +83,36 @@ describe("PurchaseCompletionService", () => {
     expect(result.completed).toBe(true);
     expect(result.ticket!.externalReference).toBe("original-cart-ref");
   });
+
+  it("advances canonical purchase to awaiting_draw_close during cart-stage completion", async () => {
+    const ticketStore = new StubTicketStore();
+    const requestStore = new StubPurchaseRequestStore();
+    const canonicalPurchaseStore = new StubCanonicalPurchaseStore([
+      createCanonicalPurchasedPurchase("req-804")
+    ]);
+    const service = createService(ticketStore, requestStore, canonicalPurchaseStore);
+    const request = createAddedToCartRequest("req-804");
+
+    await service.completeAfterCartStage({
+      request,
+      completionMode: "emulate_after_cart",
+      cartExternalReference: null
+    });
+
+    await expect(canonicalPurchaseStore.getPurchaseByLegacyRequestId("req-804")).resolves.toMatchObject({
+      status: "awaiting_draw_close"
+    });
+  });
 });
 
 function createService(
   ticketStore: StubTicketStore,
-  requestStore: PurchaseRequestStore = new StubPurchaseRequestStore()
+  requestStore: PurchaseRequestStore = new StubPurchaseRequestStore(),
+  canonicalPurchaseStore?: CanonicalPurchaseStore
 ): PurchaseCompletionService {
   return new PurchaseCompletionService({
     requestStore,
+    ...(canonicalPurchaseStore ? { canonicalPurchaseStore } : {}),
     ticketPersistenceService: new TicketPersistenceService({
       ticketStore,
       notificationStore: new StubNotificationStore()
@@ -160,6 +190,35 @@ class StubPurchaseRequestStore implements PurchaseRequestStore {
   async clearAll(): Promise<void> {}
 }
 
+class StubCanonicalPurchaseStore implements CanonicalPurchaseStore {
+  private purchases: CanonicalPurchaseRecord[];
+
+  constructor(initialPurchases: readonly CanonicalPurchaseRecord[] = []) {
+    this.purchases = initialPurchases.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async listPurchases() {
+    return this.purchases.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async getPurchaseById(purchaseId: string) {
+    const purchase = this.purchases.find((entry) => entry.snapshot.purchaseId === purchaseId) ?? null;
+    return purchase ? cloneCanonicalPurchaseRecord(purchase) : null;
+  }
+
+  async getPurchaseByLegacyRequestId(legacyRequestId: string) {
+    const purchase = this.purchases.find((entry) => entry.snapshot.legacyRequestId === legacyRequestId) ?? null;
+    return purchase ? cloneCanonicalPurchaseRecord(purchase) : null;
+  }
+
+  async savePurchase(record: CanonicalPurchaseRecord) {
+    const filtered = this.purchases.filter((entry) => entry.snapshot.purchaseId !== record.snapshot.purchaseId);
+    this.purchases = [...filtered, cloneCanonicalPurchaseRecord(record)];
+  }
+
+  async clearAll(): Promise<void> {}
+}
+
 function createAddedToCartRequest(requestId: string) {
   const executing = createExecutingRequest(requestId);
   return appendPurchaseRequestTransition(executing, "added_to_cart", {
@@ -203,4 +262,56 @@ function cloneRequestRecord(record: import("@lottery/domain").PurchaseRequestRec
     state: record.state,
     journal: record.journal.map((entry) => ({ ...entry }))
   };
+}
+
+function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): CanonicalPurchaseRecord {
+  return {
+    snapshot: {
+      ...record.snapshot,
+      payload: { ...record.snapshot.payload }
+    },
+    status: record.status,
+    resultStatus: record.resultStatus,
+    resultVisibility: record.resultVisibility,
+    purchasedAt: record.purchasedAt,
+    settledAt: record.settledAt,
+    externalTicketReference: record.externalTicketReference,
+    journal: record.journal.map((entry) => ({ ...entry }))
+  };
+}
+
+function createCanonicalPurchasedPurchase(requestId: string): CanonicalPurchaseRecord {
+  return appendCanonicalPurchaseTransition(
+    appendCanonicalPurchaseTransition(
+      appendCanonicalPurchaseTransition(
+        createSubmittedCanonicalPurchase({
+          purchaseId: requestId,
+          legacyRequestId: requestId,
+          userId: "seed-user",
+          lotteryCode: "bolshaya-8",
+          drawId: "draw-800",
+          payload: { draw_count: 1 },
+          costMinor: 25_000,
+          currency: "RUB",
+          submittedAt: "2026-04-16T11:55:00.000Z"
+        }),
+        "queued",
+        {
+          eventId: `${requestId}:queued`,
+          occurredAt: "2026-04-16T11:56:00.000Z"
+        }
+      ),
+      "processing",
+      {
+        eventId: `${requestId}:processing`,
+        occurredAt: "2026-04-16T11:57:00.000Z"
+      }
+    ),
+    "purchased",
+    {
+      eventId: `${requestId}:purchased`,
+      occurredAt: "2026-04-16T11:59:30.000Z",
+      externalTicketReference: `cart-ref-${requestId.split("-").at(-1) ?? requestId}`
+    }
+  );
 }

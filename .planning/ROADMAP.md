@@ -40,7 +40,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 17: User Cabinet Stats and Test Reset Tools** - add cross-lottery cabinet summaries plus admin queue cleanup and full test-runtime reset. (completed 2026-04-16)
 - [x] **Phase 18: Canonical Purchase and Draw Contracts** - collapse split ticket/draw truth into additive canonical contracts for `purchase`, `draw`, and `purchase_attempt`. (completed 2026-04-19)
 - [x] **Phase 19: Canonical Storage and Compatibility Projections** - add additive storage and compatibility projections so current surfaces can read from the new truth safely. (completed 2026-04-19)
-- [ ] **Phase 20: Purchase Submission and Worker Cutover** - move submit/queue/worker execution onto the canonical purchase model and durable attempt journal.
+- [x] **Phase 20: Purchase Submission and Worker Cutover** - move submit/queue/worker execution onto the canonical purchase model and durable attempt journal. (completed 2026-04-19)
 - [ ] **Phase 21: Draw Closure, Settlement, and Result Publication** - split draw control into explicit create/close/mark/settle operations with audit-first result publication.
 - [ ] **Phase 22: Winning Fulfillment and Ledger Rebase** - re-anchor credit and cash-desk flows on canonical purchase/draw result state.
 - [ ] **Phase 23: Admin, Receiver, and User Read Models** - rebuild operator and user views on canonical projections and audit views.
@@ -255,7 +255,7 @@ Phase 12 remains a parallel packaging track anchored to Phase 11 and does not ga
 | 17. User Cabinet Stats and Test Reset Tools | 1/1 | Complete | 2026-04-16 |
 | 18. Canonical Purchase and Draw Contracts | 1/1 | Complete    | 2026-04-19 |
 | 19. Canonical Storage and Compatibility Projections | 1/1 | Complete    | 2026-04-19 |
-| 20. Purchase Submission and Worker Cutover | 0/0 | Not planned | - |
+| 20. Purchase Submission and Worker Cutover | 0/1 | Planned | - |
 | 21. Draw Closure, Settlement, and Result Publication | 0/0 | Not planned | - |
 | 22. Winning Fulfillment and Ledger Rebase | 0/0 | Not planned | - |
 | 23. Admin, Receiver, and User Read Models | 0/0 | Not planned | - |
@@ -438,10 +438,10 @@ Plans:
   2. Worker updates canonical purchase and purchase-attempt state instead of relying on split legacy truth.
   3. Replay, retry, and worker restart paths do not duplicate business effects.
   4. Current user/admin request status surfaces remain truthful during the cutover.
-**Plans:** 0 plans
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 20 to break down)
+- [x] 20-01: Cut submit and worker execution over to canonical purchase truth while preserving compatibility surfaces.
 
 ### Phase 21: Draw Closure, Settlement, and Result Publication
 

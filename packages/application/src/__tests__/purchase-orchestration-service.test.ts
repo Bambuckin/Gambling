@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { LedgerEntry, PurchaseRequestRecord } from "@lottery/domain";
+import type { CanonicalPurchaseRecord, LedgerEntry, PurchaseRequestRecord } from "@lottery/domain";
 import {
   appendPurchaseRequestTransition,
   createAwaitingConfirmationRequest
 } from "@lottery/domain";
 import type { LedgerStore } from "../ports/ledger-store.js";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TimeSource } from "../ports/time-source.js";
@@ -387,16 +388,104 @@ describe("PurchaseOrchestrationService", () => {
       "req-304:cancel-release"
     ]);
   });
+
+  it("creates queued canonical purchase during confirm-and-queue", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([
+      createAwaitingRequest({
+        requestId: "req-305",
+        userId: "seed-user",
+        amountMinor: 140
+      })
+    ]);
+    const queueStore = new InMemoryPurchaseQueueStore();
+    const canonicalPurchaseStore = new InMemoryCanonicalPurchaseStore();
+    const walletLedgerService = createWalletLedgerService();
+    await walletLedgerService.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 1000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit",
+      reference: {
+        requestId: "seed-credit"
+      }
+    });
+
+    const service = createService({
+      requestStore,
+      queueStore,
+      canonicalPurchaseStore,
+      walletLedgerService
+    });
+
+    await service.confirmAndQueueRequest({
+      requestId: "req-305",
+      userId: "seed-user"
+    });
+
+    await expect(canonicalPurchaseStore.getPurchaseByLegacyRequestId("req-305")).resolves.toMatchObject({
+      snapshot: {
+        purchaseId: "req-305",
+        legacyRequestId: "req-305"
+      },
+      status: "queued"
+    });
+  });
+
+  it("marks canonical purchase canceled when queued request is canceled", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([
+      createAwaitingRequest({
+        requestId: "req-306",
+        userId: "seed-user",
+        amountMinor: 140
+      })
+    ]);
+    const queueStore = new InMemoryPurchaseQueueStore();
+    const canonicalPurchaseStore = new InMemoryCanonicalPurchaseStore();
+    const walletLedgerService = createWalletLedgerService();
+    await walletLedgerService.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 1000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit",
+      reference: {
+        requestId: "seed-credit"
+      }
+    });
+
+    const service = createService({
+      requestStore,
+      queueStore,
+      canonicalPurchaseStore,
+      walletLedgerService
+    });
+
+    await service.confirmAndQueueRequest({
+      requestId: "req-306",
+      userId: "seed-user"
+    });
+    await service.cancelQueuedRequest({
+      requestId: "req-306",
+      userId: "seed-user"
+    });
+
+    await expect(canonicalPurchaseStore.getPurchaseByLegacyRequestId("req-306")).resolves.toMatchObject({
+      status: "canceled"
+    });
+  });
 });
 
 function createService(input: {
   readonly requestStore: PurchaseRequestStore;
   readonly queueStore: PurchaseQueueStore;
+  readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
   readonly walletLedgerService: WalletLedgerService;
 }): PurchaseOrchestrationService {
   return new PurchaseOrchestrationService({
     requestStore: input.requestStore,
     queueStore: input.queueStore,
+    ...(input.canonicalPurchaseStore ? { canonicalPurchaseStore: input.canonicalPurchaseStore } : {}),
     walletLedgerService: input.walletLedgerService,
     timeSource: {
       nowIso() {
@@ -459,6 +548,33 @@ class InMemoryPurchaseRequestStore implements PurchaseRequestStore {
   }
 
   async clearAll(): Promise<void> {}
+}
+
+class InMemoryCanonicalPurchaseStore implements CanonicalPurchaseStore {
+  private records: CanonicalPurchaseRecord[] = [];
+
+  async listPurchases(): Promise<readonly CanonicalPurchaseRecord[]> {
+    return this.records.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async getPurchaseById(purchaseId: string): Promise<CanonicalPurchaseRecord | null> {
+    const record = this.records.find((entry) => entry.snapshot.purchaseId === purchaseId) ?? null;
+    return record ? cloneCanonicalPurchaseRecord(record) : null;
+  }
+
+  async getPurchaseByLegacyRequestId(legacyRequestId: string): Promise<CanonicalPurchaseRecord | null> {
+    const record = this.records.find((entry) => entry.snapshot.legacyRequestId === legacyRequestId) ?? null;
+    return record ? cloneCanonicalPurchaseRecord(record) : null;
+  }
+
+  async savePurchase(record: CanonicalPurchaseRecord): Promise<void> {
+    const filtered = this.records.filter((entry) => entry.snapshot.purchaseId !== record.snapshot.purchaseId);
+    this.records = [...filtered, cloneCanonicalPurchaseRecord(record)];
+  }
+
+  async clearAll(): Promise<void> {
+    this.records = [];
+  }
 }
 
 class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
@@ -527,5 +643,21 @@ function cloneLedgerEntry(entry: LedgerEntry): LedgerEntry {
   return {
     ...entry,
     reference: { ...entry.reference }
+  };
+}
+
+function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): CanonicalPurchaseRecord {
+  return {
+    snapshot: {
+      ...record.snapshot,
+      payload: { ...record.snapshot.payload }
+    },
+    status: record.status,
+    resultStatus: record.resultStatus,
+    resultVisibility: record.resultVisibility,
+    purchasedAt: record.purchasedAt,
+    settledAt: record.settledAt,
+    externalTicketReference: record.externalTicketReference,
+    journal: record.journal.map((entry) => ({ ...entry }))
   };
 }

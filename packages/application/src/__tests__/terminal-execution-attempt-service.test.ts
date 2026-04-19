@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { NotificationRecord, PurchaseRequestRecord, TicketRecord } from "@lottery/domain";
+import type { CanonicalPurchaseRecord, NotificationRecord, PurchaseAttemptRecord, PurchaseRequestRecord, TicketRecord } from "@lottery/domain";
 import {
+  appendCanonicalPurchaseTransition,
   appendPurchaseRequestTransition,
-  createAwaitingConfirmationRequest
+  createAwaitingConfirmationRequest,
+  createPurchasedTicketRecord,
+  createSubmittedCanonicalPurchase
 } from "@lottery/domain";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
+import type { PurchaseAttemptStore } from "../ports/purchase-attempt-store.js";
 import type { NotificationStore } from "../ports/notification-store.js";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
@@ -176,6 +181,118 @@ describe("TerminalExecutionAttemptService", () => {
       code: "request_state_invalid"
     });
   });
+
+  it("records canonical attempt history and advances canonical purchase to awaiting_draw_close on success", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([createExecutingRequest("req-804")]);
+    const queueStore = new InMemoryPurchaseQueueStore([
+      queueItem({
+        requestId: "req-804",
+        status: "executing",
+        attemptCount: 1
+      })
+    ]);
+    const canonicalPurchaseStore = new InMemoryCanonicalPurchaseStore([createCanonicalProcessingPurchase("req-804")]);
+    const purchaseAttemptStore = new InMemoryPurchaseAttemptStore();
+    const ticketStore = new InMemoryTicketStore();
+    const notificationStore = new StubNotificationStore();
+    const ticketPersistenceService = new TicketPersistenceService({
+      ticketStore,
+      notificationStore
+    });
+    const service = new TerminalExecutionAttemptService({
+      requestStore,
+      queueStore,
+      canonicalPurchaseStore,
+      purchaseAttemptStore,
+      ticketPersistenceService
+    });
+
+    const result = await service.recordAttemptResult({
+      requestId: "req-804",
+      attempt: 1,
+      startedAt: "2026-04-05T22:12:00.000Z",
+      result: terminalResult({
+        requestId: "req-804",
+        nextState: "success",
+        rawOutput: "[terminal] success",
+        externalTicketReference: "demo-ext-804"
+      })
+    });
+
+    expect(result.ticket?.requestId).toBe("req-804");
+    await expect(purchaseAttemptStore.getAttemptById("req-804:attempt:1")).resolves.toMatchObject({
+      outcome: "success",
+      purchaseId: "req-804"
+    });
+    await expect(canonicalPurchaseStore.getPurchaseByLegacyRequestId("req-804")).resolves.toMatchObject({
+      status: "awaiting_draw_close",
+      externalTicketReference: "demo-ext-804"
+    });
+  });
+
+  it("replays recorded canonical attempt without duplicating tickets", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([appendPurchaseRequestTransition(createExecutingRequest("req-805"), "success", {
+      eventId: "req-805:attempt:1:success",
+      occurredAt: "2026-04-05T22:12:30.000Z",
+      note: "terminal_attempt attempt=1 outcome=success"
+    })]);
+    const queueStore = new InMemoryPurchaseQueueStore([]);
+    const canonicalPurchaseStore = new InMemoryCanonicalPurchaseStore([
+      createCanonicalAwaitingDrawClosePurchase("req-805")
+    ]);
+    const purchaseAttemptStore = new InMemoryPurchaseAttemptStore([
+      {
+        attemptId: "req-805:attempt:1",
+        purchaseId: "req-805",
+        legacyRequestId: "req-805",
+        attemptNumber: 1,
+        outcome: "success",
+        startedAt: "2026-04-05T22:12:00.000Z",
+        finishedAt: "2026-04-05T22:12:30.000Z",
+        rawOutput: "[terminal] success",
+        durationMs: 30_000,
+        externalTicketReference: "demo-ext-805",
+        errorMessage: null
+      }
+    ]);
+    const ticketStore = new InMemoryTicketStore();
+    await ticketStore.saveTicket(createPurchasedTicketRecord({
+      ticketId: "req-805:ticket",
+      requestId: "req-805",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-300",
+      purchasedAt: "2026-04-05T22:12:30.000Z",
+      externalReference: "demo-ext-805"
+    }));
+    const notificationStore = new StubNotificationStore();
+    const ticketPersistenceService = new TicketPersistenceService({
+      ticketStore,
+      notificationStore
+    });
+    const service = new TerminalExecutionAttemptService({
+      requestStore,
+      queueStore,
+      canonicalPurchaseStore,
+      purchaseAttemptStore,
+      ticketPersistenceService
+    });
+
+    const replay = await service.recordAttemptResult({
+      requestId: "req-805",
+      attempt: 1,
+      startedAt: "2026-04-05T22:12:00.000Z",
+      result: terminalResult({
+        requestId: "req-805",
+        nextState: "success",
+        rawOutput: "[terminal] success",
+        externalTicketReference: "demo-ext-805"
+      })
+    });
+
+    expect(replay.ticket?.ticketId).toBe("req-805:ticket");
+    expect((await ticketStore.listTickets()).length).toBe(1);
+  });
 });
 
 function createQueuedRequest(requestId: string): PurchaseRequestRecord {
@@ -292,6 +409,67 @@ class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
   async clearAll(): Promise<void> {}
 }
 
+class InMemoryCanonicalPurchaseStore implements CanonicalPurchaseStore {
+  private purchases: CanonicalPurchaseRecord[];
+
+  constructor(initialPurchases: readonly CanonicalPurchaseRecord[]) {
+    this.purchases = initialPurchases.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async listPurchases(): Promise<readonly CanonicalPurchaseRecord[]> {
+    return this.purchases.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async getPurchaseById(purchaseId: string): Promise<CanonicalPurchaseRecord | null> {
+    const purchase = this.purchases.find((entry) => entry.snapshot.purchaseId === purchaseId) ?? null;
+    return purchase ? cloneCanonicalPurchaseRecord(purchase) : null;
+  }
+
+  async getPurchaseByLegacyRequestId(legacyRequestId: string): Promise<CanonicalPurchaseRecord | null> {
+    const purchase = this.purchases.find((entry) => entry.snapshot.legacyRequestId === legacyRequestId) ?? null;
+    return purchase ? cloneCanonicalPurchaseRecord(purchase) : null;
+  }
+
+  async savePurchase(record: CanonicalPurchaseRecord): Promise<void> {
+    const filtered = this.purchases.filter((entry) => entry.snapshot.purchaseId !== record.snapshot.purchaseId);
+    this.purchases = [...filtered, cloneCanonicalPurchaseRecord(record)];
+  }
+
+  async clearAll(): Promise<void> {
+    this.purchases = [];
+  }
+}
+
+class InMemoryPurchaseAttemptStore implements PurchaseAttemptStore {
+  private attempts: PurchaseAttemptRecord[];
+
+  constructor(initialAttempts: readonly PurchaseAttemptRecord[] = []) {
+    this.attempts = initialAttempts.map((attempt) => ({ ...attempt }));
+  }
+
+  async listAttemptsByPurchaseId(purchaseId: string): Promise<readonly PurchaseAttemptRecord[]> {
+    return this.attempts.filter((entry) => entry.purchaseId === purchaseId).map((attempt) => ({ ...attempt }));
+  }
+
+  async listAttemptsByLegacyRequestId(legacyRequestId: string): Promise<readonly PurchaseAttemptRecord[]> {
+    return this.attempts.filter((entry) => entry.legacyRequestId === legacyRequestId).map((attempt) => ({ ...attempt }));
+  }
+
+  async getAttemptById(attemptId: string): Promise<PurchaseAttemptRecord | null> {
+    const attempt = this.attempts.find((entry) => entry.attemptId === attemptId) ?? null;
+    return attempt ? { ...attempt } : null;
+  }
+
+  async saveAttempt(record: PurchaseAttemptRecord): Promise<void> {
+    const filtered = this.attempts.filter((entry) => entry.attemptId !== record.attemptId);
+    this.attempts = [...filtered, { ...record }];
+  }
+
+  async clearAll(): Promise<void> {
+    this.attempts = [];
+  }
+}
+
 class InMemoryTicketStore implements TicketStore {
   private tickets: TicketRecord[] = [];
 
@@ -324,6 +502,68 @@ function cloneRequestRecord(record: PurchaseRequestRecord): PurchaseRequestRecor
       payload: { ...record.snapshot.payload }
     },
     state: record.state,
+    journal: record.journal.map((entry) => ({ ...entry }))
+  };
+}
+
+function createCanonicalProcessingPurchase(requestId: string): CanonicalPurchaseRecord {
+  return appendCanonicalPurchaseTransition(
+    appendCanonicalPurchaseTransition(
+      createSubmittedCanonicalPurchase({
+        purchaseId: requestId,
+        legacyRequestId: requestId,
+        userId: "seed-user",
+        lotteryCode: "demo-lottery",
+        drawId: "draw-300",
+        payload: {
+          draw_count: 1
+        },
+        costMinor: 90,
+        currency: "RUB",
+        submittedAt: "2026-04-05T22:00:00.000Z"
+      }),
+      "queued",
+      {
+        eventId: `${requestId}:queued`,
+        occurredAt: "2026-04-05T22:02:00.000Z"
+      }
+    ),
+    "processing",
+    {
+      eventId: `${requestId}:processing`,
+      occurredAt: "2026-04-05T22:03:00.000Z"
+    }
+  );
+}
+
+function createCanonicalPurchasedPurchase(requestId: string): CanonicalPurchaseRecord {
+  return appendCanonicalPurchaseTransition(createCanonicalProcessingPurchase(requestId), "purchased", {
+    eventId: `${requestId}:purchased`,
+    occurredAt: "2026-04-05T22:12:30.000Z",
+    externalTicketReference: `demo-ext-${requestId.split("-").at(-1) ?? requestId}`
+  });
+}
+
+function createCanonicalAwaitingDrawClosePurchase(requestId: string): CanonicalPurchaseRecord {
+  return appendCanonicalPurchaseTransition(createCanonicalPurchasedPurchase(requestId), "awaiting_draw_close", {
+    eventId: `${requestId}:awaiting_draw_close`,
+    occurredAt: "2026-04-05T22:12:30.000Z",
+    externalTicketReference: `demo-ext-${requestId.split("-").at(-1) ?? requestId}`
+  });
+}
+
+function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): CanonicalPurchaseRecord {
+  return {
+    snapshot: {
+      ...record.snapshot,
+      payload: { ...record.snapshot.payload }
+    },
+    status: record.status,
+    resultStatus: record.resultStatus,
+    resultVisibility: record.resultVisibility,
+    purchasedAt: record.purchasedAt,
+    settledAt: record.settledAt,
+    externalTicketReference: record.externalTicketReference,
     journal: record.journal.map((entry) => ({ ...entry }))
   };
 }

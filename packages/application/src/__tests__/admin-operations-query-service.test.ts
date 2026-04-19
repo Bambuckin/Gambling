@@ -156,6 +156,32 @@ describe("AdminOperationsQueryService", () => {
       queueStatus: "missing"
     });
   });
+
+  it("keeps executing attempt count from queue while canonical purchase has no persisted attempts yet", async () => {
+    const service = createService({
+      nowIso: "2026-04-05T21:15:00.000Z",
+      requests: [createExecutingRequest("req-606", "2026-04-05T21:08:00.000Z")],
+      queueItems: [
+        createQueueItem({
+          requestId: "req-606",
+          status: "executing",
+          priority: "regular",
+          attemptCount: 1,
+          enqueuedAt: "2026-04-05T21:08:00.000Z"
+        })
+      ],
+      canonicalPurchases: [createCanonicalProcessingPurchase("purchase-606", "req-606", "2026-04-05T21:08:00.000Z")],
+      attempts: []
+    });
+
+    const snapshot = await service.getSnapshot();
+
+    expect(snapshot.problemRequests[0]).toMatchObject({
+      requestId: "req-606",
+      attemptCount: 1,
+      status: "executing"
+    });
+  });
 });
 
 function createService(input: {
