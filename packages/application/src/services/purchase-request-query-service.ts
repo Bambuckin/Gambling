@@ -75,8 +75,8 @@ function toStatusView(
 function deriveAttemptCount(
   journal: Awaited<ReturnType<PurchaseRequestStore["listRequests"]>>[number]["journal"]
 ): number {
-  const retryEvents = journal.filter((entry) => entry.toState === "retrying").length;
-  return retryEvents;
+  const executionEvents = journal.filter((entry) => entry.toState === "executing").length;
+  return executionEvents;
 }
 
 function resolveFinalResult(status: RequestState, note: string | undefined): string | null {

@@ -20,6 +20,14 @@ export class InMemoryIdentityStore implements IdentityStore {
     return cloneIdentity(this.identitiesById.get(identityId));
   }
 
+  async listAll(): Promise<readonly AccessIdentity[]> {
+    return Array.from(this.identitiesById.values()).map((i) => ({ ...i }));
+  }
+
+  async save(identity: AccessIdentity): Promise<void> {
+    this.upsert(identity);
+  }
+
   upsert(identity: AccessIdentity): void {
     const canonicalIdentity: AccessIdentity = {
       ...identity,

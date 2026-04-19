@@ -1,5 +1,6 @@
-﻿import { NextResponse } from "next/server";
-import { getDrawRefreshService } from "../../../../../lib/draw/draw-runtime";
+import { NextResponse } from "next/server";
+import { loadPurchasableDrawContext } from "../../../../../lib/draw/purchasable-draws";
+import { getLotteryRegistryService } from "../../../../../lib/registry/registry-runtime";
 
 type RouteContext = {
   readonly params: Promise<{
@@ -9,25 +10,14 @@ type RouteContext = {
 
 export async function GET(_request: Request, context: RouteContext): Promise<NextResponse> {
   const params = await context.params;
-  const drawService = getDrawRefreshService();
-  const drawState = await drawService.getDrawState(params.lotteryCode);
-  const draws = await drawService.listAvailableDraws(params.lotteryCode);
+  const lotteryCode = params.lotteryCode.trim().toLowerCase();
+  const lottery = await getLotteryRegistryService().getLotteryByCode(lotteryCode);
+  const drawContext = await loadPurchasableDrawContext(lotteryCode, lottery?.drawFreshnessMode);
 
   return NextResponse.json({
-    lotteryCode: params.lotteryCode,
-    status: drawState.status,
-    blockedReason: describePurchaseBlockReason(drawState.status, drawState.freshness?.staleSince),
-    draws
+    lotteryCode,
+    status: drawContext.drawState.status,
+    blockedReason: drawContext.blockedReason,
+    draws: drawContext.draws
   });
-}
-
-function describePurchaseBlockReason(
-  status: "fresh" | "stale" | "missing",
-  staleSince: string | undefined
-): string | null {
-  if (status === "missing") {
-    return "данные тиража отсутствуют";
-  }
-
-  return null;
 }

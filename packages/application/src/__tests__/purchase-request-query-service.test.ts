@@ -98,6 +98,52 @@ describe("PurchaseRequestQueryService", () => {
     expect(rows[0]?.finalResult).toBe("reserve released after cancellation");
     expect(rows[1]?.finalResult).toBeNull();
   });
+
+  it("derives execution attempt count from persisted request journal after queue item removal", async () => {
+    const executed = appendPurchaseRequestTransition(
+      appendPurchaseRequestTransition(
+        appendPurchaseRequestTransition(
+          createRequest({
+            requestId: "req-405",
+            userId: "seed-user",
+            createdAt: "2026-04-05T20:00:00.000Z"
+          }),
+          "confirmed",
+          {
+            eventId: "req-405:confirmed",
+            occurredAt: "2026-04-05T20:01:00.000Z"
+          }
+        ),
+        "queued",
+        {
+          eventId: "req-405:queued",
+          occurredAt: "2026-04-05T20:02:00.000Z"
+        }
+      ),
+      "executing",
+      {
+        eventId: "req-405:executing",
+        occurredAt: "2026-04-05T20:03:00.000Z"
+      }
+    );
+    const completed = appendPurchaseRequestTransition(executed, "success", {
+      eventId: "req-405:success",
+      occurredAt: "2026-04-05T20:04:00.000Z",
+      note: "ticket purchased"
+    });
+
+    const service = new PurchaseRequestQueryService({
+      requestStore: new InMemoryPurchaseRequestStore([completed]),
+      queueStore: new InMemoryPurchaseQueueStore([])
+    });
+
+    const rows = await service.listUserRequests("seed-user");
+    expect(rows[0]).toMatchObject({
+      requestId: "req-405",
+      status: "success",
+      attemptCount: 1
+    });
+  });
 });
 
 function createRequest(input: {
@@ -139,6 +185,8 @@ class InMemoryPurchaseRequestStore implements PurchaseRequestStore {
     const filtered = this.records.filter((entry) => entry.snapshot.requestId !== record.snapshot.requestId);
     this.records = [...filtered, cloneRequestRecord(record)];
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
@@ -165,6 +213,8 @@ class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
   async removeQueueItem(requestId: string): Promise<void> {
     this.items = this.items.filter((entry) => entry.requestId !== requestId);
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 function cloneRequestRecord(record: PurchaseRequestRecord): PurchaseRequestRecord {

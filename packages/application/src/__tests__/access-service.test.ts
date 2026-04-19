@@ -320,6 +320,12 @@ class TestIdentityStore implements IdentityStore {
   async findById(identityId: string): Promise<AccessIdentity | null> {
     return this.identitiesById.get(identityId) ?? null;
   }
+
+  async listAll(): Promise<readonly AccessIdentity[]> {
+    return [...this.identitiesById.values()];
+  }
+
+  async save(_identity: AccessIdentity): Promise<void> {}
 }
 
 class TestSessionStore implements SessionStore {
@@ -352,11 +358,17 @@ class TestSessionStore implements SessionStore {
 
     return revoked;
   }
+
+  async revokeAll(_revokedAt: string): Promise<void> {}
 }
 
 class PlainTextPasswordVerifier implements PasswordVerifier {
   async verify(plainTextPassword: string, passwordHash: string): Promise<boolean> {
     return plainTextPassword === passwordHash;
+  }
+
+  async hash(plainTextPassword: string): Promise<string> {
+    return plainTextPassword;
   }
 }
 

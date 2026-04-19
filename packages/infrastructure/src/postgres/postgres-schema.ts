@@ -45,6 +45,16 @@ create table if not exists lottery_draw_snapshots (
   fetched_at timestamptz not null,
   snapshot jsonb not null
 );
+create table if not exists lottery_draw_closures (
+  lottery_code text not null,
+  draw_id text not null,
+  status text not null,
+  closed_at timestamptz null,
+  record jsonb not null,
+  primary key (lottery_code, draw_id)
+);
+create index if not exists lottery_draw_closures_status_idx on lottery_draw_closures(status);
+create index if not exists lottery_draw_closures_closed_at_idx on lottery_draw_closures(closed_at);
 
 create table if not exists lottery_ledger_entries (
   entry_id text primary key,
@@ -118,6 +128,43 @@ create table if not exists lottery_terminal_execution_locks (
   acquired_at timestamptz not null,
   expires_at timestamptz not null
 );
+
+create table if not exists lottery_notifications (
+  notification_id text primary key,
+  user_id text not null,
+  type text not null,
+  read boolean not null,
+  created_at timestamptz not null,
+  notification jsonb not null
+);
+create index if not exists lottery_notifications_user_id_idx on lottery_notifications(user_id);
+create index if not exists lottery_notifications_created_at_idx on lottery_notifications(created_at);
+create index if not exists lottery_notifications_read_idx on lottery_notifications(read);
+
+create table if not exists lottery_cash_desk_requests (
+  cash_desk_request_id text primary key,
+  ticket_id text not null unique,
+  user_id text not null,
+  lottery_code text not null,
+  draw_id text not null,
+  status text not null,
+  created_at timestamptz not null,
+  request jsonb not null
+);
+create index if not exists lottery_cash_desk_requests_user_id_idx on lottery_cash_desk_requests(user_id);
+create index if not exists lottery_cash_desk_requests_status_idx on lottery_cash_desk_requests(status);
+create index if not exists lottery_cash_desk_requests_created_at_idx on lottery_cash_desk_requests(created_at);
+
+create table if not exists lottery_winnings_credit_jobs (
+  job_id text primary key,
+  ticket_id text not null,
+  user_id text not null,
+  status text not null,
+  created_at timestamptz not null,
+  job jsonb not null
+);
+create index if not exists lottery_winnings_credit_jobs_ticket_id_idx on lottery_winnings_credit_jobs(ticket_id);
+create index if not exists lottery_winnings_credit_jobs_status_idx on lottery_winnings_credit_jobs(status);
 `;
 
 export async function initializeLotteryPostgresSchema(pool: Pool): Promise<void> {

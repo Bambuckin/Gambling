@@ -200,6 +200,8 @@ class InMemoryPurchaseRequestStore implements PurchaseRequestStore {
     const filtered = this.records.filter((entry) => entry.snapshot.requestId !== record.snapshot.requestId);
     this.records = [...filtered, cloneRecord(record)];
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 function cloneRecord(record: PurchaseRequestRecord): PurchaseRequestRecord {

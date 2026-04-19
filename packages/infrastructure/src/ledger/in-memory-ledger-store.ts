@@ -19,6 +19,10 @@ export class InMemoryLedgerStore implements LedgerStore {
   async appendEntry(entry: LedgerEntry): Promise<void> {
     this.entries = normalizeEntries([...this.entries, entry]);
   }
+
+  async clearAll(): Promise<void> {
+    this.entries = [];
+  }
 }
 
 function normalizeEntries(entries: readonly LedgerEntry[]): LedgerEntry[] {

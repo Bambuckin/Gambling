@@ -1,5 +1,6 @@
 import {
   DrawRefreshService,
+  PurchaseCompletionService,
   PurchaseExecutionQueueService,
   type PurchaseQueueStore,
   type PurchaseRequestStore,
@@ -7,37 +8,49 @@ import {
   type TerminalExecutionLock,
   TerminalExecutionAttemptService,
   TerminalRetryService,
+  TicketClaimService,
   type TicketStore,
   type TicketVerificationJobStore,
   TicketVerificationResultService,
   TicketPersistenceService,
   TicketVerificationQueueService,
+  type WinningsCreditJobStore,
+  WinningsCreditService,
   WalletLedgerService,
   type TerminalExecutionResult
 } from "@lottery/application";
+import type { LotteryPurchaseCompletionMode } from "@lottery/domain";
 import {
-  createDefaultDrawSnapshots,
-  InMemoryLedgerStore,
+  createDefaultLotteryRegistryEntries,
+  InMemoryDrawClosureStore,
   InMemoryDrawStore,
+  InMemoryLedgerStore,
+  InMemoryNotificationStore,
   InMemoryPurchaseQueueStore,
   InMemoryPurchaseRequestStore,
   InMemoryTerminalExecutionLock,
   InMemoryTicketStore,
   InMemoryTicketVerificationJobStore,
+  InMemoryWinningsCreditJobStore,
+  PostgresDrawClosureStore,
   PostgresDrawStore,
   PostgresLedgerStore,
+  PostgresNotificationStore,
   PostgresPurchaseQueueStore,
   PostgresPurchaseRequestStore,
   PostgresTerminalExecutionLock,
   PostgresTicketStore,
-  PostgresTicketVerificationJobStore
+  PostgresTicketVerificationJobStore,
+  PostgresWinningsCreditJobStore
 } from "@lottery/infrastructure";
 import { Big8LiveDrawProvider } from "./lib/big8-live-draw-provider.js";
+import { loadWorkerEnvFromFile } from "./lib/runtime/load-worker-env.js";
 import { TerminalHandlerRuntime } from "./lib/terminal-handler-runtime.js";
 import { getWorkerPostgresPool, getWorkerStorageBackend } from "./lib/runtime/postgres-runtime.js";
 
 type WorkerBootState = "booting" | "ready";
 
+const workerEnvPath = loadWorkerEnvFromFile();
 const WORKER_ID = "terminal-worker";
 const rawPollIntervalMs = Number(process.env.LOTTERY_TERMINAL_POLL_INTERVAL_MS ?? 3000);
 const POLL_INTERVAL_MS = Number.isFinite(rawPollIntervalMs) && rawPollIntervalMs >= 250 ? rawPollIntervalMs : 3000;
@@ -46,13 +59,17 @@ const DRAW_SYNC_INTERVAL_MS =
   Number.isFinite(rawDrawSyncIntervalMs) && rawDrawSyncIntervalMs >= 1000 ? rawDrawSyncIntervalMs : 20000;
 const bootTimestamp = new Date().toISOString();
 const timeSource = new SystemTimeSource();
-const big8TerminalMode = (process.env.LOTTERY_BIG8_TERMINAL_MODE ?? "real").trim().toLowerCase();
+const big8TerminalMode = (process.env.LOTTERY_BIG8_TERMINAL_MODE ?? "mock").trim().toLowerCase();
 const drawSyncRequested = (process.env.LOTTERY_BIG8_LIVE_DRAW_SYNC_ENABLED ?? "true").trim().toLowerCase() !== "false";
 const drawSyncEnabled = drawSyncRequested;
 const storageBackend = getWorkerStorageBackend();
 const postgresPool = storageBackend === "postgres" ? getWorkerPostgresPool() : null;
 const drawStore =
   storageBackend === "postgres" && postgresPool ? new PostgresDrawStore(postgresPool) : new InMemoryDrawStore();
+const drawClosureStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresDrawClosureStore(postgresPool)
+    : new InMemoryDrawClosureStore();
 const requestStore: PurchaseRequestStore =
   storageBackend === "postgres" && postgresPool
     ? new PostgresPurchaseRequestStore(postgresPool)
@@ -75,10 +92,18 @@ const ticketStore: TicketStore =
   storageBackend === "postgres" && postgresPool
     ? new PostgresTicketStore(postgresPool)
     : new InMemoryTicketStore();
+const notificationStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresNotificationStore(postgresPool)
+    : new InMemoryNotificationStore();
 const verificationJobStore: TicketVerificationJobStore =
   storageBackend === "postgres" && postgresPool
     ? new PostgresTicketVerificationJobStore(postgresPool)
     : new InMemoryTicketVerificationJobStore();
+const winningsCreditJobStore: WinningsCreditJobStore =
+  storageBackend === "postgres" && postgresPool
+    ? new PostgresWinningsCreditJobStore(postgresPool)
+    : new InMemoryWinningsCreditJobStore();
 const walletLedgerService = new WalletLedgerService({
   ledgerStore,
   timeSource
@@ -106,7 +131,8 @@ const attemptService = new TerminalExecutionAttemptService({
   requestStore,
   queueStore,
   ticketPersistenceService: new TicketPersistenceService({
-    ticketStore
+    ticketStore,
+    notificationStore
   })
 });
 const retryService = new TerminalRetryService({
@@ -115,6 +141,7 @@ const retryService = new TerminalRetryService({
 const verificationQueueService = new TicketVerificationQueueService({
   ticketStore,
   jobStore: verificationJobStore,
+  drawClosureStore,
   timeSource
 });
 const verificationResultService = new TicketVerificationResultService({
@@ -123,7 +150,28 @@ const verificationResultService = new TicketVerificationResultService({
   walletLedgerService,
   timeSource
 });
+const ticketClaimService = new TicketClaimService({ ticketStore });
+const winningsCreditService = new WinningsCreditService({
+  winningsCreditJobStore,
+  ticketStore,
+  ticketClaimService,
+  walletLedgerService,
+  timeSource
+});
 const handlerRuntime = new TerminalHandlerRuntime();
+const completionService = new PurchaseCompletionService({
+  requestStore,
+  ticketPersistenceService: new TicketPersistenceService({
+    ticketStore,
+    notificationStore
+  }),
+  timeSource
+});
+const completionModeByLotteryCode = new Map<string, LotteryPurchaseCompletionMode>(
+  createDefaultLotteryRegistryEntries()
+    .filter((entry) => entry.purchaseCompletionMode)
+    .map((entry) => [entry.lotteryCode, entry.purchaseCompletionMode!])
+);
 
 let state: WorkerBootState = "booting";
 let isPolling = false;
@@ -131,6 +179,7 @@ let isRefreshingDraws = false;
 
 function logBootMessage(): void {
   console.log(`[terminal-worker] ${bootTimestamp} - queue reservation host started`);
+  console.log(`[terminal-worker] storage backend=${storageBackend}${workerEnvPath ? ` env=${workerEnvPath}` : ""}`);
   console.log("[terminal-worker] handler resolution, attempt journaling, and retry policy are enabled");
   console.log(
     `[terminal-worker] big8 live draw sync=${drawSyncEnabled ? "enabled" : "disabled"} interval=${DRAW_SYNC_INTERVAL_MS}ms`
@@ -150,6 +199,7 @@ async function pollQueueForExecution(): Promise<void> {
     });
     if (!reservation) {
       await processTicketVerificationQueue();
+      await processCreditQueue();
       return;
     }
 
@@ -202,7 +252,24 @@ async function pollQueueForExecution(): Promise<void> {
       `[terminal-worker] attempt recorded request=${attemptRecord.request.snapshot.requestId} outcome=${attemptRecord.request.state}${attemptRecord.ticket ? ` ticket=${attemptRecord.ticket.ticketId}` : ""}`
     );
 
+    if (attemptRecord.request.state === "added_to_cart") {
+      const completionMode = completionModeByLotteryCode.get(reservation.request.snapshot.lotteryCode);
+      if (completionMode) {
+        const completionResult = await completionService.completeAfterCartStage({
+          request: attemptRecord.request,
+          completionMode,
+          cartExternalReference: terminalResult.externalTicketReference ?? null
+        });
+        if (completionResult.completed) {
+          console.log(
+            `[terminal-worker] purchase completion request=${completionResult.request.snapshot.requestId} mode=${completionMode}${completionResult.ticket ? ` ticket=${completionResult.ticket.ticketId}` : ""}`
+          );
+        }
+      }
+    }
+
     await processTicketVerificationQueue();
+    await processCreditQueue();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[terminal-worker] reservation error: ${message}`);
@@ -274,6 +341,20 @@ async function processTicketVerificationQueue(): Promise<void> {
   }
 }
 
+async function processCreditQueue(): Promise<void> {
+  try {
+    const result = await winningsCreditService.processNextCreditJob();
+    if (result) {
+      console.log(
+        `[terminal-worker] credit job processed ticket=${result.job.ticketId} credited=${result.credited}`
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[terminal-worker] credit job processing failed: ${message}`);
+  }
+}
+
 async function refreshBig8LiveDraws(): Promise<void> {
   if (!drawSyncEnabled || isRefreshingDraws || isPolling) {
     return;
@@ -296,24 +377,18 @@ async function refreshBig8LiveDraws(): Promise<void> {
 }
 
 async function refreshBig8MockDraws() {
-  const template = createDefaultDrawSnapshots(new Date()).find((entry) => entry.lotteryCode === "bolshaya-8");
-  if (!template) {
+  const existingSnapshot = await drawStore.getSnapshot("bolshaya-8");
+  if (!existingSnapshot) {
     return drawRefreshService.getDrawState("bolshaya-8");
   }
 
-  const availableDraws = template.availableDraws ?? [];
-  const currentDraw = availableDraws[0] ?? {
-    drawId: template.drawId,
-    drawAt: template.drawAt
-  };
-
   await drawRefreshService.upsertSnapshot({
     lotteryCode: "bolshaya-8",
-    drawId: currentDraw.drawId,
-    drawAt: currentDraw.drawAt,
+    drawId: existingSnapshot.drawId,
+    drawAt: existingSnapshot.drawAt,
     fetchedAt: timeSource.nowIso(),
-    freshnessTtlSeconds: Number(process.env.LOTTERY_BIG8_DRAW_TTL_SECONDS ?? 45),
-    ...(availableDraws.length > 0 ? { availableDraws } : {})
+    freshnessTtlSeconds: existingSnapshot.freshnessTtlSeconds,
+    ...(existingSnapshot.availableDraws ? { availableDraws: existingSnapshot.availableDraws } : {})
   });
   return drawRefreshService.getDrawState("bolshaya-8");
 }

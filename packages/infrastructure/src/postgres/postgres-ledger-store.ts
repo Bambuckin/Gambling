@@ -59,4 +59,8 @@ export class PostgresLedgerStore implements LedgerStore {
       ]
     );
   }
+
+  async clearAll(): Promise<void> {
+    await this.pool.query("delete from lottery_ledger_entries");
+  }
 }

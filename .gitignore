@@ -32,3 +32,8 @@ Desktop.ini
 # Temporary files
 tmp/
 temp/
+
+# Local runtime artifacts
+.main-browser-profile-*/
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map

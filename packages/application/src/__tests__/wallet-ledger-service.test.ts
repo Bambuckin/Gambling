@@ -522,6 +522,8 @@ class InMemoryLedgerStore implements LedgerStore {
   async appendEntry(entry: LedgerEntry): Promise<void> {
     this.entries = [...this.entries, cloneEntry(entry)];
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 class FixedTimeSource implements TimeSource {

@@ -24,7 +24,7 @@ export const REQUEST_TRANSITIONS: RequestTransitionMap = {
   queued: ["executing", "canceled", "error", "reserve_released"],
   executing: ["retrying", "added_to_cart", "success", "error", "reserve_released"],
   retrying: ["queued", "executing", "error", "reserve_released"],
-  added_to_cart: [],
+  added_to_cart: ["success"],
   success: [],
   canceled: ["reserve_released"],
   error: ["reserve_released"],

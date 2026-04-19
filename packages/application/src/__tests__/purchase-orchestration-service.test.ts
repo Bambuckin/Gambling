@@ -457,6 +457,8 @@ class InMemoryPurchaseRequestStore implements PurchaseRequestStore {
     const filtered = this.records.filter((entry) => entry.snapshot.requestId !== record.snapshot.requestId);
     this.records = [...filtered, cloneRequestRecord(record)];
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
@@ -479,6 +481,8 @@ class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
   async removeQueueItem(requestId: string): Promise<void> {
     this.items = this.items.filter((entry) => entry.requestId !== requestId);
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 class InMemoryLedgerStore implements LedgerStore {
@@ -495,6 +499,8 @@ class InMemoryLedgerStore implements LedgerStore {
   async appendEntry(entry: LedgerEntry): Promise<void> {
     this.entries = [...this.entries, cloneLedgerEntry(entry)];
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 class SequentialEntryFactory implements WalletLedgerEntryFactory {

@@ -8,6 +8,16 @@
 
 Каждая подтвержденная покупка должна предсказуемо пройти путь от веб-интерфейса до единственного главного терминала с корректным резервированием/списанием денег, понятным статусом и полным журналом событий.
 
+## Current Milestone: v1.1 Domain Consolidation and Truth Model
+
+**Goal:** Collapse split runtime truth into canonical `purchase` and `draw` models without breaking the working Big 8 contour.
+
+**Target features:**
+- canonical `purchase` aggregate with separate execution, result, and visibility axes
+- canonical `draw` lifecycle with explicit `open -> closed -> settled` control
+- additive storage migration with compatibility read models for current web/admin surfaces
+- durable `purchase_attempt` history plus worker/lock hardening before transport replacement
+
 ## Requirements
 
 ### Validated
@@ -79,4 +89,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-05 after initialization*
+*Last updated: 2026-04-19 after planning the architecture consolidation wave*

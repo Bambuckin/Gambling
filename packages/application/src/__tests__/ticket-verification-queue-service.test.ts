@@ -1,6 +1,7 @@
-import type { TicketRecord, TicketVerificationJob } from "@lottery/domain";
-import { createPurchasedTicketRecord } from "@lottery/domain";
+import type { DrawClosureRecord, TicketRecord, TicketVerificationJob } from "@lottery/domain";
+import { closeDrawClosure, createOpenDrawClosure, createPurchasedTicketRecord } from "@lottery/domain";
 import { describe, expect, it } from "vitest";
+import type { DrawClosureStore } from "../ports/draw-closure-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
 import type { TicketVerificationJobStore } from "../ports/ticket-verification-job-store.js";
 import type { TimeSource } from "../ports/time-source.js";
@@ -16,6 +17,7 @@ describe("TicketVerificationQueueService", () => {
     const service = new TicketVerificationQueueService({
       ticketStore,
       jobStore,
+      drawClosureStore: new InMemoryDrawClosureStore([createClosedDrawClosure("demo-lottery", "draw-970")]),
       timeSource: new FixedTimeSource("2026-04-06T00:10:00.000Z")
     });
 
@@ -34,6 +36,7 @@ describe("TicketVerificationQueueService", () => {
     const service = new TicketVerificationQueueService({
       ticketStore,
       jobStore,
+      drawClosureStore: new InMemoryDrawClosureStore([createClosedDrawClosure("demo-lottery", "draw-972")]),
       timeSource: new FixedTimeSource("2026-04-06T00:11:00.000Z")
     });
 
@@ -59,6 +62,7 @@ describe("TicketVerificationQueueService", () => {
     const service = new TicketVerificationQueueService({
       ticketStore,
       jobStore,
+      drawClosureStore: new InMemoryDrawClosureStore([createClosedDrawClosure("demo-lottery", "draw-973")]),
       timeSource: new FixedTimeSource("2026-04-06T00:12:00.000Z")
     });
 
@@ -92,6 +96,24 @@ describe("TicketVerificationQueueService", () => {
     });
     expect(errored?.status).toBe("error");
     expect(errored?.lastError).toContain("timeout");
+  });
+
+  it("waits for draw readiness before creating verification jobs", async () => {
+    const ticketStore = new InMemoryTicketStore([createTicket("req-974", "pending")]);
+    const jobStore = new InMemoryTicketVerificationJobStore();
+    const service = new TicketVerificationQueueService({
+      ticketStore,
+      jobStore,
+      drawClosureStore: new InMemoryDrawClosureStore([createOpenDrawClosure("demo-lottery", "draw-974")]),
+      timeSource: new FixedTimeSource("2026-04-06T00:13:00.000Z")
+    });
+
+    const result = await service.enqueuePendingVerificationTickets();
+
+    expect(result.pendingCount).toBe(1);
+    expect(result.enqueuedCount).toBe(0);
+    expect(result.skippedCount).toBe(0);
+    expect((await jobStore.listJobs()).length).toBe(0);
   });
 });
 
@@ -135,6 +157,8 @@ class InMemoryTicketStore implements TicketStore {
     const filtered = this.tickets.filter((entry) => entry.ticketId !== ticket.ticketId);
     this.tickets = [...filtered, { ...ticket }];
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 class InMemoryTicketVerificationJobStore implements TicketVerificationJobStore {
@@ -160,6 +184,34 @@ class InMemoryTicketVerificationJobStore implements TicketVerificationJobStore {
   }
 }
 
+class InMemoryDrawClosureStore implements DrawClosureStore {
+  private readonly closures: DrawClosureRecord[];
+
+  constructor(closures: readonly DrawClosureRecord[]) {
+    this.closures = closures.map((closure) => ({ ...closure }));
+  }
+
+  async getClosure(lotteryCode: string, drawId: string): Promise<DrawClosureRecord | null> {
+    return this.closures.find((closure) => closure.lotteryCode === lotteryCode && closure.drawId === drawId) ?? null;
+  }
+
+  async saveClosure(): Promise<void> {
+    throw new Error("read-only test double");
+  }
+
+  async listClosures(lotteryCode?: string): Promise<readonly DrawClosureRecord[]> {
+    return lotteryCode
+      ? this.closures.filter((closure) => closure.lotteryCode === lotteryCode)
+      : [...this.closures];
+  }
+
+  async deleteClosure(): Promise<void> {
+    throw new Error("read-only test double");
+  }
+
+  async clearAll(): Promise<void> {}
+}
+
 class FixedTimeSource implements TimeSource {
   private readonly value: string;
 
@@ -170,4 +222,12 @@ class FixedTimeSource implements TimeSource {
   nowIso(): string {
     return this.value;
   }
+}
+
+function createClosedDrawClosure(lotteryCode: string, drawId: string): DrawClosureRecord {
+  return closeDrawClosure(
+    createOpenDrawClosure(lotteryCode, drawId),
+    "seed-admin",
+    "2026-04-06T00:09:59.000Z"
+  );
 }

@@ -67,37 +67,68 @@ export function MockTerminalLiveMonitor(props: MockTerminalLiveMonitorProps): Re
 
   return (
     <article className="panel">
-      <h2>{props.title ?? "Mock Terminal Inbox"}</h2>
-      <p className="muted">{props.refreshNote ?? `Auto refresh every ${REFRESH_INTERVAL_MS / 1000} sec.`}</p>
+      <h2>{props.title ?? "Очередь терминала"}</h2>
+      <p className="muted">{props.refreshNote ?? `Обновление каждые ${REFRESH_INTERVAL_MS / 1000} секунды.`}</p>
       <p className={`alert-row ${error ? "warn" : "ok"}`}>
-        {error ? `Stream temporarily unavailable: ${error}` : `Synced: ${formatIso(fetchedAt) ?? "just now"}`}
+        {error ? `Связь с терминалом временно недоступна: ${error}` : `Синхронизировано: ${formatIso(fetchedAt) ?? "только что"}`}
       </p>
 
       {rows.length === 0 ? (
-        <p className="muted">{props.emptyMessage ?? "No Big 8 requests have reached the receiver yet."}</p>
+        <p className="muted">{props.emptyMessage ?? "Заявок на терминале пока нет."}</p>
       ) : (
         <div className="page-column">
           {rows.map((row) => (
             <article key={row.requestId} className="panel">
-              <p>
-                <strong>{row.requestId}</strong> | state={row.state} | draw={row.drawId}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "1rem",
+                  flexWrap: "wrap"
+                }}
+              >
+                <div>
+                  <p style={{ marginBottom: "0.25rem" }}>
+                    <strong>{row.requestId}</strong>
+                  </p>
+                  <p className="muted" style={{ margin: 0 }}>
+                    Пользователь: {row.userId} | Тираж: {row.drawId}
+                  </p>
+                </div>
+                <span className={`badge ${resolveStateTone(row.state)}`}>{formatState(row.state)}</span>
+              </div>
+
+              <div className="mini-grid" style={{ marginTop: "0.75rem" }}>
+                <article className="mini-stat">
+                  <span className="label">Билетов</span>
+                  <span className="value">{row.ticketCount}</span>
+                </article>
+                <article className="mini-stat">
+                  <span className="label">Попыток</span>
+                  <span className="value">{row.attemptCount}</span>
+                </article>
+                <article className="mini-stat">
+                  <span className="label">Резерв</span>
+                  <span className="value">{formatIso(row.reservedAt) ?? "Ещё нет"}</span>
+                </article>
+                <article className="mini-stat">
+                  <span className="label">Обновлено</span>
+                  <span className="value">{formatIso(row.updatedAt) ?? row.updatedAt}</span>
+                </article>
+              </div>
+
+              <p className="muted" style={{ marginTop: "0.75rem" }}>
+                Телефон: {row.phoneMasked ?? "нет"}{row.receiverLabel ? ` | Получатель: ${row.receiverLabel}` : ""}
               </p>
-              <p>
-                receiver={row.receiverLabel ?? "n/a"} | user={row.userId} | attempts={row.attemptCount}
-              </p>
-              <p>
-                reserved={formatIso(row.reservedAt) ?? "n/a"} | updated={formatIso(row.updatedAt) ?? row.updatedAt}
-              </p>
-              <p>
-                phone={row.phoneMasked ?? "n/a"} | tickets={row.ticketCount}
-              </p>
-              <p>
-                worker raw: <code>{row.workerRawOutput ?? "n/a"}</code>
-              </p>
-              <details>
-                <summary>Payload snapshot</summary>
-                <pre>{JSON.stringify(row.payload, null, 2)}</pre>
-              </details>
+
+              {row.workerRawOutput ? (
+                <details>
+                  <summary>Технические детали</summary>
+                  <pre>{row.workerRawOutput}</pre>
+                  {row.payload ? <pre>{JSON.stringify(row.payload, null, 2)}</pre> : null}
+                </details>
+              ) : null}
             </article>
           ))}
         </div>
@@ -133,4 +164,39 @@ function formatIso(value: string | null | undefined): string | null {
     minute: "2-digit",
     second: "2-digit"
   });
+}
+
+function formatState(state: string): string {
+  switch (state) {
+    case "queued":
+      return "В очереди";
+    case "executing":
+      return "Исполняется";
+    case "added_to_cart":
+      return "Добавлен в корзину";
+    case "success":
+      return "Куплен";
+    case "completed":
+      return "Завершён";
+    case "retrying":
+      return "Повторная попытка";
+    case "error":
+      return "Ошибка";
+    default:
+      return state;
+  }
+}
+
+function resolveStateTone(state: string): "success" | "warning" | "error" {
+  switch (state) {
+    case "success":
+    case "completed":
+      return "success";
+    case "queued":
+    case "executing":
+    case "retrying":
+      return "warning";
+    default:
+      return "error";
+  }
 }

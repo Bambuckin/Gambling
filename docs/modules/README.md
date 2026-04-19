@@ -6,6 +6,7 @@ Use these docs before touching cross-module logic.
 ## Core References
 
 - `docs/modules/system-architecture.md` - runtime and package data-flow map.
+- `docs/modules/current-working-contour.md` - what the current real operator-facing slice does today.
 - `docs/modules/boundary-catalog.md` - authoritative ownership matrix and integration rules.
 - `docs/modules/lottery-handler-extension.md` - handler extension/change workflow.
 - `docs/modules/ui-customization.md` - visual layer customization and NLoto seed source map.

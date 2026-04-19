@@ -8,112 +8,112 @@ export interface LotteryPresentation {
 const FALLBACK_PRESENTATION: LotteryPresentation = {
   category: "Тиражная лотерея",
   tagline: "Собери ставку, подтверди заявку и отправь её в терминальную очередь.",
-  accentFrom: "#ff7b3b",
-  accentTo: "#ff3b2e"
+  accentFrom: "#8b5cf6",
+  accentTo: "#6d28d9"
 };
 
 const PRESENTATIONS: Readonly<Record<string, LotteryPresentation>> = {
   mechtallion: {
     category: "Флагман",
     tagline: "Еженедельный эфир с крупным джекпотом и расширенным призовым фондом.",
-    accentFrom: "#ff8c3a",
-    accentTo: "#ff3d2c"
+    accentFrom: "#7c3aed",
+    accentTo: "#5b21b6"
   },
   "bolshaya-8": {
     category: "Быстрые тиражи",
     tagline: "Три розыгрыша в час с повышенным фондом и агрессивной динамикой.",
-    accentFrom: "#ffb347",
-    accentTo: "#ff4f2e"
+    accentFrom: "#a78bfa",
+    accentTo: "#7c3aed"
   },
   "velikolepnaya-8": {
     category: "Быстрые тиражи",
     tagline: "Регулярные тиражи с коротким циклом и понятной механикой входа.",
-    accentFrom: "#ffc06a",
-    accentTo: "#ff6433"
+    accentFrom: "#c4b5fd",
+    accentTo: "#8b5cf6"
   },
   "super-8": {
     category: "Быстрые тиражи",
     tagline: "Формат 8x20 с усиленным множителем и экспресс-покупкой.",
-    accentFrom: "#ffd15d",
-    accentTo: "#ff6c3d"
+    accentFrom: "#ddd6fe",
+    accentTo: "#a78bfa"
   },
   "top-12": {
     category: "Числовая",
     tagline: "Лотерея с частыми тиражами и акцентом на серийную игру.",
-    accentFrom: "#f7a540",
-    accentTo: "#ff4d28"
+    accentFrom: "#9333ea",
+    accentTo: "#6b21a8"
   },
   "twelve-good-deeds": {
     category: "Благотворительная",
     tagline: "Часть средств направляется в социальные проекты и фонды.",
-    accentFrom: "#ffb36b",
-    accentTo: "#ff5c45"
+    accentFrom: "#a855f7",
+    accentTo: "#7e22ce"
   },
   "lavina-prizov": {
     category: "Моментум",
     tagline: "Плотный поток тиражей с акцентом на частые малые выигрыши.",
-    accentFrom: "#ff9e4a",
-    accentTo: "#ff3d2e"
+    accentFrom: "#8b5cf6",
+    accentTo: "#6d28d9"
   },
   premier: {
     category: "Тиражная",
     tagline: "Комфортный ритм розыгрышей для игры сериями.",
-    accentFrom: "#ffaf5e",
-    accentTo: "#ff5537"
+    accentFrom: "#b07afc",
+    accentTo: "#8338ec"
   },
   turnir: {
     category: "Турнирная",
     tagline: "Серия розыгрышей с соревновательной механикой участия.",
-    accentFrom: "#ffbf64",
-    accentTo: "#ff5b2f"
+    accentFrom: "#c084fc",
+    accentTo: "#9333ea"
   },
   "trizhdy-tri": {
     category: "Бинго",
     tagline: "Компактные тиражи с простым входом и быстрым результатом.",
-    accentFrom: "#ff9958",
-    accentTo: "#ff4a35"
+    accentFrom: "#a855f7",
+    accentTo: "#7c3aed"
   },
   "four-by-four": {
     category: "Бинго",
     tagline: "Формат 4x4 с коротким ожиданием статуса и понятной ставкой.",
-    accentFrom: "#ffab61",
-    accentTo: "#ff5633"
+    accentFrom: "#b07afc",
+    accentTo: "#8b5cf6"
   },
   "forsage-75": {
     category: "Бинго",
     tagline: "Быстрые партии для игроков, которые любят плотный темп.",
-    accentFrom: "#ffb66a",
-    accentTo: "#ff5a35"
+    accentFrom: "#c084fc",
+    accentTo: "#9333ea"
   },
   "pyataya-skorost": {
     category: "Числовая",
     tagline: "Ставки сериями с быстрым оборотом заявок.",
-    accentFrom: "#ff9f5c",
-    accentTo: "#ff4c2e"
+    accentFrom: "#9f7aea",
+    accentTo: "#805ad5"
   },
   "five-of-thirty-seven": {
     category: "Числовая",
     tagline: "Классическая механика 5/37 с гибкой глубиной участия.",
-    accentFrom: "#ff9f53",
-    accentTo: "#ff4e2f"
+    accentFrom: "#9f7aea",
+    accentTo: "#6b46c1"
   },
   "pyat-o-pyat": {
     category: "Экспресс",
     tagline: "Плотные тиражи и работа с множителями в одном потоке.",
-    accentFrom: "#ffb05f",
-    accentTo: "#ff5731"
+    accentFrom: "#b794f4",
+    accentTo: "#8b5cf6"
   },
   "cvetnye-shary": {
     category: "Кено",
     tagline: "Экспресс-розыгрыши с визуальным форматом цветных шаров.",
-    accentFrom: "#ffcd76",
-    accentTo: "#ff6b40"
+    accentFrom: "#d6bcfa",
+    accentTo: "#a78bfa"
   },
   "mechtallion-charity": {
     category: "Спецвыпуск",
     tagline: "Партнерский выпуск с благотворительным акцентом.",
-    accentFrom: "#ffc27f",
-    accentTo: "#ff7047"
+    accentFrom: "#c4b5fd",
+    accentTo: "#9f7aea"
   }
 };
 

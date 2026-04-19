@@ -5,14 +5,17 @@ This runbook prepares the current repository for LAN deployment with shared Post
 ## 1. What Is Ready In This Commit
 
 - Web and terminal-worker can run in two modes: `in-memory` or `postgres` (`LOTTERY_STORAGE_BACKEND`).
-- Postgres adapters are implemented for identities/sessions, registry, draws, ledger, purchase requests/queue, tickets, verification jobs, operations audit, and terminal execution lock.
+- Postgres adapters are implemented for identities/sessions, registry, draws, ledger, purchase requests/queue, tickets, verification jobs, draw closures, notifications, cash desk requests, winnings credit jobs, operations audit, and terminal execution lock.
 - One shared database can now be used by both web and worker processes.
+- Admin visibility no longer depends on queue depth alone: `/admin` also shows terminal/last-request rows because the worker can consume the queue immediately.
 - Bootstrap script exists to initialize schema and seed base data.
+- Kiosk launcher wraps the cashier browser session with clear exit instructions.
+- Stop scripts exist for server, worker, and client kiosk sessions.
 
 ## 2. What Still Requires Project-Specific Completion
 
-- Big 8 is integrated to cart stage only; checkout/payment automation is still pending.
-- Final customer-facing ticket purchase UI page/visual system can be replaced independently.
+- Big 8 is integrated through queueing, worker pickup, admin draw closure, and result visibility; real checkout/payment automation after cart stage is still pending.
+- The simplified client UI intentionally keeps only purchase, request status, and ticket result surfaces. Dedicated notification and payout screens are not exposed right now.
 - Infrastructure values must be filled: actual IPs, credentials, hostnames.
 
 ## 3. Machine Roles
@@ -24,8 +27,9 @@ Install:
 - Corepack enabled (`corepack enable`)
 - Repo checkout
 
-One-click launcher:
-- `bin/Start Main Server.cmd`
+One-click launchers:
+- Start: `bin/Start Main Server.cmd`
+- Stop:  `bin/Stop Server.cmd`
 
 Run:
 
@@ -49,6 +53,7 @@ Alternative (wrapper, no manual `.env` editing):
 Notes:
 - `start-web-runtime.ps1` runs config preflight and auto-builds web artifacts if `.next/BUILD_ID` is missing.
 - If you prefer direct commands, run `corepack pnpm runtime:preflight:web`, `corepack pnpm --filter @lottery/web build`, then `corepack pnpm start:web`.
+- To stop the server: `bin\Stop Server.cmd` or `.\scripts\stop-server.ps1 -EnvFile .env`
 
 ### B) Main Terminal Machine (worker)
 
@@ -59,6 +64,10 @@ Install:
 - Google Chrome or Chromium with the National Lottery tab already opened and authenticated
 - Chrome remote debugging enabled so the worker can attach to the existing cashier tab
 - Any remaining terminal automation prerequisites you will use (browser profile, credentials, selectors, or API access)
+
+One-click launchers:
+- Start: `.\scripts\start-worker-runtime.ps1 -EnvFile .env`
+- Stop:  `bin\Stop Worker.cmd`
 
 Run:
 
@@ -90,6 +99,8 @@ Chrome launch example on the terminal machine:
 
 If you use `prepare-worker-runtime.ps1 -OpenTerminalChrome`, this launch step is done automatically.
 
+To stop the worker: `bin\Stop Worker.cmd` or `.\scripts\stop-worker.ps1`
+
 Worker env values needed for live Big 8 draw sync:
 
 - `LOTTERY_BIG8_LIVE_DRAW_SYNC_ENABLED=true`
@@ -110,16 +121,32 @@ Local single-PC verification mode (no live NL checkout):
 - use `/debug/mock-terminal` to observe payloads consumed by worker from queue
 - shortcut script: `.\scripts\start-worker-mock-terminal.ps1 -EnvFile .env`
 
-### C) Client Computers
+### C) Client Computers (Kiosk Mode)
 
 Install:
-- Modern browser only
+- Modern browser (Chrome or Edge) only
 
 Use:
-- Open `http://<SERVER_IP>:3000`
-- Log in with configured credentials
+- Copy the `client-workstation` bundle folder to the cashier PC
+- Double-click `Start Client.cmd` to launch the kiosk
+- The browser opens in fullscreen kiosk mode targeting the lottery page
+
+**How to exit the kiosk:**
+1. Press **Alt+F4** in the browser window (fastest)
+2. Double-click **Stop Client.cmd** in the bundle folder
+3. Press **Ctrl+C** in the launcher console window
+
+None of these affect the server or other clients.
 
 No Node.js, DB, worker, or repo is needed on client PCs.
+
+Local kiosk testing (single machine):
+
+```powershell
+bin\Open Main Client.cmd -Kiosk
+```
+
+This opens the client in kiosk mode against `http://127.0.0.1:3000/login`. Press Alt+F4 to exit.
 
 ### D) Portable LAN Bundles (client PC + terminal receiver)
 
@@ -141,12 +168,14 @@ What goes where:
 - copy `terminal-receiver` to the terminal PC
 
 Launchers inside bundles:
-- `Start Client.cmd`
-- `Start Terminal Receiver.cmd`
+- `Start Client.cmd` / `Stop Client.cmd`
+- `Start Terminal Receiver.cmd` / `Stop Terminal Receiver.cmd`
 
 Bundle behavior:
-- client bundle opens Chrome/Edge in app mode to `/lottery/bolshaya-8`
+- client bundle opens Chrome/Edge in **kiosk mode** (fullscreen) to `/lottery/bolshaya-8`
+- client bundle includes `Stop Client.cmd` for explicit kiosk exit
 - terminal bundle starts a portable mock receiver runtime and opens `/terminal/receiver`
+- terminal bundle includes `Stop Terminal Receiver.cmd` to stop the background worker
 - terminal bundle connects to the shared Postgres on the main server IP baked into the bundle
 - no real NLoto checkout is used in this slice; the terminal only proves payload receipt and request state change
 
@@ -170,6 +199,10 @@ corepack pnpm db:reset
 
 Script: `scripts/postgres-init-and-seed.ts`
 
+Notes:
+- `db:init` now loads local `.env` the same way as runtime preflight.
+- `db:reset` clears the shared runtime state, including draw closures, notifications, cash desk requests, and winnings credit jobs.
+
 ## 5. Runtime Config Files
 
 - Global env template: `.env.example`
@@ -181,7 +214,17 @@ Script: `scripts/postgres-init-and-seed.ts`
 - Worker wrapper: `scripts/prepare-worker-runtime.ps1`
 - Runtime gap checklist: `docs/runbooks/launch-readiness-checklist.md`
 
-## 6. Optional Local PostgreSQL (docker)
+## 6. Stop / Cleanup Commands
+
+| Action | Command |
+|--------|---------|
+| Stop web server | `bin\Stop Server.cmd` or `.\scripts\stop-server.ps1` |
+| Stop terminal worker | `bin\Stop Worker.cmd` or `.\scripts\stop-worker.ps1` |
+| Stop kiosk client (LAN bundle) | `Stop Client.cmd` in bundle folder |
+| Stop terminal receiver (LAN bundle) | `Stop Terminal Receiver.cmd` in bundle folder |
+| Stop kiosk client (local dev) | Press Alt+F4 in browser, or Ctrl+C in launcher |
+
+## 7. Optional Local PostgreSQL (docker)
 
 ```powershell
 docker compose -f docker-compose.postgres.yml up -d
@@ -193,7 +236,7 @@ Then set:
 LOTTERY_POSTGRES_URL=postgresql://lottery:lottery@127.0.0.1:5432/lottery
 ```
 
-## 7. Health Check Sequence
+## 8. Health Check Sequence
 
 On server:
 
@@ -211,25 +254,48 @@ On terminal machine:
 
 Manual checks:
 - `/login` works with seeded users
-- `/admin` shows queue/terminal/alerts
+- `/admin` shows system summary, queue snapshot, terminal/last requests, and manual draw controls
 - `/lottery/bolshaya-8` shows live draw choices and refreshes them every 20 seconds
 - `/lottery/mechtallion` can create and queue request
 - worker logs show draw sync refreshes and request reservation + attempt processing
+- a confirmed request may leave the queue immediately but should remain visible in the terminal section or on `/terminal/receiver`
+- admin can mark a purchased ticket and close the draw, and the result becomes visible back on the user page
 
-## 8. Handoff Notes For Another Model/Account
+## 9. Handoff Notes For Another Machine
 
-If another model continues work, provide these files first:
+### Moving the Database
 
-1. `docs/runbooks/deployment-bootstrap.md`
-2. `.env.example`
-3. `ops/runtime/hosts.template.json`
-4. `scripts/postgres-init-and-seed.ts`
-5. `apps/web/src/lib/runtime/postgres-runtime.ts`
-6. `apps/terminal-worker/src/lib/runtime/postgres-runtime.ts`
-7. `packages/infrastructure/src/postgres/*`
+1. Install PostgreSQL on the new machine
+2. Create the `lottery` database and user
+3. Dump from old machine: `pg_dump -U lottery lottery > lottery.dump`
+4. Restore on new machine: `psql -U lottery lottery < lottery.dump`
+5. Update `LOTTERY_POSTGRES_URL` in `.env` on both web and worker machines
+6. Run `corepack pnpm runtime:preflight` to verify connectivity
 
-And explicitly state:
-- actual IP map,
-- DB credentials,
-- which lottery handlers must become real terminal integrations,
-- whether UI replacement is done in `apps/web/src/app/lottery/[lotteryCode]/page.tsx` or as a new route set.
+### Moving the Web Server
+
+1. Install Node.js >= 20.11 and enable corepack on the new machine
+2. Clone the repo
+3. Copy `.env` from the old server
+4. Update `LOTTERY_POSTGRES_URL` to point to the new DB host if it also moved
+5. Run `corepack pnpm install`
+6. Run `.\scripts\start-web-runtime.ps1 -EnvFile .env`
+7. Rebuild LAN bundles with new server IP if it changed: `corepack pnpm bundle:lan`
+
+### Moving the Terminal Worker
+
+1. Install Node.js >= 20.11 and enable corepack
+2. Clone the repo (or copy the terminal-receiver bundle)
+3. Copy `.env` from the old worker machine
+4. Update `LOTTERY_POSTGRES_URL` to point to the current DB host
+5. Ensure Chrome is installed and the NLoto tab is open with remote debugging
+6. Run `.\scripts\start-worker-runtime.ps1 -EnvFile .env`
+
+### Moving Client Kiosks
+
+No data lives on client machines. Just:
+1. Copy the `client-workstation` bundle to the new PC
+2. Ensure Chrome or Edge is installed
+3. Double-click `Start Client.cmd`
+
+Business logic, purchase flows, and handler code are never affected by machine moves.

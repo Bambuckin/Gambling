@@ -29,6 +29,30 @@ export interface AccessSession {
 
 export type SessionStatus = "active" | "expired" | "revoked";
 
+export interface DemoIdentitySeed {
+  readonly identityId: string;
+  readonly login: string;
+  readonly password: string;
+  readonly role: SessionRole;
+  readonly status?: AccessIdentityStatus;
+  readonly displayName?: string;
+  readonly phone: string;
+}
+
+export function buildIdentityFromSeed(seed: DemoIdentitySeed, passwordHash: string, nowIso: string): AccessIdentity {
+  return {
+    identityId: seed.identityId,
+    login: normalizeIdentityLogin(seed.login),
+    passwordHash,
+    role: seed.role,
+    status: seed.status ?? "active",
+    displayName: seed.displayName ?? seed.login,
+    phone: normalizeIdentityPhone(seed.phone),
+    createdAt: nowIso,
+    updatedAt: nowIso
+  };
+}
+
 export function normalizeIdentityLogin(login: string): string {
   return login.trim().toLowerCase();
 }
@@ -70,5 +94,27 @@ export function touchSession(session: AccessSession, nowIso: string): AccessSess
   return {
     ...session,
     lastSeenAt: nowIso
+  };
+}
+
+export interface IdentityFieldUpdate {
+  readonly login?: string;
+  readonly passwordHash?: string;
+  readonly role?: SessionRole;
+  readonly status?: AccessIdentityStatus;
+  readonly displayName?: string;
+  readonly phone?: string;
+}
+
+export function applyIdentityFieldUpdate(identity: AccessIdentity, update: IdentityFieldUpdate, nowIso: string): AccessIdentity {
+  return {
+    ...identity,
+    ...(update.login ? { login: normalizeIdentityLogin(update.login) } : {}),
+    ...(update.passwordHash ? { passwordHash: update.passwordHash } : {}),
+    ...(update.role ? { role: update.role } : {}),
+    ...(update.status ? { status: update.status } : {}),
+    ...(update.displayName !== undefined ? { displayName: update.displayName } : {}),
+    ...(update.phone ? { phone: normalizeIdentityPhone(update.phone) } : {}),
+    updatedAt: nowIso
   };
 }

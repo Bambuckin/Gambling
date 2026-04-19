@@ -5,4 +5,5 @@ export interface TicketStore {
   getTicketById(ticketId: string): Promise<TicketRecord | null>;
   getTicketByRequestId(requestId: string): Promise<TicketRecord | null>;
   saveTicket(ticket: TicketRecord): Promise<void>;
+  clearAll(): Promise<void>;
 }

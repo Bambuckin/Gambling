@@ -94,4 +94,6 @@ class InMemoryTicketStore implements TicketStore {
   async saveTicket(): Promise<void> {
     throw new Error("read-only test double");
   }
+
+  async clearAll(): Promise<void> {}
 }

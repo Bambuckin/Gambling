@@ -30,6 +30,10 @@ export class InMemoryTicketStore implements TicketStore {
     const filtered = this.tickets.filter((entry) => entry.ticketId !== ticket.ticketId);
     this.tickets = [...filtered, cloneTicket(ticket)];
   }
+
+  async clearAll(): Promise<void> {
+    this.tickets = [];
+  }
 }
 
 function compareTickets(left: TicketRecord, right: TicketRecord): number {

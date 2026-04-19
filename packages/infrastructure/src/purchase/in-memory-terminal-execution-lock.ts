@@ -19,6 +19,10 @@ export class InMemoryTerminalExecutionLock implements TerminalExecutionLock {
       this.ownerId = null;
     }
   }
+
+  async clearAll(): Promise<void> {
+    this.ownerId = null;
+  }
 }
 
 function normalizeOwnerId(ownerId: string): string {

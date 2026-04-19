@@ -38,7 +38,7 @@ Implemented:
 - shared Postgres runtime for web + worker;
 - persisted queue/lock/ledger/tickets/audit storage;
 - bootstrap + seed + preflight scripts;
-- customer-facing UI surface in NLoto-like visual style;
+- current working contour for Big 8: draft -> queue -> worker pickup -> admin draw closure -> visible result;
 - deployment and handoff runbooks.
 
 Still required before production go-live:
@@ -50,8 +50,10 @@ Still required before production go-live:
 Read and execute in this order:
 
 1. `docs/runbooks/deployment-bootstrap.md`
-2. `docs/runbooks/launch-readiness-checklist.md`
-3. `docs/handoff-runtime.md`
+2. `docs/modules/current-working-contour.md`
+3. `docs/runbooks/current-working-contour-smoke.md`
+4. `docs/runbooks/launch-readiness-checklist.md`
+5. `docs/handoff-runtime.md`
 
 Templates:
 
@@ -76,9 +78,10 @@ Templates:
 1. `README.md`
 2. `ARCHITECTURE.md`
 3. `docs/modules/system-architecture.md`
-4. `docs/modules/boundary-catalog.md`
-5. `docs/CONFIGURATION.md`
-6. `docs/API.md`
-7. `docs/DEVELOPMENT.md`
-8. `docs/TESTING.md`
-9. `docs/runbooks/launch-readiness-checklist.md`
+4. `docs/modules/current-working-contour.md`
+5. `docs/modules/boundary-catalog.md`
+6. `docs/CONFIGURATION.md`
+7. `docs/API.md`
+8. `docs/DEVELOPMENT.md`
+9. `docs/TESTING.md`
+10. `docs/runbooks/launch-readiness-checklist.md`

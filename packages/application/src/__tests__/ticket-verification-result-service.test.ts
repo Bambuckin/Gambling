@@ -200,6 +200,8 @@ class InMemoryTicketStore implements TicketStore {
     const filtered = this.tickets.filter((entry) => entry.ticketId !== ticket.ticketId);
     this.tickets = [...filtered, cloneTicket(ticket)];
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 class InMemoryPurchaseRequestStore implements PurchaseRequestStore {
@@ -222,6 +224,8 @@ class InMemoryPurchaseRequestStore implements PurchaseRequestStore {
     const filtered = this.records.filter((entry) => entry.snapshot.requestId !== record.snapshot.requestId);
     this.records = [...filtered, cloneRequest(record)];
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 class InMemoryLedgerStore implements LedgerStore {
@@ -238,6 +242,8 @@ class InMemoryLedgerStore implements LedgerStore {
   async appendEntry(entry: LedgerEntry): Promise<void> {
     this.entries = [...this.entries, cloneEntry(entry)];
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 class FixedTimeSource implements TimeSource {

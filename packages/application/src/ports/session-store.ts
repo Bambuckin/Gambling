@@ -5,4 +5,5 @@ export interface SessionStore {
   findById(sessionId: string): Promise<AccessSession | null>;
   update(session: AccessSession): Promise<void>;
   revoke(sessionId: string, revokedAt: string): Promise<AccessSession | null>;
+  revokeAll(revokedAt: string): Promise<void>;
 }

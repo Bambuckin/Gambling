@@ -1,8 +1,17 @@
-﻿# Roadmap: Lottery Terminal Operations System
+# Roadmap: Lottery Terminal Operations System
+
+## Milestone v1.1: Domain Consolidation and Truth Model
 
 ## Overview
 
-Р­С‚РѕС‚ roadmap СЂРµР¶РµС‚ СЃРёСЃС‚РµРјСѓ РЅР° РґРµРІСЏС‚СЊ РІРµСЂС‚РёРєР°Р»СЊРЅС‹С… С„Р°Р·: РѕС‚ С„СѓРЅРґР°РјРµРЅС‚Р°Р»СЊРЅС‹С… РєРѕРЅС‚СЂР°РєС‚РѕРІ Рё Р°СЂС…РёС‚РµРєС‚СѓСЂС‹ Рє РґРѕСЃС‚СѓРїСѓ, СЂРµРµСЃС‚СЂСѓ Р»РѕС‚РµСЂРµР№, С„РёРЅР°РЅСЃР°Рј, РѕСЂРєРµСЃС‚СЂР°С†РёРё РїРѕРєСѓРїРєРё, С‚РµСЂРјРёРЅР°Р»СЊРЅРѕРјСѓ РёСЃРїРѕР»РЅРµРЅРёСЋ, СЃРІРµСЂРєРµ Р±РёР»РµС‚РѕРІ, РѕРїРµСЂР°С†РёРѕРЅРЅРѕРјСѓ Р°РґРјРёРЅРёСЃС‚СЂРёСЂРѕРІР°РЅРёСЋ Рё С„РёРЅР°Р»СЊРЅРѕР№ РґРѕРєСѓРјРµРЅС‚Р°С†РёРё/СѓСЃРёР»РµРЅРёСЋ РєР°С‡РµСЃС‚РІР°. РўР°РєРѕР№ РїРѕСЂСЏРґРѕРє РґРµСЂР¶РёС‚ РіР»Р°РІРЅС‹Р№ СЂРёСЃРє РїРѕРґ РєРѕРЅС‚СЂРѕР»РµРј: РЅР° РєР°Р¶РґРѕРј С€Р°РіРµ РїРѕСЏРІР»СЏРµС‚СЃСЏ С‡Р°СЃС‚РёС‡РЅРѕ СЂР°Р±РѕС‚РѕСЃРїРѕСЃРѕР±РЅС‹Р№, РїСЂРѕРІРµСЂСЏРµРјС‹Р№ РєСѓСЃРѕРє, Р° РЅРµ РјРµСЂС‚РІС‹Р№ СЃР»РѕР№ вЂњРЅР° Р±СѓРґСѓС‰РµРµвЂќ.
+This roadmap started with nine foundation phases and now extends into four separate tracks:
+
+- the Big 8 live-integration slice already completed in Phases 10-11;
+- the kiosk/LAN packaging slice in Phase 12;
+- the current Big 8 working-contour wave in Phases 13-17.
+- the architecture-consolidation wave planned in Phases 18-25.
+
+Dependencies, not raw phase numbers, are canonical. Phase 12 remains a separate packaging track and does not block Phases 13-17, which continue directly from the truthful Phase 11 cart-stage integration. Phases 18-25 reopen the core runtime model after that contour is working locally, and must stay additive-first until parity is proven.
 
 ## Phases
 
@@ -21,6 +30,22 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Ticket Verification and Winnings** - Р”РѕР±Р°РІРёС‚СЊ С…СЂР°РЅРµРЅРёРµ Р±РёР»РµС‚РѕРІ, СЃРІРµСЂРєСѓ РїРѕСЃР»Рµ СЂРѕР·С‹РіСЂС‹С€Р° Рё РЅР°С‡РёСЃР»РµРЅРёРµ РІС‹РёРіСЂС‹С€Р°. (completed 2026-04-05)
 - [x] **Phase 8: Admin Operations and Observability** - Р”Р°С‚СЊ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ РїРѕР»РЅС‹Р№ РѕРїРµСЂР°С†РёРѕРЅРЅС‹Р№ РєРѕРЅС‚СѓСЂ: РѕС‡РµСЂРµРґСЊ, РѕС€РёР±РєРё, Р»РѕС‚РµСЂРµРё, С‚РµСЂРјРёРЅР°Р», Р°Р»РµСЂС‚С‹. (completed 2026-04-05)
 - [x] **Phase 9: Hardening, Extension Docs, and Release Readiness** - Р—Р°РєСЂС‹С‚СЊ РґРѕРєСѓРјРµРЅС‚Р°С†РёСЋ, СЂР°СЃС€РёСЂСЏРµРјРѕСЃС‚СЊ, СЂРµРіСЂРµСЃСЃРёРѕРЅРЅС‹Рµ РїСЂРѕРІРµСЂРєРё Рё РіРѕС‚РѕРІРЅРѕСЃС‚СЊ Рє РёР·РјРµРЅРµРЅРёСЋ СЃРёСЃС‚РµРјС‹. (completed 2026-04-06)
+- [x] **Phase 10: Big 8 Live Draw Sync and Purchase Contract** - replace synthetic Big 8 draw and draft data with a live terminal-backed contract. (completed 2026-04-13)
+- [x] **Phase 11: Big 8 Terminal Cart Execution and Realtime Status** - execute Big 8 requests against the real terminal up to honest cart addition and expose realtime status. (completed 2026-04-13)
+- [x] **Phase 12: Cashier Kiosk Client and LAN Deployment** - LAN bundle builder, kiosk launcher, deployment runbook, terminal receiver bundles. (completed 2026-04-16)
+- [x] **Phase 13: Big 8 Purchase Completion and Login UX** - finalize Big 8 requests into purchased tickets and fix the demo/login flow for testing. (completed 2026-04-16)
+- [x] **Phase 14: Admin-Driven Draw Emulation and Notifications** - let admin mark results, close draws manually, and notify users in-app. (completed 2026-04-16)
+- [x] **Phase 15: Winning Actions, Credit, and Cash Desk** - split winning fulfillment into hidden balance credit or visible cash-desk payout flow. (completed 2026-04-16)
+- [x] **Phase 16: Admin User Management and Manual Finance** - add full user drill-down, edits, block/unblock, and manual balance adjustments. (completed 2026-04-16)
+- [x] **Phase 17: User Cabinet Stats and Test Reset Tools** - add cross-lottery cabinet summaries plus admin queue cleanup and full test-runtime reset. (completed 2026-04-16)
+- [ ] **Phase 18: Canonical Purchase and Draw Contracts** - collapse split ticket/draw truth into additive canonical contracts for `purchase`, `draw`, and `purchase_attempt`.
+- [ ] **Phase 19: Canonical Storage and Compatibility Projections** - add additive storage and compatibility projections so current surfaces can read from the new truth safely.
+- [ ] **Phase 20: Purchase Submission and Worker Cutover** - move submit/queue/worker execution onto the canonical purchase model and durable attempt journal.
+- [ ] **Phase 21: Draw Closure, Settlement, and Result Publication** - split draw control into explicit create/close/mark/settle operations with audit-first result publication.
+- [ ] **Phase 22: Winning Fulfillment and Ledger Rebase** - re-anchor credit and cash-desk flows on canonical purchase/draw result state.
+- [ ] **Phase 23: Admin, Receiver, and User Read Models** - rebuild operator and user views on canonical projections and audit views.
+- [ ] **Phase 24: Advisory Lock and Queue Transport Hardening** - replace TTL lock semantics with advisory locking and keep transport replaceable behind stable boundaries.
+- [ ] **Phase 25: Legacy Model Removal and Regression Hardening** - remove legacy write models only after parity validation and regression hardening pass.
 
 ## Phase Details
 
@@ -203,7 +228,11 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12
+For the current implementation wave, dependency order is canonical:
+
+`1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21 -> 22 -> 23 -> 24 -> 25`
+
+Phase 12 remains a parallel packaging track anchored to Phase 11 and does not gate the Big 8 working-contour wave.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -218,7 +247,20 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 9. Hardening, Extension Docs, and Release Readiness | 4/4 | Complete | 2026-04-06 |
 | 10. Big 8 Live Draw Sync and Purchase Contract | 1/1 | Complete | 2026-04-13 |
 | 11. Big 8 Terminal Cart Execution and Realtime Status | 1/1 | Complete | 2026-04-13 |
-| 12. Cashier Kiosk Client and LAN Deployment | 0/0 | Not planned | - |
+| 12. Cashier Kiosk Client and LAN Deployment | 1/1 | Complete | 2026-04-16 |
+| 13. Big 8 Purchase Completion and Login UX | 4/4 | Complete | 2026-04-16 |
+| 14. Admin-Driven Draw Emulation and Notifications | 1/1 | Complete | 2026-04-16 |
+| 15. Winning Actions, Credit, and Cash Desk | 1/1 | Complete | 2026-04-16 |
+| 16. Admin User Management and Manual Finance | 1/1 | Complete | 2026-04-16 |
+| 17. User Cabinet Stats and Test Reset Tools | 1/1 | Complete | 2026-04-16 |
+| 18. Canonical Purchase and Draw Contracts | 0/1 | Planned | - |
+| 19. Canonical Storage and Compatibility Projections | 0/0 | Not planned | - |
+| 20. Purchase Submission and Worker Cutover | 0/0 | Not planned | - |
+| 21. Draw Closure, Settlement, and Result Publication | 0/0 | Not planned | - |
+| 22. Winning Fulfillment and Ledger Rebase | 0/0 | Not planned | - |
+| 23. Admin, Receiver, and User Read Models | 0/0 | Not planned | - |
+| 24. Advisory Lock and Queue Transport Hardening | 0/0 | Not planned | - |
+| 25. Legacy Model Removal and Regression Hardening | 0/0 | Not planned | - |
 
 
 ### Phase 10: Big 8 Live Draw Sync and Purchase Contract
@@ -264,7 +306,219 @@ Plans:
   2. Web, worker, and Postgres runtime setup is documented for one-host LAN deployment with clean env and start scripts.
   3. Terminal machine prerequisites and installation steps are explicit enough to re-install the worker without rediscovering hidden steps.
   4. Handoff docs explain how to move database or web hosting to another machine later without changing purchase/business logic.
+**Plans:** 1 plan
+
+Plans:
+- [x] 12-01: LAN bundle builder, kiosk launcher, deployment runbook, terminal receiver bundles.
+
+### Phase 13: Big 8 Purchase Completion and Login UX
+
+**Goal:** Convert the honest Big 8 cart-stage integration into a truthful purchased-ticket flow and fix the login/demo-user UX used for testing.
+**Requirements**: TBD
+**Depends on:** Phase 11
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+  1. Regular users land on `/lottery/bolshaya-8` after login while admins still land on `/admin`.
+  2. Demo users come from one source of truth and are copyable from the login page.
+  3. Big 8 requests still record a real `added_to_cart` cart-stage outcome but are then finalized into `success` through the emulated-after-cart completion mode.
+  4. Finalized Big 8 purchases create persistent tickets through the canonical success path and show up immediately in the lottery UI.
+  5. Big 8 stale draw handling is explicitly `warn_only` in this wave.
+**Plans:** 4 plans
+
+Plans:
+- [x] 13-01: Centralize demo identities, add cashier accounts, and fix post-login route.
+- [x] 13-02: Build login page demo-account list with copy UX.
+- [x] 13-03: Add purchaseCompletionMode, drawFreshnessMode to registry, and implement warn_only stale-draw for Big 8.
+- [x] 13-04: Implement PurchaseCompletionService for emulate_after_cart and wire into worker loop.
+
+### Phase 14: Admin-Driven Draw Emulation and Notifications
+
+**Goal:** Replace the current placeholder result story with an explicit admin-driven draw closure and ticket result loop.
+**Requirements**: TBD
+**Depends on:** Phase 13
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+  1. Admin can mark purchased tickets as `win` or `lose` before a draw is closed.
+  2. Closing a draw is manual, idempotent, and resolves all unresolved tickets in that draw.
+  3. Unmarked tickets become `lose` by default.
+  4. Users receive in-app result updates and action availability without page reload.
 **Plans:** 0 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 12 to break down)
+- [x] 14-01: Implement admin result marking, draw closure, ticket resolution, and in-app notifications.
+
+### Phase 15: Winning Actions, Credit, and Cash Desk
+
+**Goal:** Add the two required winning follow-up actions and keep them strictly exclusive.
+**Requirements**: TBD
+**Depends on:** Phase 14
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+  1. Winning tickets expose `Зачислить на баланс` and `Получить в кассе`.
+  2. Balance credit runs through a hidden internal job that executes only when purchase queue is empty.
+  3. Cash-desk path creates a visible admin request with `pending -> paid` states.
+  4. A winning ticket cannot complete both paths.
+**Plans:** 1 plan
+
+Plans:
+- [x] 15-01: Implement ticket claim lifecycle, credit job queue, cash-desk requests, and wire into web UI.
+
+### Phase 16: Admin User Management and Manual Finance
+
+**Goal:** Extend the admin console with full user drill-down, full business-field editing, block/unblock, password changes, and manual balance operations.
+**Requirements**: TBD
+**Depends on:** Phase 15
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+  1. Admin can open a user, edit all business fields, and block/unblock access.
+  2. Password changes take effect for subsequent logins.
+  3. Manual credit and debit operations are possible with mandatory reason and immutable audit trail.
+  4. User detail view shows the linked requests, tickets, winnings, cash-desk requests, and ledger history.
+**Plans:** 1 plan
+
+Plans:
+- [x] 16-01: Implement admin user management, user CRUD, block/unblock, manual balance credit/debit with audit.
+
+### Phase 17: User Cabinet Stats and Test Reset Tools
+
+**Goal:** Finish the current wave with user cabinet summaries and explicit admin controls for queue cleanup and full test-runtime reset.
+**Requirements**: TBD
+**Depends on:** Phase 16
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+  1. User cabinet shows cross-lottery aggregates and supports `lottery`, `status`, and `period` filters.
+  2. Admin sees practical operating summaries for queue state, request outcomes, pending cash-desk work, and credited winnings.
+  3. `Clear Queue` removes only non-started queued work while releasing related reserves and preserving completed history.
+  4. `Reset Test Data` restores runtime state to seeded baseline while preserving identities, credentials, catalog/config, and forcing re-login through session reset.
+**Plans:** 1 plan
+
+Plans:
+- [x] 17-01: Implement user cabinet stats, admin operational summaries, clear queue, and full test data reset.
+
+### Phase 18: Canonical Purchase and Draw Contracts
+
+**Goal:** Establish additive canonical domain contracts and persistence skeleton for `purchase`, `draw`, and `purchase_attempt` so the runtime stops depending on multiple competing write-model truths.
+**Requirements**: [CONS-01, CONS-02, CONS-03]
+**Depends on:** Phase 17
+**UI hint**: no
+**Success Criteria** (what must be TRUE):
+  1. Domain and application contracts expose canonical `purchase` state separately from result state and result visibility.
+  2. Draw lifecycle supports `open`, `closed`, and `settled` without relying on implicit closure-only semantics.
+  3. Terminal attempt history is modeled explicitly as durable `purchase_attempt` records rather than only as journal-note text.
+  4. Additive schema groundwork exists without deleting or renaming current legacy tables.
+**Plans:** 1 plan
+
+Plans:
+- [ ] 18-01: Introduce canonical purchase/draw contracts, additive schema, and invariant coverage.
+
+### Phase 19: Canonical Storage and Compatibility Projections
+
+**Goal:** Add canonical repositories, compatibility projections, and backfill-safe read paths so current cashier/admin/user surfaces can keep working while storage truth moves underneath them.
+**Requirements**: [CONS-04]
+**Depends on:** Phase 18
+**UI hint**: no
+**Success Criteria** (what must be TRUE):
+  1. Canonical Postgres repositories can persist and load purchases, draws, and attempts without breaking legacy readers.
+  2. Compatibility projections or views keep current request/ticket/admin queries functioning during the migration.
+  3. Existing runtime can be seeded and started against additive schema with no destructive data rewrite.
+  4. Backfill/replay path is documented and testable locally.
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 19 to break down)
+
+### Phase 20: Purchase Submission and Worker Cutover
+
+**Goal:** Move submit, queue reservation, terminal execution, and attempt persistence onto the canonical purchase model while preserving the current user-visible Big 8 flow.
+**Requirements**: [CONS-05]
+**Depends on:** Phase 19
+**UI hint**: no
+**Success Criteria** (what must be TRUE):
+  1. Submit flow writes canonical purchase records with idempotency semantics.
+  2. Worker updates canonical purchase and purchase-attempt state instead of relying on split legacy truth.
+  3. Replay, retry, and worker restart paths do not duplicate business effects.
+  4. Current user/admin request status surfaces remain truthful during the cutover.
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 20 to break down)
+
+### Phase 21: Draw Closure, Settlement, and Result Publication
+
+**Goal:** Replace the current closure-only result loop with explicit draw creation, close, mark-result, and settle operations governed by audit trail and settlement visibility.
+**Requirements**: [CONS-06]
+**Depends on:** Phase 20
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+  1. Draw lifecycle is controlled through explicit create, close, mark-result, and settle operations.
+  2. Result visibility is false before settlement and becomes true only through settlement.
+  3. Administrative actions around result publication are auditable and idempotent.
+  4. The user-facing result story no longer depends on legacy verification-job truth.
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 21 to break down)
+
+### Phase 22: Winning Fulfillment and Ledger Rebase
+
+**Goal:** Re-anchor winnings credit and cash-desk fulfillment on canonical purchase/draw results so money flow no longer depends on legacy ticket verification write-models.
+**Requirements**: [CONS-07]
+**Depends on:** Phase 21
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+  1. Credit and cash-desk eligibility derive from canonical result state.
+  2. Ledger side effects remain idempotent and linked to canonical purchase identifiers.
+  3. Winning follow-up actions still remain mutually exclusive.
+  4. Existing operator controls stay understandable during the rebase.
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 22 to break down)
+
+### Phase 23: Admin, Receiver, and User Read Models
+
+**Goal:** Rebuild the admin console, terminal receiver, and user-facing result/read surfaces on canonical projections and audit views instead of on legacy write-model tables.
+**Requirements**: [CONS-08]
+**Depends on:** Phase 22
+**UI hint**: yes
+**Success Criteria** (what must be TRUE):
+  1. Admin system overview, draw control, and sales operations read from canonical projections.
+  2. Terminal receiver acts as a monitor over canonical runtime state rather than as an alternate truth surface.
+  3. User-facing ticket/result/history views remain readable during and after the migration.
+  4. Projection lag or rebuild scenarios are observable and recoverable.
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 23 to break down)
+
+### Phase 24: Advisory Lock and Queue Transport Hardening
+
+**Goal:** Replace TTL lock semantics with advisory locking and keep queue transport behind a replaceable boundary so domain truth no longer depends on a lock table or custom queue shape.
+**Requirements**: [CONS-09]
+**Depends on:** Phase 23
+**UI hint**: no
+**Success Criteria** (what must be TRUE):
+  1. Exclusive terminal execution no longer depends on the legacy TTL lock table.
+  2. Worker can hold terminal exclusivity safely across long-lived external I/O.
+  3. Queue send/receive boundary can be backed by current storage or by `pg-boss`/outbox without rewriting domain rules.
+  4. Crash/restart paths leave no double-execution window.
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 24 to break down)
+
+### Phase 25: Legacy Model Removal and Regression Hardening
+
+**Goal:** Remove legacy ticket, verification-job, and lock-table write models only after parity validation proves the canonical runtime covers the same behaviors safely.
+**Requirements**: [CONS-10]
+**Depends on:** Phase 24
+**UI hint**: no
+**Success Criteria** (what must be TRUE):
+  1. Legacy write models are deleted or demoted only after migration parity checks pass.
+  2. Regression coverage protects purchase -> worker -> draw -> result -> fulfillment flow on canonical storage.
+  3. Architecture and runbook docs describe the post-migration truth model clearly.
+  4. The resulting runtime is simpler to extend than the pre-migration contour.
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 25 to break down)

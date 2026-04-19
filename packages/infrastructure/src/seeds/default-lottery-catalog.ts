@@ -1,4 +1,11 @@
-import type { DrawOption, DrawSnapshot, LotteryFormFieldDefinition, LotteryRegistryEntry } from "@lottery/domain";
+import type {
+  DrawOption,
+  DrawSnapshot,
+  LotteryDrawFreshnessMode,
+  LotteryFormFieldDefinition,
+  LotteryPurchaseCompletionMode,
+  LotteryRegistryEntry
+} from "@lottery/domain";
 
 interface LotterySeedDefinition {
   readonly lotteryCode: string;
@@ -10,6 +17,8 @@ interface LotterySeedDefinition {
   readonly freshnessTtlSeconds: number;
   readonly formSchemaVersion: string;
   readonly formFields: readonly LotteryFormFieldDefinition[];
+  readonly purchaseCompletionMode?: LotteryPurchaseCompletionMode;
+  readonly drawFreshnessMode?: LotteryDrawFreshnessMode;
 }
 
 const DEFAULT_LOTTERY_SEED_DEFINITIONS: readonly LotterySeedDefinition[] = [
@@ -33,7 +42,9 @@ const DEFAULT_LOTTERY_SEED_DEFINITIONS: readonly LotterySeedDefinition[] = [
     drawIntervalMinutes: 20,
     freshnessTtlSeconds: 60 * 30,
     formSchemaVersion: "v3-big8-live",
-    formFields: [textField("ticket_payload", "Big 8 payload")]
+    formFields: [textField("ticket_payload", "Big 8 payload")],
+    purchaseCompletionMode: "emulate_after_cart",
+    drawFreshnessMode: "warn_only"
   }),
   seed({
     lotteryCode: "velikolepnaya-8",
@@ -217,7 +228,9 @@ export function createDefaultLotteryRegistryEntries(): LotteryRegistryEntry[] {
     handlers: {
       purchaseHandler: `handlers.${definition.lotteryCode}.purchase.v1`,
       resultHandler: `handlers.${definition.lotteryCode}.result.v1`
-    }
+    },
+    ...(definition.purchaseCompletionMode ? { purchaseCompletionMode: definition.purchaseCompletionMode } : {}),
+    ...(definition.drawFreshnessMode ? { drawFreshnessMode: definition.drawFreshnessMode } : {})
   }));
 }
 

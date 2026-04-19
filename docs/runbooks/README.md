@@ -4,6 +4,7 @@ Operator and verification procedures live here.
 
 Current runbooks:
 
+- `current-working-contour-smoke.md` - shortest real smoke from login to visible result in the current Big 8 slice
 - `local-bootstrap.md` - verify git/planning baseline before implementation resumes
 - `fake-terminal-smoke.md` - smoke checks without production terminal access
 - `module-verification-matrix.md` - per-module local verification commands and triage map

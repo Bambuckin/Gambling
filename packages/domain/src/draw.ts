@@ -43,7 +43,8 @@ export function evaluateDrawFreshness(snapshot: DrawSnapshot, nowIso: string): D
 export function resolveDrawAvailabilityState(
   lotteryCode: string,
   snapshot: DrawSnapshot | null,
-  nowIso: string
+  nowIso: string,
+  freshnessMode?: "block" | "warn_only"
 ): DrawAvailabilityState {
   if (!snapshot) {
     return {
@@ -67,10 +68,51 @@ export function resolveDrawAvailabilityState(
   return {
     lotteryCode,
     status: "stale",
-    isPurchaseBlocked: true,
+    isPurchaseBlocked: freshnessMode !== "warn_only",
     snapshot,
     freshness
   };
+}
+
+export const DRAW_CLOSURE_STATUSES = ["open", "closed"] as const;
+export type DrawClosureStatus = (typeof DRAW_CLOSURE_STATUSES)[number];
+
+export interface DrawClosureRecord {
+  readonly lotteryCode: string;
+  readonly drawId: string;
+  readonly status: DrawClosureStatus;
+  readonly closedAt: string | null;
+  readonly closedBy: string | null;
+}
+
+export const ADMIN_EMULATED_WIN_AMOUNT_MINOR = 50_000;
+
+export function createOpenDrawClosure(lotteryCode: string, drawId: string): DrawClosureRecord {
+  return {
+    lotteryCode: lotteryCode.trim().toLowerCase(),
+    drawId: drawId.trim(),
+    status: "open",
+    closedAt: null,
+    closedBy: null
+  };
+}
+
+export function closeDrawClosure(record: DrawClosureRecord, closedBy: string, closedAt: string): DrawClosureRecord {
+  if (record.status === "closed") {
+    return { ...record };
+  }
+
+  return {
+    lotteryCode: record.lotteryCode,
+    drawId: record.drawId,
+    status: "closed",
+    closedAt,
+    closedBy
+  };
+}
+
+export function isDrawClosed(record: DrawClosureRecord | null): boolean {
+  return record?.status === "closed";
 }
 
 export function listSnapshotDrawOptions(snapshot: DrawSnapshot | null): readonly DrawOption[] {

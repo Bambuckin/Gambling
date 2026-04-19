@@ -2,6 +2,7 @@ import {
   type DrawAvailabilityState,
   type DrawOption,
   type DrawSnapshot,
+  type LotteryDrawFreshnessMode,
   listSnapshotDrawOptions,
   normalizeLotteryCode,
   resolveDrawAvailabilityState
@@ -48,11 +49,11 @@ export class DrawRefreshService {
     return snapshots.map((snapshot) => sanitizeSnapshot(snapshot, this.timeSource.nowIso()));
   }
 
-  async getDrawState(lotteryCode: string): Promise<DrawAvailabilityState> {
+  async getDrawState(lotteryCode: string, freshnessMode?: LotteryDrawFreshnessMode): Promise<DrawAvailabilityState> {
     const normalizedCode = normalizeLotteryCode(lotteryCode);
     const snapshot = await this.drawStore.getSnapshot(normalizedCode);
     const nowIso = this.timeSource.nowIso();
-    return resolveDrawAvailabilityState(normalizedCode, snapshot, nowIso);
+    return resolveDrawAvailabilityState(normalizedCode, snapshot, nowIso, freshnessMode);
   }
 
   async listAvailableDraws(lotteryCode: string): Promise<readonly DrawOption[]> {
@@ -63,9 +64,48 @@ export class DrawRefreshService {
 
   async upsertSnapshot(input: DrawSnapshotUpsertInput): Promise<DrawSnapshot> {
     const nowIso = this.timeSource.nowIso();
-    const snapshot = sanitizeSnapshot(input, nowIso);
+    const sanitized = sanitizeSnapshot(input, nowIso);
+    const existing = await this.drawStore.getSnapshot(sanitized.lotteryCode);
+    const snapshot = mergeSnapshotDrawOptions(sanitized, existing);
     await this.drawStore.upsertSnapshot(snapshot);
     return snapshot;
+  }
+
+  async removeDraw(lotteryCode: string, drawId: string): Promise<boolean> {
+    const normalizedCode = normalizeLotteryCode(lotteryCode);
+    const normalizedDrawId = drawId.trim();
+    if (!normalizedDrawId) {
+      return false;
+    }
+
+    const existing = await this.drawStore.getSnapshot(normalizedCode);
+    if (!existing) {
+      return false;
+    }
+
+    const remainingDraws = listSnapshotDrawOptions(existing).filter((draw) => draw.drawId !== normalizedDrawId);
+    if (remainingDraws.length === listSnapshotDrawOptions(existing).length) {
+      return false;
+    }
+
+    if (remainingDraws.length === 0) {
+      await this.drawStore.deleteSnapshot(normalizedCode);
+      return true;
+    }
+
+    const nextCurrentDraw = remainingDraws[0]!;
+    await this.drawStore.upsertSnapshot({
+      ...existing,
+      drawId: nextCurrentDraw.drawId,
+      drawAt: nextCurrentDraw.drawAt,
+      fetchedAt: this.timeSource.nowIso(),
+      availableDraws: remainingDraws
+    });
+    return true;
+  }
+
+  async clearAllSnapshots(): Promise<void> {
+    await this.drawStore.clearAll();
   }
 
   async refreshLottery(lotteryCode: string, provider: DrawDataProvider): Promise<DrawAvailabilityState> {
@@ -118,6 +158,33 @@ function sanitizeSnapshot(input: DrawSnapshotUpsertInput | DrawSnapshot, fallbac
     drawAt,
     fetchedAt,
     freshnessTtlSeconds,
+    ...(availableDraws.length > 0 ? { availableDraws } : {})
+  };
+}
+
+function mergeSnapshotDrawOptions(next: DrawSnapshot, existing: DrawSnapshot | null): DrawSnapshot {
+  const mergedOptions = new Map<string, DrawOption>();
+
+  for (const option of listSnapshotDrawOptions(existing)) {
+    mergedOptions.set(option.drawId, { ...option });
+  }
+
+  for (const option of listSnapshotDrawOptions(next)) {
+    mergedOptions.set(option.drawId, { ...option });
+  }
+
+  const currentOption = mergedOptions.get(next.drawId);
+  mergedOptions.set(next.drawId, {
+    drawId: next.drawId,
+    drawAt: next.drawAt,
+    label: currentOption?.label ?? next.drawId,
+    ...(typeof currentOption?.priceMinor === "number" ? { priceMinor: currentOption.priceMinor } : {})
+  });
+
+  const availableDraws = [...mergedOptions.values()].sort((left, right) => Date.parse(left.drawAt) - Date.parse(right.drawAt));
+
+  return {
+    ...next,
     ...(availableDraws.length > 0 ? { availableDraws } : {})
   };
 }

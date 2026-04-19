@@ -1,7 +1,8 @@
-import type { AccessIdentity, AccessIdentityStatus, SessionRole } from "@lottery/domain";
-import { normalizeIdentityLogin, normalizeIdentityPhone } from "@lottery/domain";
+import type { AccessIdentity, AccessIdentityStatus, DemoIdentitySeed, SessionRole } from "@lottery/domain";
+import { buildIdentityFromSeed, normalizeIdentityLogin, normalizeIdentityPhone } from "@lottery/domain";
 import {
   AccessService,
+  AdminUserService,
   SystemTimeSource,
   type AccessServiceDependencies,
   type IdentityStore,
@@ -16,7 +17,8 @@ import {
   PostgresIdentityStore,
   PostgresSessionStore,
   Sha256PasswordVerifier,
-  hashAccessPassword
+  hashAccessPassword,
+  listDefaultIdentitySeeds
 } from "@lottery/infrastructure";
 import { getWebPostgresPool, getWebStorageBackend } from "../runtime/postgres-runtime";
 
@@ -31,22 +33,16 @@ export interface AccessRuntimeAdapters {
   readonly accessAuditLog: AccessServiceDependencies["accessAuditLog"];
 }
 
-interface AccessIdentitySeed {
-  readonly identityId: string;
-  readonly login: string;
-  readonly password: string;
-  readonly role: SessionRole;
-  readonly status?: AccessIdentityStatus;
-  readonly displayName?: string;
-  readonly phone: string;
-}
-
 let runtimeFactory: AccessRuntimeFactory = createDefaultAccessRuntimeFactory();
 let cachedService: AccessService | null = null;
+let cachedAdminUserService: AdminUserService | null = null;
+let cachedAdapters: AccessRuntimeAdapters | null = null;
 
 export function configureAccessRuntime(nextFactory: AccessRuntimeFactory): void {
   runtimeFactory = nextFactory;
   cachedService = null;
+  cachedAdminUserService = null;
+  cachedAdapters = null;
 }
 
 export function getAccessService(): AccessService {
@@ -55,6 +51,30 @@ export function getAccessService(): AccessService {
   }
 
   return cachedService;
+}
+
+export function getAdminUserService(): AdminUserService {
+  if (!cachedAdminUserService) {
+    const deps = runtimeFactory.createDependencies();
+    cachedAdminUserService = new AdminUserService({
+      identityStore: deps.identityStore,
+      passwordVerifier: deps.passwordVerifier,
+      timeSource: deps.timeSource
+    });
+  }
+
+  return cachedAdminUserService;
+}
+
+export function getSessionStoreInstance(): SessionStore {
+  if (!cachedAdapters) {
+    cachedAdapters = createDefaultAdaptersFromFactory();
+  }
+  return cachedAdapters.sessionStore;
+}
+
+function createDefaultAdaptersFromFactory(): AccessRuntimeAdapters {
+  return createDefaultAdapters();
 }
 
 export function createDefaultAccessRuntimeFactory(): AccessRuntimeFactory {
@@ -100,42 +120,34 @@ function buildSeededIdentities(): AccessIdentity[] {
   const seeds = readIdentitySeeds();
   const nowIso = new Date().toISOString();
 
-  return seeds.map((seed) => ({
-    identityId: seed.identityId,
-    login: normalizeIdentityLogin(seed.login),
-    passwordHash: hashAccessPassword(seed.password),
-    role: seed.role,
-    status: seed.status ?? "active",
-    displayName: seed.displayName ?? seed.login,
-    phone: normalizeIdentityPhone(seed.phone),
-    createdAt: nowIso,
-    updatedAt: nowIso
-  }));
+  return seeds.map((seed) =>
+    buildIdentityFromSeed(seed, hashAccessPassword(seed.password), nowIso)
+  );
 }
 
-function readIdentitySeeds(): AccessIdentitySeed[] {
+function readIdentitySeeds(): DemoIdentitySeed[] {
   const envValue = process.env.LOTTERY_ACCESS_IDENTITIES_JSON;
   if (!envValue) {
-    return defaultIdentitySeeds();
+    return [...listDefaultIdentitySeeds()];
   }
 
   try {
     const parsed = JSON.parse(envValue) as unknown;
     if (!Array.isArray(parsed)) {
-      return defaultIdentitySeeds();
+      return [...listDefaultIdentitySeeds()];
     }
 
     const seeds = parsed
       .map((entry) => sanitizeIdentitySeed(entry))
-      .filter((entry): entry is AccessIdentitySeed => entry !== null);
+      .filter((entry): entry is DemoIdentitySeed => entry !== null);
 
-    return seeds.length > 0 ? seeds : defaultIdentitySeeds();
+    return seeds.length > 0 ? seeds : [...listDefaultIdentitySeeds()];
   } catch {
-    return defaultIdentitySeeds();
+    return [...listDefaultIdentitySeeds()];
   }
 }
 
-function sanitizeIdentitySeed(input: unknown): AccessIdentitySeed | null {
+function sanitizeIdentitySeed(input: unknown): DemoIdentitySeed | null {
   if (!input || typeof input !== "object") {
     return null;
   }
@@ -162,36 +174,4 @@ function sanitizeIdentitySeed(input: unknown): AccessIdentitySeed | null {
     ...(status ? { status } : {}),
     ...(displayName ? { displayName } : {})
   };
-}
-
-function defaultIdentitySeeds(): AccessIdentitySeed[] {
-  return [
-    {
-      identityId: "seed-user",
-      login: "operator",
-      password: "operator",
-      role: "user",
-      status: "active",
-      displayName: "Operator User",
-      phone: "79990000001"
-    },
-    {
-      identityId: "seed-admin",
-      login: "admin",
-      password: "admin",
-      role: "admin",
-      status: "active",
-      displayName: "Administrator",
-      phone: "79990000002"
-    },
-    {
-      identityId: "seed-tester",
-      login: "tester",
-      password: "tester",
-      role: "user",
-      status: "active",
-      displayName: "Tester User",
-      phone: "79990000003"
-    }
-  ];
 }

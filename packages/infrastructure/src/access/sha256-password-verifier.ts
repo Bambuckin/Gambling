@@ -10,6 +10,10 @@ export class Sha256PasswordVerifier implements PasswordVerifier {
 
     return timingSafeEqual(Buffer.from(calculatedHash, "utf8"), Buffer.from(passwordHash, "utf8"));
   }
+
+  async hash(plainTextPassword: string): Promise<string> {
+    return hashAccessPassword(plainTextPassword);
+  }
 }
 
 export function hashAccessPassword(plainTextPassword: string): string {

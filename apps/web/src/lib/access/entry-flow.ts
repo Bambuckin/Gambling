@@ -92,7 +92,7 @@ export function sanitizeLotteryCode(value: string): string {
     return trimmed.toLowerCase();
   }
 
-  return "mechtallion";
+  return "bolshaya-8";
 }
 
 async function resolveAllowedLotteryCode(rawLotteryCode: string): Promise<string> {
@@ -155,5 +155,5 @@ function resolvePostLoginPath(session: AccessSession, role: SessionRole, fallbac
     return lotteryPathFromCode(sanitizeLotteryCode(session.returnToLotteryCode));
   }
 
-  return role === "admin" ? "/admin" : "/lottery/mechtallion";
+  return role === "admin" ? "/admin" : "/lottery/bolshaya-8";
 }

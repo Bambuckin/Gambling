@@ -1,7 +1,7 @@
-import type { DrawStore, LotteryRegistryStore } from "@lottery/application";
-import { normalizeLotteryCode, type DrawSnapshot, type LotteryRegistryEntry } from "@lottery/domain";
+import type { DrawClosureStore, DrawStore, LotteryRegistryStore } from "@lottery/application";
+import { normalizeLotteryCode, type DrawClosureRecord, type DrawSnapshot, type LotteryRegistryEntry } from "@lottery/domain";
 import type { Pool } from "pg";
-import { deepClone } from "./utils.js";
+import { deepClone, optionalNormalizedText } from "./utils.js";
 
 export class PostgresLotteryRegistryStore implements LotteryRegistryStore {
   private readonly pool: Pool;
@@ -115,6 +115,113 @@ export class PostgresDrawStore implements DrawStore {
       ]
     );
   }
+
+  async deleteSnapshot(lotteryCode: string): Promise<void> {
+    const normalizedLotteryCode = normalizeLotteryCode(lotteryCode);
+    await this.pool.query(
+      `
+        delete from lottery_draw_snapshots
+        where lottery_code = $1
+      `,
+      [normalizedLotteryCode]
+    );
+  }
+
+  async clearAll(): Promise<void> {
+    await this.pool.query("delete from lottery_draw_snapshots");
+  }
+}
+
+export class PostgresDrawClosureStore implements DrawClosureStore {
+  private readonly pool: Pool;
+
+  constructor(pool: Pool) {
+    this.pool = pool;
+  }
+
+  async getClosure(lotteryCode: string, drawId: string): Promise<DrawClosureRecord | null> {
+    const normalizedLotteryCode = normalizeLotteryCode(lotteryCode);
+    const normalizedDrawId = drawId.trim();
+    const result = await this.pool.query(
+      `
+        select record
+        from lottery_draw_closures
+        where lottery_code = $1 and draw_id = $2
+        limit 1
+      `,
+      [normalizedLotteryCode, normalizedDrawId]
+    );
+
+    const row = result.rows[0];
+    return row ? deepClone(row.record as DrawClosureRecord) : null;
+  }
+
+  async saveClosure(record: DrawClosureRecord): Promise<void> {
+    const normalizedRecord = normalizeDrawClosureRecord(record);
+
+    await this.pool.query(
+      `
+        insert into lottery_draw_closures (
+          lottery_code,
+          draw_id,
+          status,
+          closed_at,
+          record
+        ) values ($1, $2, $3, $4, $5::jsonb)
+        on conflict (lottery_code, draw_id)
+        do update
+          set status = excluded.status,
+              closed_at = excluded.closed_at,
+              record = excluded.record
+      `,
+      [
+        normalizedRecord.lotteryCode,
+        normalizedRecord.drawId,
+        normalizedRecord.status,
+        normalizedRecord.closedAt,
+        JSON.stringify(normalizedRecord)
+      ]
+    );
+  }
+
+  async listClosures(lotteryCode?: string): Promise<readonly DrawClosureRecord[]> {
+    const normalizedLotteryCode = optionalNormalizedText(lotteryCode);
+    const result = normalizedLotteryCode
+      ? await this.pool.query(
+          `
+            select record
+            from lottery_draw_closures
+            where lottery_code = $1
+            order by coalesce(closed_at, to_timestamp(0)) desc, draw_id asc
+          `,
+          [normalizeLotteryCode(normalizedLotteryCode)]
+        )
+      : await this.pool.query(
+          `
+            select record
+            from lottery_draw_closures
+            order by coalesce(closed_at, to_timestamp(0)) desc, lottery_code asc, draw_id asc
+          `
+        );
+
+    return result.rows.map((row: { record: DrawClosureRecord }) => deepClone(row.record));
+  }
+
+  async deleteClosure(lotteryCode: string, drawId: string): Promise<void> {
+    const normalizedLotteryCode = normalizeLotteryCode(lotteryCode);
+    const normalizedDrawId = drawId.trim();
+    await this.pool.query(
+      `
+        delete from lottery_draw_closures
+        where lottery_code = $1 and draw_id = $2
+      `,
+      [normalizedLotteryCode, normalizedDrawId]
+    );
+  }
+
+  async clearAll(): Promise<void> {
+    await this.pool.query("delete from lottery_draw_closures");
+  }
 }
 
 function normalizeRegistryEntry(entry: LotteryRegistryEntry): LotteryRegistryEntry {
@@ -142,6 +249,20 @@ function normalizeDrawSnapshot(snapshot: DrawSnapshot): DrawSnapshot {
           }))
         }
       : {})
+  };
+}
+
+function normalizeDrawClosureRecord(record: DrawClosureRecord): DrawClosureRecord {
+  const normalizedClosedAt = optionalNormalizedText(record.closedAt);
+  const normalizedClosedBy = optionalNormalizedText(record.closedBy);
+
+  return {
+    ...deepClone(record),
+    lotteryCode: normalizeLotteryCode(record.lotteryCode),
+    drawId: record.drawId.trim(),
+    status: record.status,
+    closedAt: normalizedClosedAt ? toIsoString(normalizedClosedAt) : null,
+    closedBy: normalizedClosedBy ?? null
   };
 }
 

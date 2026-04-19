@@ -168,14 +168,22 @@ function Ensure-PostgresReady {
   if ($postgresService) {
     $needsServiceStart = -not (Test-TcpPort -ServerHost $Connection.Host -Port $Connection.Port)
     $needsLanConfig = Test-PostgresLanConfigRequired -ServiceDetails $postgresService
+    $needsListenAddresses = Test-PostgresListenAddressesRequired -ServiceDetails $postgresService
+    $needsFirewallRule = -not (Test-PostgresFirewallRule -Port $Connection.Port)
 
-    if ($needsServiceStart -or $needsLanConfig) {
+    if ($needsServiceStart -or $needsLanConfig -or $needsListenAddresses -or $needsFirewallRule) {
       Ensure-ElevatedForSystemChange -EnvFile $EnvFile -SeedMode $SeedMode -ResetRuntime:$ResetRuntime -Reason "local PostgreSQL"
     }
 
     if ($needsLanConfig) {
       Ensure-PostgresLanAccess -ServiceDetails $postgresService
     }
+
+    if ($needsListenAddresses) {
+      Ensure-PostgresListenAddresses -ServiceDetails $postgresService
+    }
+
+    Ensure-PostgresFirewallRule -Port $Connection.Port
 
     if ($postgresService.Status -ne "Running") {
       Write-Host "[main-server] starting local PostgreSQL service: $($postgresService.Name)"
@@ -357,6 +365,133 @@ function Ensure-PostgresLanAccess {
   }
 
   Restart-Service -Name $ServiceDetails.Name -Force
+}
+
+function Test-PostgresListenAddressesRequired {
+  param(
+    [Parameter(Mandatory = $true)]
+    [pscustomobject]$ServiceDetails
+  )
+
+  $confPath = Get-PostgresConfPath -ServiceDetails $ServiceDetails
+  if (-not $confPath) {
+    return $false
+  }
+
+  $content = Get-Content -LiteralPath $confPath -Raw
+  $listenLine = ($content -split "`n" | Where-Object {
+    $_ -match '^\s*listen_addresses\s*='
+  }) | Select-Object -First 1
+
+  if (-not $listenLine) {
+    return $true
+  }
+
+  $value = if ($listenLine -match "=\s*'([^']*)'") {
+    $Matches[1]
+  } elseif ($listenLine -match "=\s*(\S+)") {
+    $Matches[1]
+  } else {
+    ""
+  }
+
+  return $value.Trim("'""` ").ToLowerInvariant() -eq "localhost"
+}
+
+function Ensure-PostgresListenAddresses {
+  param(
+    [Parameter(Mandatory = $true)]
+    [pscustomobject]$ServiceDetails
+  )
+
+  $confPath = Get-PostgresConfPath -ServiceDetails $ServiceDetails
+  if (-not $confPath) {
+    Write-Host "[main-server] WARNING: postgresql.conf not found; Postgres may not accept LAN connections"
+    return
+  }
+
+  $content = Get-Content -LiteralPath $confPath -Raw
+  $pattern = '(?m)^\s*listen_addresses\s*=.*$'
+  if ($content -match $pattern) {
+    $content = [regex]::Replace($content, $pattern, "listen_addresses = '*'")
+  } else {
+    $content = $content.TrimEnd() + [Environment]::NewLine + "listen_addresses = '*'" + [Environment]::NewLine
+  }
+  Set-Content -LiteralPath $confPath -Value $content -Encoding ascii -NoNewline
+
+  Write-Host "[main-server] set listen_addresses = '*' in postgresql.conf"
+
+  if ($ServiceDetails.PgCtlPath -and (Test-Path -LiteralPath $ServiceDetails.PgCtlPath)) {
+    Write-Host "[main-server] restarting PostgreSQL to apply listen_addresses"
+    & $ServiceDetails.PgCtlPath stop -D $ServiceDetails.DataDirectory -m fast 2>$null
+    Start-Sleep -Seconds 2
+    & $ServiceDetails.PgCtlPath start -D $ServiceDetails.DataDirectory -w -t 30 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      Start-Service -Name $ServiceDetails.Name -ErrorAction SilentlyContinue
+    }
+  } else {
+    Restart-Service -Name $ServiceDetails.Name -Force
+    Start-Sleep -Seconds 3
+  }
+}
+
+function Ensure-PostgresFirewallRule {
+  param(
+    [Parameter(Mandatory = $true)]
+    [int]$Port
+  )
+
+  $ruleName = Get-LotteryPostgresFirewallRuleName -Port $Port
+  $existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+  if ($existing) {
+    return
+  }
+
+  Write-Host "[main-server] adding firewall rule for PostgreSQL on port $Port (LAN only)"
+  New-NetFirewallRule `
+    -DisplayName $ruleName `
+    -Direction Inbound `
+    -Action Allow `
+    -Protocol TCP `
+    -LocalPort $Port `
+    -RemoteAddress LocalSubnet `
+    -Profile @("Private", "Public") | Out-Null
+}
+
+function Get-LotteryPostgresFirewallRuleName {
+  param(
+    [Parameter(Mandatory = $true)]
+    [int]$Port
+  )
+
+  return "Lottery PostgreSQL TCP $Port"
+}
+
+function Test-PostgresFirewallRule {
+  param(
+    [Parameter(Mandatory = $true)]
+    [int]$Port
+  )
+
+  return $null -ne (Get-NetFirewallRule -DisplayName (Get-LotteryPostgresFirewallRuleName -Port $Port) -ErrorAction SilentlyContinue)
+}
+
+function Get-PostgresConfPath {
+  param(
+    [Parameter(Mandatory = $true)]
+    [pscustomobject]$ServiceDetails
+  )
+
+  if (-not $ServiceDetails.DataDirectory) {
+    return $null
+  }
+
+  $confPath = Join-Path $ServiceDetails.DataDirectory "postgresql.conf"
+  if (Test-Path -LiteralPath $confPath) {
+    return $confPath
+  }
+
+  return $null
 }
 
 function Get-PostgresPgHbaPath {

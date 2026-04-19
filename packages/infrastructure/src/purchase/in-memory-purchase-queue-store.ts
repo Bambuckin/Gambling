@@ -28,6 +28,10 @@ export class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
     const normalized = requestId.trim();
     this.items = this.items.filter((entry) => entry.requestId !== normalized);
   }
+
+  async clearAll(): Promise<void> {
+    this.items = [];
+  }
 }
 
 function compareQueueItems(left: PurchaseQueueItem, right: PurchaseQueueItem): number {

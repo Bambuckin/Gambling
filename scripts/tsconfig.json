@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "moduleDetection": "force",
+    "baseUrl": "..",
+    "paths": {
+      "@lottery/domain": ["packages/domain/src/index.ts"],
+      "@lottery/application": ["packages/application/src/index.ts"],
+      "@lottery/infrastructure": ["packages/infrastructure/src/index.ts"],
+      "@lottery/lottery-handlers": ["packages/lottery-handlers/src/index.ts"],
+      "@lottery/test-kit": ["packages/test-kit/src/index.ts"]
+    },
+    "types": ["node"],
+    "lib": ["ES2022"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "rootDir": ".."
+  },
+  "include": ["*.ts"]
+}

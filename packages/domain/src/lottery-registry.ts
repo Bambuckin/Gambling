@@ -30,6 +30,9 @@ export interface LotteryFormFieldDefinition {
   readonly options?: readonly LotteryFormFieldOption[];
 }
 
+export type LotteryPurchaseCompletionMode = "direct" | "emulate_after_cart";
+export type LotteryDrawFreshnessMode = "block" | "warn_only";
+
 export interface LotteryRegistryEntry {
   readonly lotteryCode: string;
   readonly title: string;
@@ -39,6 +42,8 @@ export interface LotteryRegistryEntry {
   readonly formFields: readonly LotteryFormFieldDefinition[];
   readonly pricing: LotteryPricingRule;
   readonly handlers: LotteryHandlerBinding;
+  readonly purchaseCompletionMode?: LotteryPurchaseCompletionMode;
+  readonly drawFreshnessMode?: LotteryDrawFreshnessMode;
 }
 
 export function normalizeLotteryCode(input: string): string {

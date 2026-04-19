@@ -4,16 +4,22 @@ import type { DrawOption, DrawSnapshot } from "@lottery/domain";
 import { getWebPostgresPool, getWebStorageBackend } from "../runtime/postgres-runtime";
 
 let cachedService: DrawRefreshService | null = null;
+let cachedDrawStore: InMemoryDrawStore | PostgresDrawStore | null = null;
+
+export function getDrawStoreInstance(): InMemoryDrawStore | PostgresDrawStore {
+  if (!cachedDrawStore) {
+    const backend = getWebStorageBackend();
+    cachedDrawStore =
+      backend === "postgres" ? new PostgresDrawStore(getWebPostgresPool()) : new InMemoryDrawStore(readSeedSnapshots());
+  }
+
+  return cachedDrawStore;
+}
 
 export function getDrawRefreshService(): DrawRefreshService {
   if (!cachedService) {
-    const backend = getWebStorageBackend();
-
     cachedService = new DrawRefreshService({
-      drawStore:
-        backend === "postgres"
-          ? new PostgresDrawStore(getWebPostgresPool())
-          : new InMemoryDrawStore(readSeedSnapshots()),
+      drawStore: getDrawStoreInstance(),
       timeSource: new SystemTimeSource()
     });
   }

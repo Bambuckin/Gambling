@@ -74,6 +74,31 @@ export class PostgresIdentityStore implements IdentityStore {
     return rowToAccessIdentity(row);
   }
 
+  async listAll(): Promise<readonly AccessIdentity[]> {
+    const result = await this.pool.query(
+      `
+        select
+          identity_id,
+          login,
+          password_hash,
+          role,
+          status,
+          display_name,
+          phone,
+          created_at,
+          updated_at
+        from lottery_identities
+        order by created_at asc, identity_id asc
+      `
+    );
+
+    return result.rows.map((row: typeof result.rows[0]) => rowToAccessIdentity(row));
+  }
+
+  async save(identity: AccessIdentity): Promise<void> {
+    await this.upsert(identity);
+  }
+
   async upsert(identity: AccessIdentity): Promise<void> {
     const payload = normalizeIdentity(identity);
     await this.pool.query(
@@ -247,6 +272,18 @@ export class PostgresSessionStore implements SessionStore {
 
     const row = result.rows[0];
     return row ? rowToAccessSession(row) : null;
+  }
+
+  async revokeAll(revokedAt: string): Promise<void> {
+    const normalizedRevokedAt = revokedAt.trim();
+    await this.pool.query(
+      `
+        update lottery_sessions
+        set revoked_at = $1
+        where revoked_at is null
+      `,
+      [normalizedRevokedAt]
+    );
   }
 }
 

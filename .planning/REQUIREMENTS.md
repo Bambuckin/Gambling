@@ -109,6 +109,27 @@
 
 - **API-01**: System exposes controlled external APIs for reporting or upstream integrations.
 
+## v1.1 Architecture Consolidation Requirements
+
+### Canonical Runtime Truth
+
+- [ ] **CONS-01**: System stores ticket truth in a canonical `purchase` aggregate instead of splitting it across request, queue item, ticket, and verification-job write models.
+- [ ] **CONS-02**: System stores draw lifecycle in a canonical `draw` aggregate with explicit `open`, `closed`, and `settled` states.
+- [ ] **CONS-03**: System stores every terminal execution attempt as a durable `purchase_attempt` record with raw terminal response and normalized outcome.
+
+### Migration and Cutover
+
+- [ ] **CONS-04**: Migration to canonical purchase/draw storage is additive first and keeps current cashier, admin, and user flows working through compatibility read models or projections.
+- [ ] **CONS-05**: Purchase submission and worker execution become idempotent and replay-safe around the canonical purchase aggregate.
+- [ ] **CONS-06**: Admin draw actions split into explicit create, close, mark-result, and settle operations, with audit trail and result visibility controlled by settlement.
+
+### Fulfillment and Operations
+
+- [ ] **CONS-07**: Winning fulfillment and ledger side effects run from canonical purchase/draw result state rather than from legacy verification-job truth.
+- [ ] **CONS-08**: Admin, terminal receiver, and user read surfaces consume canonical projections instead of legacy write models.
+- [ ] **CONS-09**: Exclusive terminal execution uses database-native advisory locking and keeps queue transport behind a replaceable boundary.
+- [ ] **CONS-10**: Legacy ticket, verification-job, and lock-table write models are removed only after parity validation and regression coverage pass.
+
 ## Out of Scope
 
 | Feature | Reason |
@@ -173,12 +194,25 @@
 | DOCS-01 | Phase 9 | Complete |
 | DOCS-02 | Phase 9 | Complete |
 | DOCS-03 | Phase 9 | Complete |
+| CONS-01 | Phase 18 | Planned |
+| CONS-02 | Phase 18 | Planned |
+| CONS-03 | Phase 18 | Planned |
+| CONS-04 | Phase 19 | Planned |
+| CONS-05 | Phase 20 | Planned |
+| CONS-06 | Phase 21 | Planned |
+| CONS-07 | Phase 22 | Planned |
+| CONS-08 | Phase 23 | Planned |
+| CONS-09 | Phase 24 | Planned |
+| CONS-10 | Phase 25 | Planned |
 
 **Coverage:**
 - v1 requirements: 49 total
 - Mapped to phases: 49
 - Unmapped: 0 ✅
+- v1.1 consolidation requirements: 10 total
+- Mapped to phases: 10
+- Unmapped: 0 ✅
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-06 after 09-04 completion (hardening docs, extension runbooks, and release readiness gate)*
+*Last updated: 2026-04-19 after planning phases 18-25 for architecture consolidation*

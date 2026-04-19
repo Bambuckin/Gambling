@@ -9,36 +9,31 @@ export default async function TerminalReceiverPage(): Promise<ReactElement> {
   return (
     <section className="page-column">
       <article className="panel">
-        <h1>Terminal Receiver Monitor</h1>
+        <h1>Экран терминала</h1>
         <p>
-          This page opens on the terminal PC and shows that the central server really delivered the Big 8 payload and
-          that the receiver changed request state through the shared runtime.
+          Здесь видно, какие заявки дошли до главного терминала и в каком состоянии они сейчас находятся.
         </p>
         <p className="muted">
-          This is a LAN verification slice without real NLoto checkout. The terminal acts only as a receiver and status
-          switcher.
+          Если билет подтверждён пользователем и встал в очередь, он должен появиться ниже без ручного обновления.
         </p>
       </article>
 
       <MockTerminalLiveMonitor
         initialRows={rows}
         endpointPath="/api/terminal/receiver/inbox"
-        title="Big 8 Receiver Inbox"
-        refreshNote="Auto refresh every 2 sec from the central server."
-        emptyMessage="No Big 8 requests have reached the terminal receiver yet."
+        title="Очередь терминала"
+        refreshNote="Обновление каждые 2 секунды."
+        emptyMessage="Новых заявок на терминале пока нет."
       />
 
       <article className="panel">
-        <h2>Quick Links</h2>
+        <h2>Переходы</h2>
         <div className="actions-row">
           <Link className="btn-primary" href="/lottery/bolshaya-8">
-            Open Big 8 client
+            Открыть клиент
           </Link>
           <Link className="btn-ghost" href="/admin">
-            Open admin
-          </Link>
-          <Link className="btn-ghost" href="/debug/mock-terminal">
-            Debug monitor
+            Открыть админку
           </Link>
         </div>
       </article>

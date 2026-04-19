@@ -1,5 +1,6 @@
-import { appendPurchaseRequestTransition, createAwaitingConfirmationRequest, type TicketRecord } from "@lottery/domain";
+import { appendPurchaseRequestTransition, createAwaitingConfirmationRequest, type NotificationRecord, type TicketRecord } from "@lottery/domain";
 import { describe, expect, it } from "vitest";
+import type { NotificationStore } from "../ports/notification-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
 import {
   TicketPersistenceService,
@@ -9,8 +10,10 @@ import {
 describe("TicketPersistenceService", () => {
   it("persists a ticket for successful request", async () => {
     const ticketStore = new InMemoryTicketStore();
+    const notificationStore = new InMemoryNotificationStore();
     const service = new TicketPersistenceService({
-      ticketStore
+      ticketStore,
+      notificationStore
     });
 
     const result = await service.persistSuccessfulPurchaseTicket({
@@ -29,8 +32,10 @@ describe("TicketPersistenceService", () => {
 
   it("returns replayed when ticket for request already exists", async () => {
     const ticketStore = new InMemoryTicketStore();
+    const notificationStore = new InMemoryNotificationStore();
     const service = new TicketPersistenceService({
-      ticketStore
+      ticketStore,
+      notificationStore
     });
 
     const first = await service.persistSuccessfulPurchaseTicket({
@@ -52,8 +57,10 @@ describe("TicketPersistenceService", () => {
 
   it("rejects non-success request state", async () => {
     const ticketStore = new InMemoryTicketStore();
+    const notificationStore = new InMemoryNotificationStore();
     const service = new TicketPersistenceService({
-      ticketStore
+      ticketStore,
+      notificationStore
     });
 
     const action = service.persistSuccessfulPurchaseTicket({
@@ -124,10 +131,37 @@ class InMemoryTicketStore implements TicketStore {
     const filtered = this.tickets.filter((entry) => entry.ticketId !== ticket.ticketId);
     this.tickets = [...filtered, cloneTicket(ticket)];
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 function cloneTicket(ticket: TicketRecord): TicketRecord {
   return {
     ...ticket
   };
+}
+
+class InMemoryNotificationStore implements NotificationStore {
+  private notifications: NotificationRecord[] = [];
+
+  async saveNotification(notification: NotificationRecord): Promise<void> {
+    const filtered = this.notifications.filter((n) => n.notificationId !== notification.notificationId);
+    this.notifications = [...filtered, { ...notification }];
+  }
+
+  async listUserNotifications(userId: string): Promise<readonly NotificationRecord[]> {
+    return this.notifications.filter((n) => n.userId === userId);
+  }
+
+  async getNotificationById(notificationId: string): Promise<NotificationRecord | null> {
+    return this.notifications.find((n) => n.notificationId === notificationId) ?? null;
+  }
+
+  async markNotificationRead(notificationId: string): Promise<void> {
+    this.notifications = this.notifications.map((n) =>
+      n.notificationId === notificationId ? { ...n, read: true } : n
+    );
+  }
+
+  async clearAll(): Promise<void> {}
 }

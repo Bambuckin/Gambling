@@ -12,10 +12,13 @@ export interface TicketView {
   readonly lotteryCode: string;
   readonly drawId: string;
   readonly verificationStatus: TicketRecord["verificationStatus"];
+  readonly adminResultMark: TicketRecord["adminResultMark"];
   readonly winningAmountMinor: number | null;
   readonly verifiedAt: string | null;
   readonly externalReference: string;
   readonly purchasedAt: string;
+  readonly resultSource: TicketRecord["resultSource"];
+  readonly claimState: TicketRecord["claimState"];
 }
 
 export class TicketQueryService {
@@ -52,10 +55,13 @@ function toTicketView(ticket: TicketRecord): TicketView {
     lotteryCode: ticket.lotteryCode,
     drawId: ticket.drawId,
     verificationStatus: ticket.verificationStatus,
+    adminResultMark: ticket.adminResultMark,
     winningAmountMinor: ticket.winningAmountMinor,
     verifiedAt: ticket.verifiedAt,
     externalReference: ticket.externalReference,
-    purchasedAt: ticket.purchasedAt
+    purchasedAt: ticket.purchasedAt,
+    resultSource: ticket.resultSource,
+    claimState: ticket.claimState
   };
 }
 

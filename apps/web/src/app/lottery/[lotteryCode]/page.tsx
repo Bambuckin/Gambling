@@ -1,4 +1,4 @@
-﻿import type { CSSProperties, ReactElement } from "react";
+import type { CSSProperties, ReactElement } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
@@ -15,17 +15,18 @@ import type {
 } from "@lottery/domain";
 import { isBig8PurchaseDraftPayload, sanitizePurchaseDraftPayload } from "@lottery/domain";
 import { requireLotteryAccess, submitLogout } from "../../../lib/access/entry-flow";
-import { getDrawRefreshService } from "../../../lib/draw/draw-runtime";
+import { loadPurchasableDrawContext } from "../../../lib/draw/purchasable-draws";
 import { LEDGER_DEFAULT_CURRENCY, getWalletLedgerService } from "../../../lib/ledger/ledger-runtime";
-import { buildWalletMovementRows } from "../../../lib/ledger/wallet-view";
 import { Big8PurchaseForm } from "../../../lib/lottery-form/big8-purchase-form";
 import { LotteryFormFields } from "../../../lib/lottery-form/render-lottery-form-fields";
 import {
+  getNotificationService,
   getPurchaseOrchestrationService,
   getPurchaseRequestQueryService,
   getPurchaseRequestService
 } from "../../../lib/purchase/purchase-runtime";
 import { LotteryLiveMonitor } from "../../../lib/purchase/lottery-live-monitor";
+import { LotteryNotificationMonitor } from "../../../lib/purchase/lottery-notification-monitor";
 import { getLotteryRegistryService } from "../../../lib/registry/registry-runtime";
 import { getTicketQueryService } from "../../../lib/ticket/ticket-runtime";
 import { resolveLotteryPresentation } from "../../../lib/ui/lottery-presentation";
@@ -60,24 +61,28 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
     );
   }
 
-  const drawState = await getDrawRefreshService().getDrawState(lottery.lotteryCode);
-  const availableDraws = await getDrawRefreshService().listAvailableDraws(lottery.lotteryCode);
-  const purchaseBlockedReason = describePurchaseBlockReason(drawState);
+  const drawContext = await loadPurchasableDrawContext(lottery.lotteryCode, lottery.drawFreshnessMode);
+  const drawState = drawContext.drawState;
+  const availableDraws = drawContext.draws;
+  const purchaseBlockedReason = drawContext.blockedReason;
   const walletLedgerService = getWalletLedgerService();
   const walletSnapshot = await walletLedgerService.getWalletSnapshot(access.identity.identityId, LEDGER_DEFAULT_CURRENCY);
-  const walletEntries = await walletLedgerService.listEntries(access.identity.identityId);
-  const walletMovements = buildWalletMovementRows(walletEntries, { limit: 10 });
   const confirmationDraft = decodeConfirmationToken(quoteToken, lottery.lotteryCode);
   const purchaseRequests = (await getPurchaseRequestQueryService().listUserRequests(access.identity.identityId))
     .filter((request) => request.lotteryCode === lottery.lotteryCode);
   const tickets = (await getTicketQueryService().listUserTickets(access.identity.identityId)).filter(
     (ticket) => ticket.lotteryCode === lottery.lotteryCode
   );
+  const notifications = (await getNotificationService().listUserNotifications(access.identity.identityId)).filter(
+    (notification) => notification.referenceLotteryCode === lottery.lotteryCode
+  );
   const presentation = resolveLotteryPresentation(lottery.lotteryCode);
   const drawBadge = resolveDrawBadge(drawState);
   const draftBadge = resolveDraftBadge(draftStatus);
-  const purchaseStatusTone = resolvePurchaseStatusTone(drawState);
-  const purchaseStatusMessage = resolvePurchaseStatusMessage(drawState);
+  const purchaseStatusTone = purchaseBlockedReason ? "warn" : resolvePurchaseStatusTone(drawState);
+  const purchaseStatusMessage = purchaseBlockedReason
+    ? `Покупка заблокирована: ${purchaseBlockedReason}.`
+    : resolvePurchaseStatusMessage(drawState);
   const isBig8Lottery = lottery.formSchemaVersion === "v3-big8-live";
 
   return (
@@ -152,7 +157,7 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
               <h3>{isBig8PurchaseDraftPayload(confirmationDraft.payload) ? "Подтверждение корзины Big 8" : "Подтверждение заявки"}</h3>
               <div className="mini-grid">
                 <article className="mini-stat">
-                  <span className="label">Request ID</span>
+                  <span className="label">Заявка</span>
                   <span className="value">{confirmationDraft.requestId}</span>
                 </article>
                 <article className="mini-stat">
@@ -188,20 +193,9 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
         </article>
 
         <article className="panel">
-          <h2>Сессия и кошелёк</h2>
+          <h2>Кошелёк и тираж</h2>
+          <p className="muted">Здесь только минимум, который нужен перед отправкой билета.</p>
           <div className="mini-grid">
-            <article className="mini-stat">
-              <span className="label">Пользователь</span>
-              <span className="value">{access.identity.displayName}</span>
-            </article>
-            <article className="mini-stat">
-              <span className="label">Роль</span>
-              <span className="value">{access.identity.role}</span>
-            </article>
-            <article className="mini-stat">
-              <span className="label">Телефон</span>
-              <span className="value">{formatPhone(access.identity.phone)}</span>
-            </article>
             <article className="mini-stat">
               <span className="label">Доступно</span>
               <span className="value">{formatMinorAsRub(walletSnapshot.availableMinor)}</span>
@@ -210,9 +204,6 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
               <span className="label">В резерве</span>
               <span className="value">{formatMinorAsRub(walletSnapshot.reservedMinor)}</span>
             </article>
-          </div>
-
-          <div className="mini-grid">
             <article className="mini-stat">
               <span className="label">Текущий тираж</span>
               <span className="value">{drawState.snapshot?.drawId ?? "нет данных"}</span>
@@ -229,39 +220,10 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
               <span className="label">Свежесть</span>
               <span className="value">{drawState.freshness?.isFresh ? "актуально" : "нужна проверка"}</span>
             </article>
-            <article className="mini-stat">
-              <span className="label">Доступных тиражей</span>
-              <span className="value">{availableDraws.length}</span>
-            </article>
           </div>
-
-          <h3>Последние движения кошелька</h3>
-          {walletMovements.length === 0 ? (
-            <p className="muted">Движений пока нет.</p>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Операция</th>
-                    <th>Сумма</th>
-                    <th>Ссылка</th>
-                    <th>Время</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {walletMovements.map((movement) => (
-                    <tr key={movement.entryId}>
-                      <td>{movement.operation}</td>
-                      <td>{movement.amountLabel}</td>
-                      <td>{movement.referenceLabel}</td>
-                      <td>{movement.createdAt}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <p className="muted" style={{ marginTop: "0.75rem" }}>
+            Пользователь: {access.identity.displayName} | Телефон: {formatPhone(access.identity.phone)}
+          </p>
         </article>
       </section>
 
@@ -277,6 +239,20 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
         }))}
       />
 
+      <LotteryNotificationMonitor
+        lotteryCode={lottery.lotteryCode}
+        initialNotifications={notifications.map((notification) => ({
+          notificationId: notification.notificationId,
+          type: notification.type,
+          title: notification.title,
+          body: notification.body,
+          read: notification.read,
+          createdAt: notification.createdAt,
+          referenceTicketId: notification.referenceTicketId,
+          referenceDrawId: notification.referenceDrawId
+        }))}
+      />
+
       <section className="two-col">
         <article className="panel">
           <h2>Заявки на покупку</h2>
@@ -287,7 +263,7 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
               <table>
                 <thead>
                   <tr>
-                    <th>ID</th>
+                    <th>Заявка</th>
                     <th>Статус</th>
                     <th>Тираж</th>
                     <th>Попытки</th>
@@ -301,12 +277,12 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
                   {purchaseRequests.map((request) => (
                     <tr key={request.requestId}>
                       <td>{request.requestId}</td>
-                      <td>{request.status}</td>
+                      <td>{formatRequestStatus(request.status)}</td>
                       <td>{request.drawId}</td>
                       <td>{request.attemptCount}</td>
                       <td>{formatMinorAsRub(request.costMinor)}</td>
                       <td>{formatIso(request.createdAt)}</td>
-                      <td>{request.finalResult ?? "нет"}</td>
+                      <td>{formatRequestResult(request.finalResult)}</td>
                       <td>
                         {isRequestCancelableStatus(request.status) ? (
                           <form action={cancelPurchaseRequestAction}>
@@ -329,7 +305,7 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
         </article>
 
         <article className="panel">
-          <h2>Проверка билетов</h2>
+          <h2>Билеты и результаты</h2>
           {tickets.length === 0 ? (
             <p className="muted">Результатов проверки пока нет.</p>
           ) : (
@@ -337,23 +313,23 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
               <table>
                 <thead>
                   <tr>
-                    <th>Ticket</th>
-                    <th>Request</th>
+                    <th>Билет</th>
                     <th>Тираж</th>
                     <th>Статус</th>
                     <th>Выигрыш</th>
-                    <th>Проверка</th>
+                    <th>Источник</th>
+                    <th>Статус выплаты</th>
                   </tr>
                 </thead>
                 <tbody>
                   {tickets.map((ticket) => (
                     <tr key={ticket.ticketId}>
                       <td>{ticket.ticketId}</td>
-                      <td>{ticket.requestId}</td>
                       <td>{ticket.drawId}</td>
-                      <td>{ticket.verificationStatus}</td>
-                      <td>{formatMinorAsRub(ticket.winningAmountMinor ?? 0)}</td>
-                      <td>{formatIso(ticket.verifiedAt) ?? "в очереди"}</td>
+                      <td>{formatTicketVerificationStatus(ticket.verificationStatus)}</td>
+                      <td>{formatTicketOutcome(ticket.verificationStatus, ticket.winningAmountMinor)}</td>
+                      <td>{formatTicketResultSource(ticket.resultSource)}</td>
+                      <td>{formatClaimState(ticket.claimState)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -383,9 +359,9 @@ async function submitPurchaseDraftAction(formData: FormData): Promise<void> {
   if (!lottery) {
     return redirect(`/lottery/${access.lotteryCode}?draft=error&message=Lottery+not+found`);
   }
-  const drawState = await getDrawRefreshService().getDrawState(lottery.lotteryCode);
-  const liveDraws = await getDrawRefreshService().listAvailableDraws(lottery.lotteryCode);
-  const purchaseBlockedReason = describePurchaseBlockReason(drawState);
+  const drawContext = await loadPurchasableDrawContext(lottery.lotteryCode, lottery.drawFreshnessMode);
+  const liveDraws = drawContext.draws;
+  const purchaseBlockedReason = drawContext.blockedReason;
   if (purchaseBlockedReason) {
     const blockedMessage = encodeURIComponent(`Покупка заблокирована: ${purchaseBlockedReason}.`);
     return redirect(`/lottery/${lottery.lotteryCode}?draft=error&message=${blockedMessage}`);
@@ -408,7 +384,7 @@ async function submitPurchaseDraftAction(formData: FormData): Promise<void> {
         });
     const drawId = isBig8Lottery
       ? String(formData.get("selectedDrawId") ?? "").trim()
-      : drawState.snapshot?.drawId;
+      : drawContext.drawState.snapshot?.drawId;
     const selectedDraw = drawId ? liveDraws.find((draw) => draw.drawId === drawId) ?? null : null;
     if (!drawId || (isBig8Lottery && !selectedDraw)) {
       return redirect(
@@ -475,9 +451,9 @@ async function confirmPurchaseRequestAction(formData: FormData): Promise<void> {
     );
   }
 
-  const drawState = await getDrawRefreshService().getDrawState(lottery.lotteryCode);
-  const liveDraws = await getDrawRefreshService().listAvailableDraws(lottery.lotteryCode);
-  const purchaseBlockedReason = describePurchaseBlockReason(drawState);
+  const drawContext = await loadPurchasableDrawContext(lottery.lotteryCode, lottery.drawFreshnessMode);
+  const liveDraws = drawContext.draws;
+  const purchaseBlockedReason = drawContext.blockedReason;
   if (purchaseBlockedReason) {
     return redirect(
       `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(`Покупка заблокирована: ${purchaseBlockedReason}.`)}`
@@ -768,6 +744,103 @@ function renderConfirmationPayloadDetails(payload: PurchaseDraftPayload, baseAmo
 
 function isRequestCancelableStatus(state: RequestState): boolean {
   return state === "queued" || state === "retrying";
+}
+
+function formatRequestStatus(state: RequestState): string {
+  switch (state) {
+    case "awaiting_confirmation":
+      return "Ждёт подтверждения";
+    case "confirmed":
+      return "Подтверждена";
+    case "queued":
+      return "В очереди";
+    case "executing":
+      return "Исполняется";
+    case "retrying":
+      return "Повторная попытка";
+    case "added_to_cart":
+      return "В корзине";
+    case "success":
+      return "Завершена";
+    case "error":
+      return "Ошибка";
+    case "canceled":
+      return "Отменена";
+    default:
+      return state;
+  }
+}
+
+function formatRequestResult(result: string | null): string {
+  if (!result) {
+    return "Нет";
+  }
+
+  switch (result) {
+    case "ticket_purchased":
+      return "Билет куплен";
+    case "added_to_cart":
+      return "В корзине";
+    default:
+      return result;
+  }
+}
+
+function formatTicketVerificationStatus(status: string): string {
+  switch (status) {
+    case "pending":
+      return "Ожидает";
+    case "verified":
+      return "Проверен";
+    case "failed":
+      return "Ошибка";
+    default:
+      return status;
+  }
+}
+
+function formatTicketOutcome(verificationStatus: string, winningAmountMinor: number | null | undefined): string {
+  if (verificationStatus === "pending") {
+    return "Ждёт результата";
+  }
+
+  if (verificationStatus === "failed") {
+    return "Проверка завершилась ошибкой";
+  }
+
+  if ((winningAmountMinor ?? 0) > 0) {
+    return formatMinorAsRub(winningAmountMinor ?? 0);
+  }
+
+  return "Проигрыш";
+}
+
+function formatTicketResultSource(resultSource: string | null | undefined): string {
+  switch (resultSource) {
+    case "terminal":
+      return "Терминал";
+    case "admin_emulated":
+      return "Администратор";
+    default:
+      return "—";
+  }
+}
+
+function formatClaimState(claimState: string): string {
+  switch (claimState) {
+    case "unclaimed":
+      return "Не обработан";
+    case "credit_pending":
+      return "Зачисление в очереди";
+    case "credited":
+      return "Зачислен";
+    case "cash_desk_pending":
+      return "Ожидает кассу";
+    case "cash_desk_paid":
+      return "Выдан в кассе";
+    default:
+      return claimState;
+  }
 }
 
 function readSingleParam(value: string | string[] | undefined): string | null {

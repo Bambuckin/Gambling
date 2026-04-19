@@ -24,6 +24,10 @@ export class InMemoryPurchaseRequestStore implements PurchaseRequestStore {
     const filtered = this.records.filter((entry) => entry.snapshot.requestId !== record.snapshot.requestId);
     this.records = [...filtered, cloneRecord(record)];
   }
+
+  async clearAll(): Promise<void> {
+    this.records = [];
+  }
 }
 
 function compareRecordsByCreatedAt(left: PurchaseRequestRecord, right: PurchaseRequestRecord): number {

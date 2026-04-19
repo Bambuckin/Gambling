@@ -14,6 +14,8 @@ Documentation in this repository is part of execution, not a post-factum attachm
 - `docs/modules/` - implemented architecture map, boundaries, contracts, extension guidance.
 - `docs/runbooks/` - verification and operational procedures from local bootstrap to release checks.
 - `docs/handoff-runtime.md` - explicit continuation scope for another model/account.
+- `docs/modules/current-working-contour.md` - source-of-truth for what the current operator-facing slice really does today.
+- `docs/runbooks/current-working-contour-smoke.md` - end-to-end manual smoke for the current real contour.
 
 ## Architecture And Modules
 
@@ -21,6 +23,7 @@ Documentation in this repository is part of execution, not a post-factum attachm
 - `docs/adr/ADR-001-stack-and-repo-shape.md` - selected workspace baseline.
 - `ARCHITECTURE.md` - current system shape, module topology, and core data flows.
 - `docs/modules/system-architecture.md` - expanded runtime/package flow map.
+- `docs/modules/current-working-contour.md` - current live slice, UI contract, runtime ownership, and operator rules.
 - `docs/modules/boundary-catalog.md` - source-of-truth module ownership and allowed/disallowed integration points.
 - `docs/modules/lottery-handler-extension.md` - deterministic workflow for adding/changing lottery handlers.
 - `docs/modules/ui-customization.md` - where to edit visual surface and seeded lottery catalog safely.
@@ -42,6 +45,7 @@ If a decision affects future implementation, write it to `docs/` or `.planning/`
 
 ## Runbooks
 
+- `docs/runbooks/current-working-contour-smoke.md` - shortest real contour smoke from login to draw closure result.
 - `docs/runbooks/local-bootstrap.md` - local environment and baseline checks.
 - `docs/runbooks/fake-terminal-smoke.md` - smoke validation without production terminal.
 - `docs/runbooks/purchase-request-verification.md` - purchase lifecycle and queue status checks.

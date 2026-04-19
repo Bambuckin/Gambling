@@ -21,6 +21,14 @@ export class InMemoryDrawStore implements DrawStore {
   async upsertSnapshot(snapshot: DrawSnapshot): Promise<void> {
     this.snapshotsByLotteryCode.set(normalizeLotteryCode(snapshot.lotteryCode), cloneSnapshot(snapshot));
   }
+
+  async deleteSnapshot(lotteryCode: string): Promise<void> {
+    this.snapshotsByLotteryCode.delete(normalizeLotteryCode(lotteryCode));
+  }
+
+  async clearAll(): Promise<void> {
+    this.snapshotsByLotteryCode.clear();
+  }
 }
 
 function cloneSnapshot(snapshot: DrawSnapshot): DrawSnapshot {

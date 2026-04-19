@@ -1,4 +1,6 @@
 import type {
+  CashDeskRequestStore,
+  NotificationStore,
   PurchaseQueueItem,
   PurchaseQueueStore,
   PurchaseRequestStore,
@@ -8,12 +10,14 @@ import type {
 } from "@lottery/application";
 import {
   normalizeLotteryCode,
+  type CashDeskRequest,
+  type NotificationRecord,
   type PurchaseRequestRecord,
   type TicketRecord,
   type TicketVerificationJob
 } from "@lottery/domain";
 import type { Pool } from "pg";
-import { deepClone, last, normalizeText } from "./utils.js";
+import { deepClone, last, normalizeText, optionalNormalizedText } from "./utils.js";
 
 export class PostgresPurchaseRequestStore implements PurchaseRequestStore {
   private readonly pool: Pool;
@@ -81,6 +85,10 @@ export class PostgresPurchaseRequestStore implements PurchaseRequestStore {
         JSON.stringify(normalizedRecord)
       ]
     );
+  }
+
+  async clearAll(): Promise<void> {
+    await this.pool.query("delete from lottery_purchase_requests");
   }
 }
 
@@ -157,6 +165,10 @@ export class PostgresPurchaseQueueStore implements PurchaseQueueStore {
       `,
       [normalizedRequestId]
     );
+  }
+
+  async clearAll(): Promise<void> {
+    await this.pool.query("delete from lottery_purchase_queue_items");
   }
 }
 
@@ -241,6 +253,194 @@ export class PostgresTicketStore implements TicketStore {
         JSON.stringify(normalizedTicket)
       ]
     );
+  }
+
+  async clearAll(): Promise<void> {
+    await this.pool.query("delete from lottery_tickets");
+  }
+}
+
+export class PostgresNotificationStore implements NotificationStore {
+  private readonly pool: Pool;
+
+  constructor(pool: Pool) {
+    this.pool = pool;
+  }
+
+  async saveNotification(notification: NotificationRecord): Promise<void> {
+    const normalizedNotification = normalizeNotificationRecord(notification);
+
+    await this.pool.query(
+      `
+        insert into lottery_notifications (
+          notification_id,
+          user_id,
+          type,
+          read,
+          created_at,
+          notification
+        ) values ($1, $2, $3, $4, $5, $6::jsonb)
+        on conflict (notification_id)
+        do update
+          set user_id = excluded.user_id,
+              type = excluded.type,
+              read = excluded.read,
+              created_at = excluded.created_at,
+              notification = excluded.notification
+      `,
+      [
+        normalizedNotification.notificationId,
+        normalizedNotification.userId,
+        normalizedNotification.type,
+        normalizedNotification.read,
+        normalizedNotification.createdAt,
+        JSON.stringify(normalizedNotification)
+      ]
+    );
+  }
+
+  async listUserNotifications(userId: string): Promise<readonly NotificationRecord[]> {
+    const normalizedUserId = normalizeText(userId, "userId");
+    const result = await this.pool.query(
+      `
+        select notification
+        from lottery_notifications
+        where user_id = $1
+        order by created_at desc, notification_id desc
+      `,
+      [normalizedUserId]
+    );
+
+    return result.rows.map((row: { notification: NotificationRecord }) => deepClone(row.notification));
+  }
+
+  async getNotificationById(notificationId: string): Promise<NotificationRecord | null> {
+    const normalizedNotificationId = normalizeText(notificationId, "notificationId");
+    const result = await this.pool.query(
+      `
+        select notification
+        from lottery_notifications
+        where notification_id = $1
+        limit 1
+      `,
+      [normalizedNotificationId]
+    );
+
+    const row = result.rows[0];
+    return row ? deepClone(row.notification as NotificationRecord) : null;
+  }
+
+  async markNotificationRead(notificationId: string): Promise<void> {
+    const normalizedNotificationId = normalizeText(notificationId, "notificationId");
+    const existing = await this.getNotificationById(normalizedNotificationId);
+    if (!existing || existing.read) {
+      return;
+    }
+
+    const nextNotification: NotificationRecord = {
+      ...existing,
+      read: true
+    };
+
+    await this.saveNotification(nextNotification);
+  }
+
+  async clearAll(): Promise<void> {
+    await this.pool.query("delete from lottery_notifications");
+  }
+}
+
+export class PostgresCashDeskRequestStore implements CashDeskRequestStore {
+  private readonly pool: Pool;
+
+  constructor(pool: Pool) {
+    this.pool = pool;
+  }
+
+  async saveCashDeskRequest(request: CashDeskRequest): Promise<void> {
+    const normalizedRequest = normalizeCashDeskRequest(request);
+
+    await this.pool.query(
+      `
+        insert into lottery_cash_desk_requests (
+          cash_desk_request_id,
+          ticket_id,
+          user_id,
+          lottery_code,
+          draw_id,
+          status,
+          created_at,
+          request
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+        on conflict (cash_desk_request_id)
+        do update
+          set ticket_id = excluded.ticket_id,
+              user_id = excluded.user_id,
+              lottery_code = excluded.lottery_code,
+              draw_id = excluded.draw_id,
+              status = excluded.status,
+              created_at = excluded.created_at,
+              request = excluded.request
+      `,
+      [
+        normalizedRequest.cashDeskRequestId,
+        normalizedRequest.ticketId,
+        normalizedRequest.userId,
+        normalizedRequest.lotteryCode,
+        normalizedRequest.drawId,
+        normalizedRequest.status,
+        normalizedRequest.createdAt,
+        JSON.stringify(normalizedRequest)
+      ]
+    );
+  }
+
+  async getCashDeskRequestById(cashDeskRequestId: string): Promise<CashDeskRequest | null> {
+    const normalizedRequestId = normalizeText(cashDeskRequestId, "cashDeskRequestId");
+    const result = await this.pool.query(
+      `
+        select request
+        from lottery_cash_desk_requests
+        where cash_desk_request_id = $1
+        limit 1
+      `,
+      [normalizedRequestId]
+    );
+
+    const row = result.rows[0];
+    return row ? deepClone(row.request as CashDeskRequest) : null;
+  }
+
+  async getCashDeskRequestByTicketId(ticketId: string): Promise<CashDeskRequest | null> {
+    const normalizedTicketId = normalizeText(ticketId, "ticketId");
+    const result = await this.pool.query(
+      `
+        select request
+        from lottery_cash_desk_requests
+        where ticket_id = $1
+        limit 1
+      `,
+      [normalizedTicketId]
+    );
+
+    const row = result.rows[0];
+    return row ? deepClone(row.request as CashDeskRequest) : null;
+  }
+
+  async listCashDeskRequests(): Promise<readonly CashDeskRequest[]> {
+    const result = await this.pool.query(
+      `
+        select request
+        from lottery_cash_desk_requests
+        order by created_at desc, cash_desk_request_id desc
+      `
+    );
+
+    return result.rows.map((row: { request: CashDeskRequest }) => deepClone(row.request));
+  }
+
+  async clearAll(): Promise<void> {
+    await this.pool.query("delete from lottery_cash_desk_requests");
   }
 }
 
@@ -388,6 +588,16 @@ export class PostgresTerminalExecutionLock implements TerminalExecutionLock {
       [this.lockName, normalizedOwnerId]
     );
   }
+
+  async clearAll(): Promise<void> {
+    await this.pool.query(
+      `
+        delete from lottery_terminal_execution_locks
+        where lock_name = $1
+      `,
+      [this.lockName]
+    );
+  }
 }
 
 function normalizePurchaseRequestRecord(record: PurchaseRequestRecord): PurchaseRequestRecord {
@@ -449,6 +659,41 @@ function normalizeTicketVerificationJob(job: TicketVerificationJob): TicketVerif
     externalReference: normalizeText(job.externalReference, "job.externalReference"),
     enqueuedAt: toIsoString(job.enqueuedAt),
     updatedAt: toIsoString(job.updatedAt)
+  };
+}
+
+function normalizeNotificationRecord(notification: NotificationRecord): NotificationRecord {
+  return {
+    ...deepClone(notification),
+    notificationId: normalizeText(notification.notificationId, "notification.notificationId"),
+    userId: normalizeText(notification.userId, "notification.userId"),
+    type: notification.type,
+    title: normalizeText(notification.title, "notification.title"),
+    body: normalizeText(notification.body, "notification.body"),
+    read: notification.read,
+    createdAt: toIsoString(notification.createdAt),
+    referenceTicketId: optionalNormalizedText(notification.referenceTicketId) ?? null,
+    referenceDrawId: optionalNormalizedText(notification.referenceDrawId) ?? null,
+    referenceLotteryCode: optionalNormalizedText(notification.referenceLotteryCode)
+      ? normalizeLotteryCode(notification.referenceLotteryCode!)
+      : null
+  };
+}
+
+function normalizeCashDeskRequest(request: CashDeskRequest): CashDeskRequest {
+  return {
+    ...deepClone(request),
+    cashDeskRequestId: normalizeText(request.cashDeskRequestId, "request.cashDeskRequestId"),
+    ticketId: normalizeText(request.ticketId, "request.ticketId"),
+    userId: normalizeText(request.userId, "request.userId"),
+    lotteryCode: normalizeLotteryCode(request.lotteryCode),
+    drawId: normalizeText(request.drawId, "request.drawId"),
+    winningAmountMinor: Math.max(0, Math.trunc(request.winningAmountMinor)),
+    currency: normalizeText(request.currency, "request.currency").toUpperCase(),
+    status: request.status,
+    createdAt: toIsoString(request.createdAt),
+    paidAt: optionalNormalizedText(request.paidAt) ? toIsoString(request.paidAt!) : null,
+    paidBy: optionalNormalizedText(request.paidBy) ?? null
   };
 }
 

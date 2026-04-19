@@ -1,4 +1,4 @@
-export const LEDGER_OPERATIONS = ["reserve", "debit", "release", "credit"] as const;
+export const LEDGER_OPERATIONS = ["reserve", "debit", "release", "credit", "manual_credit", "manual_debit"] as const;
 
 export type LedgerOperationType = (typeof LEDGER_OPERATIONS)[number];
 
@@ -6,6 +6,7 @@ export interface LedgerReference {
   readonly requestId?: string;
   readonly ticketId?: string;
   readonly drawId?: string;
+  readonly adminAdjustmentId?: string;
 }
 
 export interface LedgerEntry {
@@ -79,6 +80,10 @@ export function normalizeLedgerEntry(entry: LedgerEntry): LedgerEntry {
     throw new LedgerValidationError(`entry "${entryId}" operation "${entry.operation}" requires requestId reference`);
   }
 
+  if (requiresAdminAdjustmentReference(entry.operation) && !reference.adminAdjustmentId) {
+    throw new LedgerValidationError(`entry "${entryId}" operation "${entry.operation}" requires adminAdjustmentId reference`);
+  }
+
   const createdAt = normalizeIsoTimestamp(entry.createdAt, `entry "${entryId}" createdAt`);
 
   return {
@@ -97,20 +102,26 @@ export function normalizeLedgerReference(reference: LedgerReference): LedgerRefe
   const requestId = reference.requestId?.trim();
   const ticketId = reference.ticketId?.trim();
   const drawId = reference.drawId?.trim();
+  const adminAdjustmentId = reference.adminAdjustmentId?.trim();
 
   return {
     ...(requestId ? { requestId } : {}),
     ...(ticketId ? { ticketId } : {}),
-    ...(drawId ? { drawId } : {})
+    ...(drawId ? { drawId } : {}),
+    ...(adminAdjustmentId ? { adminAdjustmentId } : {})
   };
 }
 
 export function hasLedgerReference(reference: LedgerReference): boolean {
-  return Boolean(reference.requestId || reference.ticketId);
+  return Boolean(reference.requestId || reference.ticketId || reference.adminAdjustmentId);
 }
 
 export function requiresRequestReference(operation: LedgerOperationType): boolean {
   return operation === "reserve" || operation === "debit" || operation === "release";
+}
+
+export function requiresAdminAdjustmentReference(operation: LedgerOperationType): boolean {
+  return operation === "manual_credit" || operation === "manual_debit";
 }
 
 export function resolveLedgerMovementDelta(operation: LedgerOperationType, amountMinor: number): LedgerMovementDelta {
@@ -135,6 +146,16 @@ export function resolveLedgerMovementDelta(operation: LedgerOperationType, amoun
     case "credit":
       return {
         availableMinorDelta: normalizedAmount,
+        reservedMinorDelta: 0
+      };
+    case "manual_credit":
+      return {
+        availableMinorDelta: normalizedAmount,
+        reservedMinorDelta: 0
+      };
+    case "manual_debit":
+      return {
+        availableMinorDelta: -normalizedAmount,
         reservedMinorDelta: 0
       };
     default:

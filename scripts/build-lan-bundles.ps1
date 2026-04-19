@@ -4,7 +4,7 @@ param(
   [Parameter(Mandatory = $false)]
   [string]$OutputRoot = "dist/lan-bundles",
   [Parameter(Mandatory = $false)]
-  [string]$ServerIp = "192.168.1.187",
+  [string]$ServerIp = "",
   [Parameter(Mandatory = $false)]
   [int]$ServerPort = 3000,
   [Parameter(Mandatory = $false)]
@@ -22,6 +22,36 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+function Resolve-LanServerIp {
+  $candidate = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+    Where-Object {
+      $_.IPAddress -notlike "127.*" -and
+      $_.IPAddress -notlike "169.254.*" -and
+      $_.IPAddress -notlike "10.*" -and
+      $_.PrefixOrigin -ne "WellKnown"
+    } |
+    Sort-Object InterfaceAlias |
+    Select-Object -First 1
+
+  if ($candidate) {
+    return $candidate.IPAddress
+  }
+
+  $fallback = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+    Where-Object {
+      $_.IPAddress -notlike "127.*" -and
+      $_.IPAddress -notlike "169.254.*" -and
+      $_.PrefixOrigin -ne "WellKnown"
+    } |
+    Select-Object -First 1
+
+  if ($fallback) {
+    return $fallback.IPAddress
+  }
+
+  throw "Cannot auto-detect server LAN IP. Pass -ServerIp explicitly."
+}
 
 function Invoke-Main {
   $root = Resolve-Path (Join-Path $PSScriptRoot "..")
@@ -48,9 +78,12 @@ function Invoke-Main {
     throw "LAN bundle requires LOTTERY_STORAGE_BACKEND=postgres in $envPath"
   }
 
-  $sharedPostgresUrl = Resolve-PostgresUrl -EnvMap $envMap -ServerIp $ServerIp
+  $resolvedServerIp = if ($ServerIp.Trim().Length -gt 0) { $ServerIp.Trim() } else { Resolve-LanServerIp }
+  Write-Host "[lan-bundles] server IP: $resolvedServerIp"
+
+  $sharedPostgresUrl = Resolve-PostgresUrl -EnvMap $envMap -ServerIp $resolvedServerIp
   $resolvedServerPort = Resolve-ServerPort -EnvMap $envMap -FallbackPort $ServerPort
-  $webBaseUrl = "http://$ServerIp`:$resolvedServerPort"
+  $webBaseUrl = "http://$resolvedServerIp`:$resolvedServerPort"
 $clientUrl = "$webBaseUrl/lottery/bolshaya-8"
 $terminalMonitorUrl = "$webBaseUrl/terminal/receiver"
 $profileTag = (Get-Date -Format "yyyyMMdd-HHmmss")
@@ -110,7 +143,7 @@ $profileTag = (Get-Date -Format "yyyyMMdd-HHmmss")
     builtAt = $builtAt
     webBaseUrl = $webBaseUrl
     clientUrl = $clientUrl
-    serverIp = $ServerIp
+    serverIp = $resolvedServerIp
     serverPort = $resolvedServerPort
   clientHostName = $ClientHostName
   clientIp = $ClientIp
@@ -122,7 +155,7 @@ $profileTag = (Get-Date -Format "yyyyMMdd-HHmmss")
     webBaseUrl = $webBaseUrl
     monitorUrl = $terminalMonitorUrl
     clientUrl = $clientUrl
-    serverIp = $ServerIp
+    serverIp = $resolvedServerIp
     serverPort = $resolvedServerPort
   terminalHostName = $TerminalHostName
   terminalIp = $TerminalIp
@@ -134,43 +167,86 @@ $profileTag = (Get-Date -Format "yyyyMMdd-HHmmss")
   Write-TerminalLaunchers -BundlePath $terminalBundlePath
 
   $clientReadme = @"
-Copy this folder to client PC: $ClientHostName ($ClientIp)
+============================================
+  LOTTERY CASHIER KIOSK
+============================================
 
-Run:
-- Start Client.cmd
+Copy this folder to the cashier/client PC.
+Target machine: $ClientHostName ($ClientIp)
 
-What it does:
-- opens Chrome/Edge in app mode
-- targets $clientUrl
-- keeps browser profile inside this folder
+HOW TO START:
+  Double-click:  Start Client.cmd
 
-Central server requirements:
-- web app must be running on $webBaseUrl
-- client PC must see the server over LAN
+WHAT IT DOES:
+  - Opens Chrome or Edge in KIOSK MODE (fullscreen, no address bar)
+  - Targets: $clientUrl
+  - Keeps browser profile inside this folder
+  - Console window stays open and shows status
+
+============================================
+  HOW TO EXIT THE KIOSK
+============================================
+
+  Option 1:  Press  Alt+F4  in the browser window
+  Option 2:  Double-click  Stop Client.cmd  in this folder
+  Option 3:  Press  Ctrl+C  in the launcher console window
+
+  Any of these will close the kiosk browser.
+  They will NOT affect the server or other clients.
+
+============================================
+  REQUIREMENTS
+============================================
+
+  - Central server must be running on $webBaseUrl
+  - Client PC must be able to reach the server over LAN
+  - Chrome or Edge must be installed on this PC
+  - No Node.js, database, or repo needed here
+
+ADVANCED:
+  Start Client.cmd -- -NoKiosk
+  (opens in app mode with title bar instead of fullscreen kiosk)
 "@
   Write-TextFile -Path (Join-Path $clientBundlePath "README.txt") -Value $clientReadme
 
   $terminalReadme = @"
-Copy this folder to terminal PC: $TerminalHostName ($TerminalIp)
+============================================
+  LOTTERY TERMINAL RECEIVER
+============================================
 
-Run:
-- Start Terminal Receiver.cmd
+Copy this folder to the terminal PC.
+Target machine: $TerminalHostName ($TerminalIp)
 
-What it does:
-- launches portable node runtime from this folder
-- starts Big 8 mock terminal receiver against shared Postgres on $ServerIp
-- opens receiver monitor at $terminalMonitorUrl
-- writes logs to .\logs\
+HOW TO START:
+  Double-click:  Start Terminal Receiver.cmd
 
-Central server requirements:
-- web app must be running on $webBaseUrl
-- PostgreSQL must accept LAN connections from terminal PC
+HOW TO STOP:
+  Double-click:  Stop Terminal Receiver.cmd
+  (stops the background worker process)
+
+WHAT IT DOES:
+  - Launches portable node runtime from this folder (no install needed)
+  - Starts Big 8 mock terminal receiver against shared Postgres on $resolvedServerIp
+  - Opens receiver monitor at $terminalMonitorUrl
+  - Writes worker logs to .\logs\
+
+============================================
+  REQUIREMENTS
+============================================
+
+  - Web app must be running on $webBaseUrl
+  - PostgreSQL must accept LAN connections from this PC
+  - Chrome or Edge recommended for the monitor page
+
+LOG FILES:
+  - logs\terminal-worker.stdout.log
+  - logs\terminal-worker.stderr.log
 "@
   Write-TextFile -Path (Join-Path $terminalBundlePath "README.txt") -Value $terminalReadme
 
   Write-JsonFile -Path (Join-Path $outputRootPath "bundle-manifest.json") -Value @{
     builtAt = $builtAt
-    serverIp = $ServerIp
+    serverIp = $resolvedServerIp
     serverPort = $resolvedServerPort
     webBaseUrl = $webBaseUrl
     clientBundle = @{
@@ -411,7 +487,7 @@ function Write-ClientLaunchers {
 
   $clientScript = @'
 param(
-  [switch]$NoBrowser
+  [switch]$NoKiosk
 )
 
 $ErrorActionPreference = "Stop"
@@ -447,40 +523,197 @@ function Resolve-ProfileDir {
   return $profileDir
 }
 
+function Find-KioskBrowserProcess {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$ProfileDir
+  )
+
+  $normalizedProfile = [System.IO.Path]::GetFullPath($ProfileDir).TrimEnd("\")
+  $browserNames = @("chrome", "msedge")
+
+  foreach ($name in $browserNames) {
+    $procs = Get-Process -Name $name -ErrorAction SilentlyContinue
+    foreach ($proc in $procs) {
+      if ($null -eq $proc.Path) { continue }
+      try {
+        $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId=$($proc.Id)" -ErrorAction SilentlyContinue).CommandLine
+        if ($cmdLine -and $cmdLine.Contains($normalizedProfile)) {
+          return $proc
+        }
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return $null
+}
+
 $bundleRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configPath = Join-Path $bundleRoot "client-config.json"
 $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
 $profileDir = Resolve-ProfileDir -BundleRoot $bundleRoot
 
-if ($NoBrowser.IsPresent) {
-  return
-}
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  LOTTERY CASHIER KIOSK" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Server: $($config.webBaseUrl)" -ForegroundColor White
+Write-Host "  Page:   $($config.clientUrl)" -ForegroundColor White
+Write-Host ""
+Write-Host "----------------------------------------" -ForegroundColor Yellow
+Write-Host "  HOW TO EXIT:" -ForegroundColor Yellow
+Write-Host "    Press Alt+F4 in the browser window" -ForegroundColor White
+Write-Host "    OR double-click 'Stop Client.cmd'" -ForegroundColor White
+Write-Host "    OR close this console window" -ForegroundColor White
+Write-Host "----------------------------------------" -ForegroundColor Yellow
+Write-Host ""
 
 $browserPath = Resolve-BrowserPath
+$browserProcess = $null
+
 if ($browserPath) {
-  Start-Process -FilePath $browserPath -ArgumentList @(
-    "--app=$($config.clientUrl)",
+  $kioskArgs = @(
     "--user-data-dir=$profileDir",
     "--disable-extensions",
     "--disable-sync",
     "--no-first-run",
-    "--no-default-browser-check",
-    "--start-maximized"
-  ) | Out-Null
-  return
+    "--no-default-browser-check"
+  )
+
+  if ($NoKiosk.IsPresent) {
+    $kioskArgs += @("--app=$($config.clientUrl)", "--start-maximized")
+  } else {
+    $kioskArgs += @("--kiosk", "$($config.clientUrl)")
+  }
+
+  $browserProcess = Start-Process -FilePath $browserPath -ArgumentList $kioskArgs -PassThru
+} else {
+  Start-Process -FilePath $config.clientUrl | Out-Null
+  Write-Host "[client] Chrome/Edge not found; opened in default browser (kiosk mode not available)"
 }
 
-Start-Process -FilePath $config.clientUrl | Out-Null
+$pidFile = Join-Path $bundleRoot "run\client-browser.pid"
+$runDir = Join-Path $bundleRoot "run"
+New-Item -ItemType Directory -Path $runDir -Force | Out-Null
+
+if ($browserProcess) {
+  Set-Content -LiteralPath $pidFile -Value $browserProcess.Id
+  Write-Host "[client] browser pid=$($browserProcess.Id)"
+}
+
+Write-Host "[client] running; close browser or press Ctrl+C here to stop"
+Write-Host ""
+
+try {
+  if ($browserProcess) {
+    $browserProcess.WaitForExit()
+    Write-Host "[client] browser closed"
+  } else {
+    Read-Host "Press Enter to close"
+  }
+} catch {
+  Write-Host "[client] interrupted"
+}
+
+$existing = Find-KioskBrowserProcess -ProfileDir $profileDir
+if ($existing) {
+  Write-Host "[client] stopping remaining browser process pid=$($existing.Id)"
+  Stop-Process -Id $existing.Id -Force -ErrorAction SilentlyContinue
+}
+
+if (Test-Path -LiteralPath $pidFile) {
+  Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+}
 '@
 
   $clientCmd = @'
 @echo off
 setlocal
+title Lottery Cashier Kiosk
 powershell -ExecutionPolicy Bypass -File "%~dp0Start Client.ps1"
+if errorlevel 1 (
+  echo.
+  echo Kiosk launch failed. Check the error above.
+  pause
+)
+'@
+
+  $stopClientScript = @'
+$ErrorActionPreference = "Stop"
+
+$bundleRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$pidFile = Join-Path $bundleRoot "run\client-browser.pid"
+
+Write-Host "[stop-client] looking for kiosk browser process..."
+
+$stopped = $false
+
+if (Test-Path -LiteralPath $pidFile) {
+  $rawPid = (Get-Content -LiteralPath $pidFile -Raw).Trim()
+  if ($rawPid.Length -gt 0) {
+    try {
+      $proc = Get-Process -Id $rawPid -ErrorAction Stop
+      $procPath = [System.IO.Path]::GetFileName($proc.Path).ToLowerInvariant()
+      if ($procPath -in @("chrome.exe", "msedge.exe")) {
+        Write-Host "[stop-client] stopping browser pid=$rawPid"
+        Stop-Process -Id $rawPid -Force
+        $stopped = $true
+      }
+    } catch {
+      Write-Host "[stop-client] pid=$rawPid no longer running"
+    }
+  }
+  Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+}
+
+if (-not $stopped) {
+  $profilesRoot = Join-Path $bundleRoot "profiles"
+  if (Test-Path -LiteralPath $profilesRoot) {
+    $latestProfile = Get-ChildItem -LiteralPath $profilesRoot -Directory |
+      Sort-Object LastWriteTime -Descending |
+      Select-Object -First 1
+
+    if ($latestProfile) {
+      $normalizedProfile = $latestProfile.FullName.TrimEnd("\")
+      foreach ($name in @("chrome", "msedge")) {
+        $procs = Get-Process -Name $name -ErrorAction SilentlyContinue
+        foreach ($proc in $procs) {
+          try {
+            $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId=$($proc.Id)" -ErrorAction SilentlyContinue).CommandLine
+            if ($cmdLine -and $cmdLine.Contains($normalizedProfile)) {
+              Write-Host "[stop-client] stopping browser pid=$($proc.Id)"
+              Stop-Process -Id $proc.Id -Force
+              $stopped = $true
+            }
+          } catch { continue }
+        }
+      }
+    }
+  }
+}
+
+if ($stopped) {
+  Write-Host "[stop-client] done - kiosk browser stopped"
+} else {
+  Write-Host "[stop-client] no kiosk browser found - it may already be closed"
+}
+'@
+
+  $stopClientCmd = @'
+@echo off
+setlocal
+title Stop Lottery Client
+powershell -ExecutionPolicy Bypass -File "%~dp0Stop Client.ps1"
+timeout /t 3 /nobreak >nul
 '@
 
   Write-TextFile -Path (Join-Path $BundlePath "Start Client.ps1") -Value $clientScript
   Write-TextFile -Path (Join-Path $BundlePath "Start Client.cmd") -Value $clientCmd
+  Write-TextFile -Path (Join-Path $BundlePath "Stop Client.ps1") -Value $stopClientScript
+  Write-TextFile -Path (Join-Path $BundlePath "Stop Client.cmd") -Value $stopClientCmd
 }
 
 function Write-TerminalLaunchers {
@@ -652,8 +885,67 @@ setlocal
 powershell -ExecutionPolicy Bypass -File "%~dp0Start Terminal Receiver.ps1"
 '@
 
+  $stopTerminalScript = @'
+$ErrorActionPreference = "Stop"
+
+$bundleRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$pidFile = Join-Path $bundleRoot "run\terminal-worker.pid"
+
+Write-Host "[stop-receiver] looking for terminal worker process..."
+
+if (Test-Path -LiteralPath $pidFile) {
+  $rawPid = (Get-Content -LiteralPath $pidFile -Raw).Trim()
+  if ($rawPid.Length -gt 0) {
+    try {
+      $proc = Get-Process -Id $rawPid -ErrorAction Stop
+      Write-Host "[stop-receiver] stopping worker pid=$rawPid"
+      Stop-Process -Id $rawPid -Force
+      Start-Sleep -Milliseconds 500
+      $proc2 = Get-Process -Id $rawPid -ErrorAction SilentlyContinue
+      if ($proc2) {
+        Stop-Process -Id $rawPid -Force -ErrorAction SilentlyContinue
+      }
+      Write-Host "[stop-receiver] done"
+    } catch {
+      Write-Host "[stop-receiver] pid=$rawPid no longer running"
+    }
+  }
+  Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+} else {
+  $runtimeRoot = Join-Path $bundleRoot "runtime"
+  $nodeExe = Join-Path $runtimeRoot "node.exe"
+  if (Test-Path -LiteralPath $nodeExe) {
+    $normalizedNode = [System.IO.Path]::GetFullPath($nodeExe)
+    $workers = Get-Process node -ErrorAction SilentlyContinue | Where-Object {
+      $_.Path -and [System.IO.Path]::GetFullPath($_.Path).Equals($normalizedNode, [System.StringComparison]::OrdinalIgnoreCase)
+    }
+    if ($workers) {
+      foreach ($w in $workers) {
+        Write-Host "[stop-receiver] stopping worker pid=$($w.Id)"
+        Stop-Process -Id $w.Id -Force
+      }
+      Write-Host "[stop-receiver] done"
+    } else {
+      Write-Host "[stop-receiver] no terminal worker found"
+    }
+  } else {
+    Write-Host "[stop-receiver] no terminal worker found"
+  }
+}
+'@
+
+  $stopTerminalCmd = @'
+@echo off
+setlocal
+title Stop Terminal Receiver
+powershell -ExecutionPolicy Bypass -File "%~dp0Stop Terminal Receiver.ps1"
+timeout /t 3 /nobreak >nul
+'@
+
   Write-TextFile -Path (Join-Path $BundlePath "Start Terminal Receiver.ps1") -Value $terminalScript
   Write-TextFile -Path (Join-Path $BundlePath "Start Terminal Receiver.cmd") -Value $terminalCmd
+  Write-TextFile -Path (Join-Path $BundlePath "Stop Terminal Receiver.ps1") -Value $stopTerminalScript
+  Write-TextFile -Path (Join-Path $BundlePath "Stop Terminal Receiver.cmd") -Value $stopTerminalCmd
 }
 
 Invoke-Main

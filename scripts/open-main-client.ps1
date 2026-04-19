@@ -1,4 +1,6 @@
-param()
+param(
+  [switch]$Kiosk
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -32,12 +34,41 @@ if (-not $browserPath) {
 }
 
 $url = "http://127.0.0.1:3000/login"
-Start-Process -FilePath $browserPath -ArgumentList @(
-  "--app=$url",
-  "--user-data-dir=$profileDir",
-  "--disable-extensions",
-  "--disable-sync",
-  "--no-first-run",
-  "--no-default-browser-check",
-  "--start-maximized"
-) | Out-Null
+
+if ($Kiosk.IsPresent) {
+  Write-Host ""
+  Write-Host "========================================" -ForegroundColor Cyan
+  Write-Host "  LOTTERY CASHIER KIOSK (LOCAL)" -ForegroundColor Cyan
+  Write-Host "========================================" -ForegroundColor Cyan
+  Write-Host ""
+  Write-Host "  TO EXIT:  Press Alt+F4" -ForegroundColor Yellow
+  Write-Host "========================================" -ForegroundColor Cyan
+  Write-Host ""
+
+  $browserProcess = Start-Process -FilePath $browserPath -ArgumentList @(
+    "--kiosk",
+    $url,
+    "--user-data-dir=$profileDir",
+    "--disable-extensions",
+    "--disable-sync",
+    "--no-first-run",
+    "--no-default-browser-check"
+  ) -PassThru
+
+  try {
+    $browserProcess.WaitForExit()
+    Write-Host "[client] browser closed"
+  } catch {
+    Write-Host "[client] interrupted"
+  }
+} else {
+  Start-Process -FilePath $browserPath -ArgumentList @(
+    "--app=$url",
+    "--user-data-dir=$profileDir",
+    "--disable-extensions",
+    "--disable-sync",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--start-maximized"
+  ) | Out-Null
+}

@@ -1,4 +1,6 @@
-import { hashAccessPassword } from "@lottery/infrastructure";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { hashAccessPassword, listDefaultIdentitySeeds, listDefaultLedgerSeeds } from "@lottery/infrastructure";
 import {
   createDefaultDrawSnapshots,
   createDefaultLotteryRegistryEntries,
@@ -10,7 +12,8 @@ import {
   PostgresLotteryRegistryStore,
   readPostgresConnectionStringFromEnv
 } from "@lottery/infrastructure";
-import type { DrawSnapshot, LedgerEntry, LotteryRegistryEntry } from "@lottery/domain";
+import type { AccessIdentity, DrawSnapshot, LedgerEntry, LotteryRegistryEntry } from "@lottery/domain";
+import { buildIdentityFromSeed } from "@lottery/domain";
 
 interface CliOptions {
   readonly seedMode: "if-empty" | "force" | "skip";
@@ -18,6 +21,7 @@ interface CliOptions {
 }
 
 async function main(): Promise<void> {
+  loadLocalEnvFile(".env");
   const options = readCliOptions(process.argv.slice(2));
   const connectionString = readPostgresConnectionStringFromEnv();
   if (!connectionString) {
@@ -99,6 +103,48 @@ async function main(): Promise<void> {
   console.log("[bootstrap] completed");
 }
 
+function loadLocalEnvFile(envPath: string): void {
+  const absoluteEnvPath = resolve(envPath);
+  if (!existsSync(absoluteEnvPath)) {
+    return;
+  }
+
+  const envFromFile = parseEnvFile(readFileSync(absoluteEnvPath, "utf8"));
+  for (const [key, value] of Object.entries(envFromFile)) {
+    const currentValue = process.env[key]?.trim();
+    if (currentValue) {
+      continue;
+    }
+    process.env[key] = value;
+  }
+}
+
+function parseEnvFile(contents: string): Record<string, string> {
+  const output: Record<string, string> = {};
+
+  for (const rawLine of contents.split(/\r?\n/g)) {
+    const line = rawLine.trim();
+    if (line.length === 0 || line.startsWith("#")) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = line.slice(0, separatorIndex).trim();
+    const value = line.slice(separatorIndex + 1);
+    if (!key) {
+      continue;
+    }
+
+    output[key] = value;
+  }
+
+  return output;
+}
+
 function readCliOptions(args: readonly string[]): CliOptions {
   let seedMode: CliOptions["seedMode"] = "if-empty";
   let resetRuntime = false;
@@ -142,6 +188,10 @@ async function resetRuntimeTables(pool: ReturnType<typeof getPostgresPool>): Pro
     delete from lottery_terminal_execution_locks;
     delete from lottery_operations_audit_events;
     delete from lottery_access_audit_events;
+    delete from lottery_notifications;
+    delete from lottery_draw_closures;
+    delete from lottery_cash_desk_requests;
+    delete from lottery_winnings_credit_jobs;
     delete from lottery_ticket_verification_jobs;
     delete from lottery_tickets;
     delete from lottery_purchase_queue_items;
@@ -150,54 +200,11 @@ async function resetRuntimeTables(pool: ReturnType<typeof getPostgresPool>): Pro
   `);
 }
 
-function defaultIdentities(): readonly {
-  readonly identityId: string;
-  readonly login: string;
-  readonly passwordHash: string;
-  readonly role: "user" | "admin";
-  readonly status: "active";
-  readonly displayName: string;
-  readonly phone: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}[] {
+function defaultIdentities(): readonly AccessIdentity[] {
   const nowIso = new Date().toISOString();
-
-  return [
-    {
-      identityId: "seed-user",
-      login: "operator",
-      passwordHash: hashAccessPassword("operator"),
-      role: "user",
-      status: "active",
-      displayName: "Operator User",
-      phone: "79990000001",
-      createdAt: nowIso,
-      updatedAt: nowIso
-    },
-    {
-      identityId: "seed-admin",
-      login: "admin",
-      passwordHash: hashAccessPassword("admin"),
-      role: "admin",
-      status: "active",
-      displayName: "Administrator",
-      phone: "79990000002",
-      createdAt: nowIso,
-      updatedAt: nowIso
-    },
-    {
-      identityId: "seed-tester",
-      login: "tester",
-      passwordHash: hashAccessPassword("tester"),
-      role: "user",
-      status: "active",
-      displayName: "Tester User",
-      phone: "79990000003",
-      createdAt: nowIso,
-      updatedAt: nowIso
-    }
-  ];
+  return listDefaultIdentitySeeds().map((seed) =>
+    buildIdentityFromSeed(seed, hashAccessPassword(seed.password), nowIso)
+  );
 }
 
 function defaultRegistryEntries(): readonly LotteryRegistryEntry[] {
@@ -210,44 +217,8 @@ function defaultDrawSnapshots(): readonly DrawSnapshot[] {
 
 function defaultLedgerEntries(): readonly LedgerEntry[] {
   const now = Date.now();
-
-  return [
-    {
-      entryId: "seed-user-credit",
-      userId: "seed-user",
-      operation: "credit",
-      amountMinor: 220_000,
-      currency: "RUB",
-      idempotencyKey: "seed-user-credit",
-      reference: {
-        requestId: "seed-user-credit"
-      },
-      createdAt: new Date(now - 4 * 60 * 1000).toISOString()
-    },
-    {
-      entryId: "seed-admin-credit",
-      userId: "seed-admin",
-      operation: "credit",
-      amountMinor: 500_000,
-      currency: "RUB",
-      idempotencyKey: "seed-admin-credit",
-      reference: {
-        requestId: "seed-admin-credit"
-      },
-      createdAt: new Date(now - 3 * 60 * 1000).toISOString()
-    },
-    {
-      entryId: "seed-tester-credit",
-      userId: "seed-tester",
-      operation: "credit",
-      amountMinor: 180_000,
-      currency: "RUB",
-      idempotencyKey: "seed-tester-credit",
-      reference: {
-        requestId: "seed-tester-credit"
-      },
-      createdAt: new Date(now - 2 * 60 * 1000).toISOString()
-    },
+  const ledgerSeeds = listDefaultLedgerSeeds();
+  const extraEntries: readonly LedgerEntry[] = [
     {
       entryId: "seed-tester-reserve",
       userId: "seed-tester",
@@ -260,6 +231,22 @@ function defaultLedgerEntries(): readonly LedgerEntry[] {
       },
       createdAt: new Date(now - 60 * 1000).toISOString()
     }
+  ];
+
+  return [
+    ...ledgerSeeds.map((seed, index): LedgerEntry => ({
+      entryId: seed.entryId,
+      userId: seed.identityId,
+      operation: "credit",
+      amountMinor: seed.amountMinor,
+      currency: "RUB",
+      idempotencyKey: seed.idempotencyKey,
+      reference: {
+        requestId: seed.idempotencyKey
+      },
+      createdAt: new Date(now - (4 - index) * 60 * 1000).toISOString()
+    })),
+    ...extraEntries
   ];
 }
 

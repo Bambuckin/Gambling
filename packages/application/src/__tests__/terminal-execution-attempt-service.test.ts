@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { PurchaseRequestRecord, TicketRecord } from "@lottery/domain";
+import type { NotificationRecord, PurchaseRequestRecord, TicketRecord } from "@lottery/domain";
 import {
   appendPurchaseRequestTransition,
   createAwaitingConfirmationRequest
 } from "@lottery/domain";
+import type { NotificationStore } from "../ports/notification-store.js";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
@@ -25,8 +26,10 @@ describe("TerminalExecutionAttemptService", () => {
       })
     ]);
     const ticketStore = new InMemoryTicketStore();
+    const notificationStore = new StubNotificationStore();
     const ticketPersistenceService = new TicketPersistenceService({
-      ticketStore
+      ticketStore,
+      notificationStore
     });
     const service = new TerminalExecutionAttemptService({
       requestStore,
@@ -66,8 +69,10 @@ describe("TerminalExecutionAttemptService", () => {
       })
     ]);
     const ticketStore = new InMemoryTicketStore();
+    const notificationStore = new StubNotificationStore();
     const ticketPersistenceService = new TicketPersistenceService({
-      ticketStore
+      ticketStore,
+      notificationStore
     });
     const service = new TerminalExecutionAttemptService({
       requestStore,
@@ -104,8 +109,10 @@ describe("TerminalExecutionAttemptService", () => {
       })
     ]);
     const ticketStore = new InMemoryTicketStore();
+    const notificationStore = new StubNotificationStore();
     const ticketPersistenceService = new TicketPersistenceService({
-      ticketStore
+      ticketStore,
+      notificationStore
     });
     const service = new TerminalExecutionAttemptService({
       requestStore,
@@ -142,8 +149,10 @@ describe("TerminalExecutionAttemptService", () => {
       })
     ]);
     const ticketStore = new InMemoryTicketStore();
+    const notificationStore = new StubNotificationStore();
     const ticketPersistenceService = new TicketPersistenceService({
-      ticketStore
+      ticketStore,
+      notificationStore
     });
     const service = new TerminalExecutionAttemptService({
       requestStore,
@@ -251,6 +260,8 @@ class InMemoryPurchaseRequestStore implements PurchaseRequestStore {
     const filtered = this.records.filter((entry) => entry.snapshot.requestId !== record.snapshot.requestId);
     this.records = [...filtered, cloneRequestRecord(record)];
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
@@ -277,6 +288,8 @@ class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
   async removeQueueItem(requestId: string): Promise<void> {
     this.items = this.items.filter((entry) => entry.requestId !== requestId);
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 class InMemoryTicketStore implements TicketStore {
@@ -300,6 +313,8 @@ class InMemoryTicketStore implements TicketStore {
     const filtered = this.tickets.filter((entry) => entry.ticketId !== ticket.ticketId);
     this.tickets = [...filtered, { ...ticket }];
   }
+
+  async clearAll(): Promise<void> {}
 }
 
 function cloneRequestRecord(record: PurchaseRequestRecord): PurchaseRequestRecord {
@@ -311,4 +326,12 @@ function cloneRequestRecord(record: PurchaseRequestRecord): PurchaseRequestRecor
     state: record.state,
     journal: record.journal.map((entry) => ({ ...entry }))
   };
+}
+
+class StubNotificationStore implements NotificationStore {
+  async saveNotification(): Promise<void> {}
+  async listUserNotifications(): Promise<readonly NotificationRecord[]> { return []; }
+  async getNotificationById(): Promise<NotificationRecord | null> { return null; }
+  async markNotificationRead(): Promise<void> {}
+  async clearAll(): Promise<void> {}
 }

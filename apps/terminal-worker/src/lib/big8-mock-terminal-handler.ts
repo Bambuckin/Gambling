@@ -40,16 +40,19 @@ export class Big8MockTerminalHandler implements LotteryPurchaseHandlerContract {
     const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
     const maskedPhone = maskPhone(payload.contactPhone);
     const receiverLabel = readReceiverLabel();
+    const externalTicketReference = `big8-mock-${context.draw.drawId}-${context.requestId}-${context.attempt}`;
 
     return {
-      executionOutcome: "added_to_cart",
-      externalTicketReference: null,
+      executionOutcome: "ticket_purchased",
+      externalTicketReference,
       rawTerminalOutput: [
         "[big8-mock-terminal]",
         `receiver=${receiverLabel}`,
         `request=${context.requestId}`,
         `draw=${context.draw.drawId}`,
         `attempt=${context.attempt}`,
+        `ticket=${externalTicketReference}`,
+        "status=ticket_purchased",
         `tickets=${payload.tickets.length}`,
         `phone=${maskedPhone}`,
         `payload_base64=${encodedPayload}`

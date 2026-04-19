@@ -39,6 +39,16 @@ export class InMemorySessionStore implements SessionStore {
 
     return cloneSession(revoked);
   }
+
+  async revokeAll(revokedAt: string): Promise<void> {
+    for (const [sessionId, existing] of this.sessions) {
+      this.sessions.set(sessionId, {
+        ...existing,
+        revokedAt,
+        lastSeenAt: revokedAt
+      });
+    }
+  }
 }
 
 function cloneSession(session: AccessSession | undefined): AccessSession | null {

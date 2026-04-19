@@ -1,8 +1,10 @@
-import { createPurchasedTicketRecord, type PurchaseRequestRecord, type TicketRecord } from "@lottery/domain";
+import { createNotification, createPurchasedTicketRecord, type PurchaseRequestRecord, type TicketRecord } from "@lottery/domain";
+import type { NotificationStore } from "../ports/notification-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
 
 export interface TicketPersistenceServiceDependencies {
   readonly ticketStore: TicketStore;
+  readonly notificationStore: NotificationStore;
 }
 
 export interface PersistSuccessfulPurchaseTicketInput {
@@ -35,9 +37,11 @@ export class TicketPersistenceServiceError extends Error {
 
 export class TicketPersistenceService {
   private readonly ticketStore: TicketStore;
+  private readonly notificationStore: NotificationStore;
 
   constructor(dependencies: TicketPersistenceServiceDependencies) {
     this.ticketStore = dependencies.ticketStore;
+    this.notificationStore = dependencies.notificationStore;
   }
 
   async persistSuccessfulPurchaseTicket(
@@ -72,6 +76,21 @@ export class TicketPersistenceService {
     });
 
     await this.ticketStore.saveTicket(ticket);
+
+    await this.notificationStore.saveNotification(
+      createNotification({
+        notificationId: `${ticket.ticketId}:purchase_success`,
+        userId: ticket.userId,
+        type: "purchase_success",
+        title: "Билет куплен",
+        body: `Ваш билет для тиража ${ticket.drawId} успешно оформлен.`,
+        createdAt: input.purchasedAt,
+        referenceTicketId: ticket.ticketId,
+        referenceDrawId: ticket.drawId,
+        referenceLotteryCode: ticket.lotteryCode
+      })
+    );
+
     return {
       ticket,
       replayed: false

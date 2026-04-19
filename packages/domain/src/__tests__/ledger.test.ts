@@ -186,6 +186,115 @@ describe("ledger domain", () => {
     expect(action).toThrow(LedgerValidationError);
     expect(action).toThrow("requires requestId reference");
   });
+
+  it("applies manual_credit to available balance", () => {
+    const snapshot = buildBalanceSnapshot({
+      userId: "seed-user",
+      currency: "RUB",
+      entries: [
+        createEntry({
+          entryId: "e1",
+          operation: "credit",
+          amountMinor: 50_000,
+          idempotencyKey: "idem-1",
+          reference: { requestId: "r1" }
+        }),
+        createEntry({
+          entryId: "e2",
+          operation: "manual_credit",
+          amountMinor: 10_000,
+          idempotencyKey: "idem-2",
+          reference: { adminAdjustmentId: "adj-1" }
+        })
+      ]
+    });
+
+    expect(snapshot.availableMinor).toBe(60_000);
+    expect(snapshot.reservedMinor).toBe(0);
+  });
+
+  it("applies manual_debit from available balance", () => {
+    const snapshot = buildBalanceSnapshot({
+      userId: "seed-user",
+      currency: "RUB",
+      entries: [
+        createEntry({
+          entryId: "e1",
+          operation: "credit",
+          amountMinor: 50_000,
+          idempotencyKey: "idem-1",
+          reference: { requestId: "r1" }
+        }),
+        createEntry({
+          entryId: "e2",
+          operation: "manual_debit",
+          amountMinor: 20_000,
+          idempotencyKey: "idem-2",
+          reference: { adminAdjustmentId: "adj-1" }
+        })
+      ]
+    });
+
+    expect(snapshot.availableMinor).toBe(30_000);
+    expect(snapshot.reservedMinor).toBe(0);
+  });
+
+  it("rejects manual operations without adminAdjustmentId reference", () => {
+    const action = () =>
+      normalizeLedgerEntry(
+        createEntry({
+          entryId: "e-bad",
+          operation: "manual_credit",
+          amountMinor: 100,
+          idempotencyKey: "idem-bad",
+          reference: { requestId: "r1" }
+        })
+      );
+
+    expect(action).toThrow(LedgerValidationError);
+    expect(action).toThrow("requires adminAdjustmentId reference");
+  });
+
+  it("rejects manual_debit that causes negative available balance", () => {
+    const snapshot = buildBalanceSnapshot({
+      userId: "seed-user",
+      currency: "RUB",
+      entries: [
+        createEntry({
+          entryId: "e1",
+          operation: "credit",
+          amountMinor: 5_000,
+          idempotencyKey: "idem-1",
+          reference: { requestId: "r1" }
+        })
+      ]
+    });
+
+    const overDebit = createEntry({
+      entryId: "e2",
+      operation: "manual_debit",
+      amountMinor: 10_000,
+      idempotencyKey: "idem-2",
+      reference: { adminAdjustmentId: "adj-1" }
+    });
+
+    expect(() => applyLedgerEntry(snapshot, overDebit)).toThrow(LedgerValidationError);
+    expect(() => applyLedgerEntry(snapshot, overDebit)).toThrow("negative available");
+  });
+
+  it("accepts adminAdjustmentId as valid ledger reference", () => {
+    const entry = normalizeLedgerEntry(
+      createEntry({
+        entryId: "e-adj",
+        operation: "manual_credit",
+        amountMinor: 1_000,
+        idempotencyKey: "idem-adj",
+        reference: { adminAdjustmentId: "adj-100" }
+      })
+    );
+
+    expect(entry.reference.adminAdjustmentId).toBe("adj-100");
+  });
 });
 
 function createEntry(overrides: Partial<LedgerEntry>): LedgerEntry {

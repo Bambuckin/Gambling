@@ -27,7 +27,13 @@ export async function listMockTerminalInboxRows(limit = DEFAULT_LIMIT): Promise<
   return records
     .filter((record) => record.snapshot.lotteryCode === "bolshaya-8")
     .map(toInboxRow)
-    .filter((row) => row.state !== "awaiting_confirmation" && row.state !== "confirmed" && row.state !== "canceled")
+    .filter(
+      (row) =>
+        row.state !== "awaiting_confirmation" &&
+        row.state !== "confirmed" &&
+        row.state !== "canceled" &&
+        row.state !== "reserve_released"
+    )
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .slice(0, normalizedLimit);
 }

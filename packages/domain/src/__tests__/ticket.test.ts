@@ -7,6 +7,8 @@ import {
   failTicketVerificationJob,
   isTicketPendingVerification,
   reserveTicketVerificationJob,
+  setTicketAdminResultMark,
+  resolveTicketFromAdminMark,
   TicketValidationError
 } from "../ticket.js";
 
@@ -35,7 +37,12 @@ describe("createPurchasedTicketRecord", () => {
       verificationRawOutput: null,
       winningAmountMinor: null,
       verifiedAt: null,
-      lastVerificationEventId: null
+      lastVerificationEventId: null,
+      adminResultMark: null,
+      adminResultMarkedBy: null,
+      adminResultMarkedAt: null,
+      resultSource: null,
+      claimState: "unclaimed"
     });
   });
 
@@ -238,5 +245,133 @@ describe("applyTicketVerificationOutcome", () => {
         winningAmountMinor: -1
       })
     ).toThrow(TicketValidationError);
+  });
+});
+
+describe("setTicketAdminResultMark", () => {
+  it("marks a pending ticket as win", () => {
+    const ticket = createPurchasedTicketRecord({
+      ticketId: "req-930:ticket",
+      requestId: "req-930",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-930",
+      purchasedAt: "2026-04-05T23:20:00.000Z"
+    });
+
+    const marked = setTicketAdminResultMark(ticket, "win", "admin-1", "2026-04-05T23:21:00.000Z");
+    expect(marked.adminResultMark).toBe("win");
+    expect(marked.adminResultMarkedBy).toBe("admin-1");
+    expect(marked.adminResultMarkedAt).toBe("2026-04-05T23:21:00.000Z");
+    expect(marked.verificationStatus).toBe("pending");
+  });
+
+  it("marks a pending ticket as lose", () => {
+    const ticket = createPurchasedTicketRecord({
+      ticketId: "req-931:ticket",
+      requestId: "req-931",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-931",
+      purchasedAt: "2026-04-05T23:22:00.000Z"
+    });
+
+    const marked = setTicketAdminResultMark(ticket, "lose", "admin-1", "2026-04-05T23:22:30.000Z");
+    expect(marked.adminResultMark).toBe("lose");
+  });
+
+  it("rejects marking already verified ticket", () => {
+    const ticket = createPurchasedTicketRecord({
+      ticketId: "req-932:ticket",
+      requestId: "req-932",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-932",
+      purchasedAt: "2026-04-05T23:23:00.000Z"
+    });
+
+    const verified = applyTicketVerificationOutcome(ticket, {
+      verificationStatus: "verified",
+      verificationEventId: "job:req-932:1",
+      verifiedAt: "2026-04-05T23:24:00.000Z",
+      rawTerminalOutput: "[result] lose",
+      winningAmountMinor: 0
+    });
+
+    expect(() => setTicketAdminResultMark(verified, "win", "admin-1", "2026-04-05T23:25:00.000Z")).toThrow(
+      TicketValidationError
+    );
+  });
+});
+
+describe("resolveTicketFromAdminMark", () => {
+  it("resolves win-marked ticket with win amount", () => {
+    const ticket = createPurchasedTicketRecord({
+      ticketId: "req-940:ticket",
+      requestId: "req-940",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-940",
+      purchasedAt: "2026-04-05T23:30:00.000Z"
+    });
+
+    const marked = setTicketAdminResultMark(ticket, "win", "admin-1", "2026-04-05T23:31:00.000Z");
+    const resolved = resolveTicketFromAdminMark(marked, 50_000, "2026-04-05T23:32:00.000Z", "admin-1");
+
+    expect(resolved.verificationStatus).toBe("verified");
+    expect(resolved.winningAmountMinor).toBe(50_000);
+    expect(resolved.resultSource).toBe("admin_emulated");
+    expect(resolved.verifiedAt).toBe("2026-04-05T23:32:00.000Z");
+  });
+
+  it("resolves lose-marked ticket with zero winning", () => {
+    const ticket = createPurchasedTicketRecord({
+      ticketId: "req-941:ticket",
+      requestId: "req-941",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-941",
+      purchasedAt: "2026-04-05T23:33:00.000Z"
+    });
+
+    const marked = setTicketAdminResultMark(ticket, "lose", "admin-1", "2026-04-05T23:34:00.000Z");
+    const resolved = resolveTicketFromAdminMark(marked, 50_000, "2026-04-05T23:35:00.000Z", "admin-1");
+
+    expect(resolved.verificationStatus).toBe("verified");
+    expect(resolved.winningAmountMinor).toBe(0);
+    expect(resolved.resultSource).toBe("admin_emulated");
+  });
+
+  it("defaults unmarked ticket to lose", () => {
+    const ticket = createPurchasedTicketRecord({
+      ticketId: "req-942:ticket",
+      requestId: "req-942",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-942",
+      purchasedAt: "2026-04-05T23:36:00.000Z"
+    });
+
+    const resolved = resolveTicketFromAdminMark(ticket, 50_000, "2026-04-05T23:37:00.000Z", "admin-1");
+    expect(resolved.verificationStatus).toBe("verified");
+    expect(resolved.winningAmountMinor).toBe(0);
+    expect(resolved.resultSource).toBe("admin_emulated");
+  });
+
+  it("skips already resolved ticket idempotently", () => {
+    const ticket = createPurchasedTicketRecord({
+      ticketId: "req-943:ticket",
+      requestId: "req-943",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-943",
+      purchasedAt: "2026-04-05T23:38:00.000Z"
+    });
+
+    const first = resolveTicketFromAdminMark(ticket, 50_000, "2026-04-05T23:39:00.000Z", "admin-1");
+    const second = resolveTicketFromAdminMark(first, 50_000, "2026-04-05T23:40:00.000Z", "admin-1");
+
+    expect(second.verifiedAt).toBe(first.verifiedAt);
+    expect(second.verificationStatus).toBe("verified");
   });
 });

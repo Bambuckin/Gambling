@@ -97,6 +97,14 @@ class InMemoryDrawStore implements DrawStore {
     const filtered = this.snapshots.filter((entry) => entry.lotteryCode !== snapshot.lotteryCode);
     this.snapshots = [...filtered, cloneSnapshot(snapshot)];
   }
+
+  async deleteSnapshot(lotteryCode: string): Promise<void> {
+    this.snapshots = this.snapshots.filter((entry) => entry.lotteryCode !== lotteryCode);
+  }
+
+  async clearAll(): Promise<void> {
+    this.snapshots = [];
+  }
 }
 
 function createRegistryEntry(overrides: Partial<LotteryRegistryUpsertInput>): LotteryRegistryUpsertInput {

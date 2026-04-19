@@ -1,10 +1,14 @@
 export const TICKET_PURCHASE_STATES = ["purchased"] as const;
 export const TICKET_VERIFICATION_STATES = ["pending", "verified", "failed"] as const;
 export const TICKET_VERIFICATION_JOB_STATES = ["queued", "verifying", "done", "error"] as const;
+export const TICKET_ADMIN_RESULT_MARKS = ["win", "lose"] as const;
+export const TICKET_CLAIM_STATES = ["unclaimed", "credit_pending", "credited", "cash_desk_pending", "cash_desk_paid"] as const;
 
 export type TicketPurchaseState = (typeof TICKET_PURCHASE_STATES)[number];
 export type TicketVerificationState = (typeof TICKET_VERIFICATION_STATES)[number];
 export type TicketVerificationJobState = (typeof TICKET_VERIFICATION_JOB_STATES)[number];
+export type TicketAdminResultMark = (typeof TICKET_ADMIN_RESULT_MARKS)[number];
+export type TicketClaimState = (typeof TICKET_CLAIM_STATES)[number];
 
 export interface TicketRecord {
   readonly ticketId: string;
@@ -20,6 +24,11 @@ export interface TicketRecord {
   readonly winningAmountMinor: number | null;
   readonly verifiedAt: string | null;
   readonly lastVerificationEventId: string | null;
+  readonly adminResultMark: TicketAdminResultMark | null;
+  readonly adminResultMarkedBy: string | null;
+  readonly adminResultMarkedAt: string | null;
+  readonly resultSource: "terminal" | "admin_emulated" | null;
+  readonly claimState: TicketClaimState;
 }
 
 export interface CreatePurchasedTicketRecordInput {
@@ -95,12 +104,62 @@ export function createPurchasedTicketRecord(input: CreatePurchasedTicketRecordIn
     verificationRawOutput: null,
     winningAmountMinor: null,
     verifiedAt: null,
-    lastVerificationEventId: null
+    lastVerificationEventId: null,
+    adminResultMark: null,
+    adminResultMarkedBy: null,
+    adminResultMarkedAt: null,
+    resultSource: null,
+    claimState: "unclaimed"
   };
 }
 
 export function isTicketPendingVerification(ticket: TicketRecord): boolean {
   return ticket.purchaseStatus === "purchased" && ticket.verificationStatus === "pending";
+}
+
+export function setTicketAdminResultMark(
+  ticket: TicketRecord,
+  mark: TicketAdminResultMark,
+  markedBy: string,
+  markedAt: string
+): TicketRecord {
+  if (ticket.verificationStatus !== "pending") {
+    throw new TicketValidationError(
+      `ticket "${ticket.ticketId}" cannot be marked from verification status "${ticket.verificationStatus}"`
+    );
+  }
+
+  return {
+    ...ticket,
+    adminResultMark: mark,
+    adminResultMarkedBy: markedBy,
+    adminResultMarkedAt: requireValidIso(markedAt, "markedAt")
+  };
+}
+
+export function resolveTicketFromAdminMark(
+  ticket: TicketRecord,
+  winAmountMinor: number,
+  resolvedAt: string,
+  resolvedBy: string
+): TicketRecord {
+  if (ticket.verificationStatus !== "pending") {
+    return { ...ticket };
+  }
+
+  const mark = ticket.adminResultMark ?? "lose";
+  const isWin = mark === "win";
+  const winningAmountMinor = isWin ? winAmountMinor : 0;
+
+  return {
+    ...ticket,
+    verificationStatus: "verified",
+    verificationRawOutput: `admin_emulated mark=${mark} resolvedBy=${resolvedBy}`,
+    winningAmountMinor,
+    verifiedAt: requireValidIso(resolvedAt, "resolvedAt"),
+    lastVerificationEventId: `${ticket.ticketId}:admin-resolve`,
+    resultSource: "admin_emulated"
+  };
 }
 
 export function createTicketVerificationJob(input: CreateTicketVerificationJobInput): TicketVerificationJob {

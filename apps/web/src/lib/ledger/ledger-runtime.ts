@@ -1,26 +1,37 @@
 import type { LedgerEntry } from "@lottery/domain";
-import { SystemTimeSource, WalletLedgerService } from "@lottery/application";
+import { SystemTimeSource, WalletLedgerService, type LedgerStore } from "@lottery/application";
 import { InMemoryLedgerStore, PostgresLedgerStore } from "@lottery/infrastructure";
 import { getWebPostgresPool, getWebStorageBackend } from "../runtime/postgres-runtime";
 
 export const LEDGER_DEFAULT_CURRENCY = "RUB";
 
 let cachedService: WalletLedgerService | null = null;
+let ledgerStore: LedgerStore | null = null;
+
+function getLedgerStore(): LedgerStore {
+  if (!ledgerStore) {
+    const backend = getWebStorageBackend();
+    ledgerStore =
+      backend === "postgres"
+        ? new PostgresLedgerStore(getWebPostgresPool())
+        : new InMemoryLedgerStore(readSeedEntries());
+  }
+  return ledgerStore;
+}
 
 export function getWalletLedgerService(): WalletLedgerService {
   if (!cachedService) {
-    const backend = getWebStorageBackend();
-
     cachedService = new WalletLedgerService({
-      ledgerStore:
-        backend === "postgres"
-          ? new PostgresLedgerStore(getWebPostgresPool())
-          : new InMemoryLedgerStore(readSeedEntries()),
+      ledgerStore: getLedgerStore(),
       timeSource: new SystemTimeSource()
     });
   }
 
   return cachedService;
+}
+
+export function getLedgerStoreInstance(): LedgerStore {
+  return getLedgerStore();
 }
 
 function readSeedEntries(): LedgerEntry[] {

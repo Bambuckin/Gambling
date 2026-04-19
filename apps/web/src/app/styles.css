@@ -1,12 +1,12 @@
 :root {
-  --surface-base: #fff8f1;
+  --surface-base: #f5f0ff;
   --surface-card: #ffffff;
-  --surface-muted: #fff1e4;
-  --ink-main: #241915;
-  --ink-soft: #6f4c3f;
-  --line-soft: #f1d6bf;
-  --accent-primary: #ff5a2f;
-  --accent-secondary: #ff8a33;
+  --surface-muted: #ede5ff;
+  --ink-main: #1a1030;
+  --ink-soft: #5c3d7a;
+  --line-soft: #d4c1f0;
+  --accent-primary: #7c3aed;
+  --accent-secondary: #a855f7;
   --success-bg: #e9fbe8;
   --success-ink: #1d7f34;
   --warning-bg: #fff4e4;
@@ -16,7 +16,7 @@
   --radius-xl: 28px;
   --radius-l: 20px;
   --radius-m: 14px;
-  --shadow-soft: 0 24px 60px rgba(59, 32, 19, 0.08);
+  --shadow-soft: 0 24px 60px rgba(40, 20, 80, 0.08);
 }
 
 * {
@@ -28,9 +28,9 @@ body {
   font-family: var(--font-body), "Segoe UI", sans-serif;
   color: var(--ink-main);
   background:
-    radial-gradient(circle at 5% 0%, #ffe7d2 0%, transparent 48%),
-    radial-gradient(circle at 90% 12%, #ffd2a9 0%, transparent 45%),
-    linear-gradient(160deg, #fff9f4 0%, #fff4e9 48%, #ffeede 100%);
+    radial-gradient(circle at 5% 0%, #e0d0ff 0%, transparent 48%),
+    radial-gradient(circle at 90% 12%, #cbb2ff 0%, transparent 45%),
+    linear-gradient(160deg, #faf5ff 0%, #f3ecff 48%, #ece0ff 100%);
   min-height: 100vh;
 }
 
@@ -62,8 +62,8 @@ a {
   top: 0;
   z-index: 20;
   backdrop-filter: blur(12px);
-  background: rgba(255, 248, 241, 0.8);
-  border-bottom: 1px solid rgba(241, 214, 191, 0.8);
+  background: rgba(245, 240, 255, 0.8);
+  border-bottom: 1px solid rgba(212, 193, 240, 0.8);
 }
 
 .top-bar-inner {
@@ -90,7 +90,7 @@ a {
   height: 12px;
   border-radius: 999px;
   background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary));
-  box-shadow: 0 0 0 6px rgba(255, 140, 70, 0.2);
+  box-shadow: 0 0 0 6px rgba(124, 58, 237, 0.2);
 }
 
 .top-nav {
@@ -103,22 +103,22 @@ a {
 .nav-link {
   font-weight: 600;
   font-size: 0.95rem;
-  color: #5b3d31;
+  color: #5b3d8a;
   padding: 8px 12px;
   border-radius: 999px;
   transition: background 0.2s ease, color 0.2s ease;
 }
 
 .nav-link:hover {
-  background: rgba(255, 90, 47, 0.1);
-  color: #2e1c16;
+  background: rgba(124, 58, 237, 0.1);
+  color: #2e1c52;
 }
 
 .nav-separator {
   width: 4px;
   height: 4px;
   border-radius: 999px;
-  background: #dcae8e;
+  background: #b89ee0;
 }
 
 .main-wrap {
@@ -140,9 +140,9 @@ a {
   padding: 30px;
   border-radius: var(--radius-xl);
   background:
-    linear-gradient(140deg, rgba(255, 108, 59, 0.97) 0%, rgba(255, 154, 72, 0.95) 55%, rgba(255, 195, 117, 0.92) 100%);
+    linear-gradient(140deg, rgba(124, 58, 237, 0.97) 0%, rgba(168, 85, 247, 0.95) 55%, rgba(192, 132, 252, 0.92) 100%);
   color: #fff;
-  box-shadow: 0 28px 56px rgba(129, 62, 33, 0.24);
+  box-shadow: 0 28px 56px rgba(60, 30, 100, 0.24);
 }
 
 .hero-card p {
@@ -199,8 +199,8 @@ a {
 
 .btn-primary {
   background: #fff;
-  color: #7b331f;
-  box-shadow: 0 10px 28px rgba(80, 24, 4, 0.2);
+  color: #4a1f96;
+  box-shadow: 0 10px 28px rgba(50, 20, 90, 0.2);
 }
 
 .btn-primary:hover {
@@ -227,12 +227,12 @@ a {
 }
 
 .btn-danger {
-  background: #f2b0a8;
-  color: #68150d;
+  background: #d8b4fe;
+  color: #4a1080;
 }
 
 .btn-danger:hover {
-  background: #f6c1bb;
+  background: #e0c4ff;
 }
 
 .lottery-grid {
@@ -252,8 +252,8 @@ a {
       color-mix(in srgb, var(--lottery-accent-from) 18%, #ffffff 82%) 0%,
       color-mix(in srgb, var(--lottery-accent-to) 10%, #ffffff 90%) 100%
     );
-  border: 1px solid rgba(255, 137, 88, 0.25);
-  box-shadow: 0 16px 30px rgba(98, 51, 31, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  box-shadow: 0 16px 30px rgba(60, 30, 100, 0.08);
 }
 
 .lottery-category {
@@ -261,7 +261,7 @@ a {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #7f4b37;
+  color: #6b3fa0;
 }
 
 .lottery-card h2 {
@@ -281,12 +281,12 @@ a {
   padding: 5px 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
-  color: #8b5136;
+  color: #7a4599;
 }
 
 .lottery-link {
   font-weight: 700;
-  color: #6f2713;
+  color: #5c1d96;
 }
 
 .system-strip {
@@ -348,7 +348,7 @@ a {
   padding: 10px 14px;
   border-radius: 12px;
   border: 1px solid var(--line-soft);
-  background: #fff8f3;
+  background: #f5f0ff;
   font-size: 0.92rem;
 }
 
@@ -396,13 +396,13 @@ a {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: #875741;
+  color: #6b3fa0;
 }
 
 .mini-stat .value {
   font-family: var(--font-heading), "Segoe UI", sans-serif;
   font-weight: 700;
-  color: #351d14;
+  color: #1a0f30;
 }
 
 .lottery-form-grid {
@@ -415,24 +415,24 @@ a {
   display: grid;
   gap: 6px;
   font-size: 0.9rem;
-  color: #53362b;
+  color: #4a2d6a;
 }
 
 .field input,
 .field select {
-  border: 1px solid #e6c3a6;
+  border: 1px solid #cbb2e0;
   border-radius: 12px;
   padding: 11px 12px;
-  background: #fffdfb;
-  color: #2b1c17;
+  background: #fdfbff;
+  color: #2a1a40;
   font-size: 0.95rem;
   font-family: var(--font-body), "Segoe UI", sans-serif;
 }
 
 .field input:focus,
 .field select:focus {
-  outline: 2px solid rgba(255, 90, 47, 0.25);
-  border-color: #ff8c5f;
+  outline: 2px solid rgba(124, 58, 237, 0.25);
+  border-color: #a855f7;
 }
 
 .actions-row {
@@ -452,11 +452,11 @@ td {
   padding: 9px 8px;
   font-size: 0.85rem;
   text-align: left;
-  border-bottom: 1px solid #f1ddd0;
+  border-bottom: 1px solid #ddd0f0;
 }
 
 th {
-  color: #845340;
+  color: #6b3fa0;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -469,7 +469,7 @@ th {
 
 .muted {
   font-size: 0.84rem;
-  color: #846355;
+  color: #7a5a99;
 }
 
 .login-shell {
@@ -489,7 +489,7 @@ th {
   color: #fff;
   display: grid;
   gap: 12px;
-  box-shadow: 0 24px 55px rgba(102, 51, 30, 0.22);
+  box-shadow: 0 24px 55px rgba(50, 20, 100, 0.22);
 }
 
 .lottery-hero::after {
@@ -544,8 +544,8 @@ th {
 .big8-confirmation-card {
   border: 1px solid var(--line-soft);
   border-radius: 18px;
-  background: linear-gradient(180deg, #fffaf5 0%, #fff3e7 100%);
-  box-shadow: 0 14px 30px rgba(83, 45, 26, 0.08);
+  background: linear-gradient(180deg, #faf5ff 0%, #f0e6ff 100%);
+  box-shadow: 0 14px 30px rgba(50, 20, 100, 0.08);
 }
 
 .big8-draw-strip,
@@ -559,7 +559,7 @@ th {
   display: grid;
   gap: 4px;
   font-size: 0.84rem;
-  color: #835541;
+  color: #7a4599;
 }
 
 .big8-ticket-counter {
@@ -571,7 +571,7 @@ th {
 .big8-ticket-counter span,
 .big8-multiplier-row span,
 .big8-section-row span {
-  color: #7e5544;
+  color: #6b3f8a;
   font-size: 0.84rem;
 }
 
@@ -584,10 +584,10 @@ th {
 .big8-counter-controls button,
 .big8-number-button,
 .big8-ghost-button {
-  border: 1px solid #e2b991;
+  border: 1px solid #cbb2e0;
   border-radius: 12px;
   background: #fff;
-  color: #4e2d22;
+  color: #3d1f66;
   font: inherit;
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;

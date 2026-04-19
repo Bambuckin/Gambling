@@ -2,10 +2,12 @@ import {
   completeTicketVerificationJob,
   createTicketVerificationJob,
   failTicketVerificationJob,
+  isDrawClosed,
   isTicketPendingVerification,
   reserveTicketVerificationJob,
   type TicketVerificationJob
 } from "@lottery/domain";
+import type { DrawClosureStore } from "../ports/draw-closure-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
 import type { TicketVerificationJobStore } from "../ports/ticket-verification-job-store.js";
 import type { TimeSource } from "../ports/time-source.js";
@@ -13,6 +15,7 @@ import type { TimeSource } from "../ports/time-source.js";
 export interface TicketVerificationQueueServiceDependencies {
   readonly ticketStore: TicketStore;
   readonly jobStore: TicketVerificationJobStore;
+  readonly drawClosureStore: DrawClosureStore;
   readonly timeSource: TimeSource;
 }
 
@@ -29,11 +32,13 @@ export interface ReserveNextVerificationJobInput {
 export class TicketVerificationQueueService {
   private readonly ticketStore: TicketStore;
   private readonly jobStore: TicketVerificationJobStore;
+  private readonly drawClosureStore: DrawClosureStore;
   private readonly timeSource: TimeSource;
 
   constructor(dependencies: TicketVerificationQueueServiceDependencies) {
     this.ticketStore = dependencies.ticketStore;
     this.jobStore = dependencies.jobStore;
+    this.drawClosureStore = dependencies.drawClosureStore;
     this.timeSource = dependencies.timeSource;
   }
 
@@ -44,6 +49,11 @@ export class TicketVerificationQueueService {
     let skippedCount = 0;
 
     for (const ticket of pendingTickets) {
+      const drawClosure = await this.drawClosureStore.getClosure(ticket.lotteryCode, ticket.drawId);
+      if (!isDrawClosed(drawClosure)) {
+        continue;
+      }
+
       const existing = await this.jobStore.getJobByTicketId(ticket.ticketId);
       if (existing) {
         skippedCount += 1;

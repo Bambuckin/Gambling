@@ -1,6 +1,8 @@
 import type { ReactElement } from "react";
 import { redirect } from "next/navigation";
 import { loginPath, normalizeReturnToPath, submitLogin } from "../../lib/access/entry-flow";
+import { DemoAccountList, type DemoAccountEntry } from "../../lib/access/demo-account-list";
+import { listDefaultIdentitySeeds } from "@lottery/infrastructure";
 
 type LoginPageProps = {
   readonly searchParams: Promise<{
@@ -44,20 +46,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps): Promi
           </div>
         </form>
 
-        <div className="mini-grid">
-          <article className="mini-stat">
-            <span className="label">User</span>
-            <span className="value">operator / operator</span>
-          </article>
-          <article className="mini-stat">
-            <span className="label">Tester</span>
-            <span className="value">tester / tester</span>
-          </article>
-          <article className="mini-stat">
-            <span className="label">Admin</span>
-            <span className="value">admin / admin</span>
-          </article>
-        </div>
+        <DemoAccountList accounts={buildDemoAccounts()} />
       </section>
     </section>
   );
@@ -108,4 +97,12 @@ function describeAccessError(errorCode: string): string {
     default:
       return "Не удалось выполнить вход.";
   }
+}
+
+function buildDemoAccounts(): DemoAccountEntry[] {
+  return listDefaultIdentitySeeds().map((seed) => ({
+    label: seed.displayName ?? seed.login,
+    login: seed.login,
+    password: seed.password
+  }));
 }
