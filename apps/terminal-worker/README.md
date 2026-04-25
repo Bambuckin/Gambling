@@ -1,6 +1,6 @@
 # @lottery/terminal-worker
 
-Single active execution worker for terminal-bound purchase requests and ticket verification jobs.
+Single active execution worker for terminal-bound purchase requests and winnings-credit jobs.
 
 ## What This App Owns
 
@@ -9,8 +9,8 @@ Single active execution worker for terminal-bound purchase requests and ticket v
 - purchase handler resolution;
 - terminal attempt execution and journaling;
 - retry classification handoff;
-- ticket verification queue processing;
-- Big 8 live draw sync and Big 8 purchase automation.
+- winnings-credit job processing;
+- Big 8 live draw sync and Big 8 terminal purchase automation.
 
 It does not own:
 
@@ -21,10 +21,10 @@ It does not own:
 
 ## Key Files
 
-- `src/main.ts` - boot sequence, polling loop, verification loop, draw sync loop
+- `src/main.ts` - boot sequence, queue polling loop, credit-job loop, draw sync loop
 - `src/lib/terminal-handler-runtime.ts` - handler registry bootstrap and verify-result stub behavior
 - `src/lib/big8-live-draw-provider.ts` - live draw extraction from the terminal page
-- `src/lib/big8-terminal-cart-handler.ts` - real Big 8 add-to-cart automation via Puppeteer
+- `src/lib/big8-terminal-cart-handler.ts` - real Big 8 terminal purchase automation via Puppeteer
 - `src/lib/big8-mock-terminal-handler.ts` - mock Big 8 handler for payload verification
 - `src/lib/runtime/postgres-runtime.ts` - backend and connection selection
 
@@ -36,8 +36,7 @@ It does not own:
 4. Execute the attempt.
 5. Persist the normalized outcome through `TerminalExecutionAttemptService`.
 6. Release the lock.
-7. Enqueue or reserve ticket verification jobs.
-8. Apply verification results through `TicketVerificationResultService`.
+7. Process pending winnings-credit jobs after queue work.
 
 Main orchestration lives in `src/main.ts`.
 

@@ -1,16 +1,14 @@
 "use client";
 
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 
-interface LotteryNotificationRow {
+export interface LotteryNotificationRow {
   readonly notificationId: string;
   readonly type: string;
   readonly title: string;
   readonly body: string;
   readonly read: boolean;
   readonly createdAt: string;
-  readonly referenceTicketId: string | null;
-  readonly referenceDrawId: string | null;
 }
 
 interface LotteryNotificationMonitorProps {
@@ -20,15 +18,22 @@ interface LotteryNotificationMonitorProps {
 
 interface LotteryNotificationResponse {
   readonly notifications: readonly LotteryNotificationRow[];
-  readonly fetchedAt: string;
 }
 
 const REFRESH_INTERVAL_MS = 2_500;
 
 export function LotteryNotificationMonitor(props: LotteryNotificationMonitorProps): ReactElement {
   const [notifications, setNotifications] = useState<readonly LotteryNotificationRow[]>(props.initialNotifications);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pushNotification, setPushNotification] = useState<LotteryNotificationRow | null>(() =>
+    resolveInitialPushNotification(props.initialNotifications)
+  );
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(() => {
+    return typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+  });
+  const seenNotificationIdsRef = useRef(
+    new Set(props.initialNotifications.map((notification) => notification.notificationId))
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +44,7 @@ export function LotteryNotificationMonitor(props: LotteryNotificationMonitorProp
           cache: "no-store"
         });
         if (!response.ok) {
-          throw new Error(`status=${response.status}`);
+          throw new Error("refresh failed");
         }
 
         const payload = (await response.json()) as LotteryNotificationResponse;
@@ -47,16 +52,17 @@ export function LotteryNotificationMonitor(props: LotteryNotificationMonitorProp
           return;
         }
 
-        setNotifications(payload.notifications);
-        setFetchedAt(payload.fetchedAt);
-        setError(null);
-      } catch (refreshError) {
-        if (cancelled) {
-          return;
+        const newPushNotifications = collectNewPushNotifications(payload.notifications, seenNotificationIdsRef.current);
+        announceDesktopNotifications(newPushNotifications);
+        if (newPushNotifications[0]) {
+          setPushNotification(newPushNotifications[0]);
         }
-
-        const message = refreshError instanceof Error ? refreshError.message : String(refreshError);
-        setError(message);
+        setNotifications(payload.notifications);
+        setError(null);
+      } catch {
+        if (!cancelled) {
+          setError("Оповещения временно не обновляются.");
+        }
       }
     };
 
@@ -71,6 +77,14 @@ export function LotteryNotificationMonitor(props: LotteryNotificationMonitorProp
     };
   }, [props.lotteryCode]);
 
+  useEffect(() => {
+    if (typeof Notification === "undefined") {
+      return;
+    }
+
+    setPermission(Notification.permission);
+  }, []);
+
   const unreadCount = notifications.filter((notification) => !notification.read).length;
 
   return (
@@ -84,21 +98,48 @@ export function LotteryNotificationMonitor(props: LotteryNotificationMonitorProp
           flexWrap: "wrap"
         }}
       >
-        <div>
-          <h2>Оповещения по тиражу</h2>
-          <p className="muted">После покупки и после закрытия тиража сюда прилетает живой статус билета.</p>
+        <h2>Оповещения</h2>
+        <div className="actions-row">
+          {permission === "default" ? (
+            <button
+              className="btn-ghost"
+              type="button"
+              onClick={() => {
+                void requestNotificationPermission(setPermission);
+              }}
+            >
+              Включить уведомления
+            </button>
+          ) : null}
+          <span className={`badge ${unreadCount > 0 ? "warning" : "success"}`}>
+            {unreadCount > 0 ? `${unreadCount} новых` : "Без новых"}
+          </span>
         </div>
-        <span className={`badge ${unreadCount > 0 ? "warning" : "success"}`}>
-          {unreadCount > 0 ? `${unreadCount} новых` : "Без новых"}
-        </span>
       </div>
 
-      <p className={`alert-row ${error ? "warn" : "ok"}`}>
-        {error ? `Поток уведомлений временно недоступен: ${error}` : `Синхронизировано: ${formatIso(fetchedAt) ?? "только что"}`}
-      </p>
+      {error ? <p className="alert-row warn">{error}</p> : null}
+
+      {permission === "denied" ? (
+        <p className="muted">Уведомления заблокированы в настройках браузера.</p>
+      ) : null}
+
+      {pushNotification ? (
+        <section className="alert-row ok" role="status" aria-live="polite">
+          <strong>{pushNotification.title}</strong>
+          <span style={{ marginLeft: "0.5rem" }}>{pushNotification.body}</span>
+          <button
+            type="button"
+            className="btn-ghost"
+            style={{ marginLeft: "0.75rem" }}
+            onClick={() => setPushNotification(null)}
+          >
+            Скрыть
+          </button>
+        </section>
+      ) : null}
 
       {notifications.length === 0 ? (
-        <p className="muted">Оповещений по этой лотерее пока нет.</p>
+        <p className="muted">Оповещений пока нет.</p>
       ) : (
         <div className="page-column">
           {notifications.map((notification) => (
@@ -127,8 +168,6 @@ export function LotteryNotificationMonitor(props: LotteryNotificationMonitorProp
               <p style={{ margin: "0.5rem 0 0.35rem" }}>{notification.body}</p>
               <p className="muted" style={{ margin: 0 }}>
                 {formatIso(notification.createdAt) ?? notification.createdAt}
-                {notification.referenceDrawId ? ` | Тираж: ${notification.referenceDrawId}` : ""}
-                {notification.referenceTicketId ? ` | Билет: ${notification.referenceTicketId}` : ""}
               </p>
             </section>
           ))}
@@ -147,7 +186,7 @@ function formatNotificationType(type: string): string {
     case "winning_actions_available":
       return "Выигрыш";
     default:
-      return type;
+      return "Событие";
   }
 }
 
@@ -169,4 +208,69 @@ function formatIso(value: string | null | undefined): string | null {
     minute: "2-digit",
     second: "2-digit"
   });
+}
+
+export function collectNewPushNotifications(
+  notifications: readonly LotteryNotificationRow[],
+  seenNotificationIds: Set<string>
+): LotteryNotificationRow[] {
+  const newPushNotifications: LotteryNotificationRow[] = [];
+
+  for (const notification of notifications) {
+    const alreadySeen = seenNotificationIds.has(notification.notificationId);
+    seenNotificationIds.add(notification.notificationId);
+
+    if (!alreadySeen && shouldShowPushNotification(notification)) {
+      newPushNotifications.push(notification);
+    }
+  }
+
+  return newPushNotifications;
+}
+
+export function resolveInitialPushNotification(
+  notifications: readonly LotteryNotificationRow[]
+): LotteryNotificationRow | null {
+  const candidates = notifications
+    .filter((notification) => !notification.read && shouldShowPushNotification(notification))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+  return candidates[0] ?? null;
+}
+
+function announceDesktopNotifications(notifications: readonly LotteryNotificationRow[]): void {
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+    return;
+  }
+
+  for (const notification of notifications) {
+    if (!shouldShowPushNotification(notification)) {
+      continue;
+    }
+
+    const desktopNotification = new Notification(notification.title, {
+      body: notification.body,
+      tag: notification.notificationId
+    });
+    desktopNotification.onclick = () => {
+      window.focus();
+      desktopNotification.close();
+    };
+  }
+}
+
+export function shouldShowPushNotification(notification: LotteryNotificationRow): boolean {
+  return notification.type === "winning_actions_available" || notification.type === "draw_closed_result_ready";
+}
+
+async function requestNotificationPermission(
+  setPermission: (nextPermission: NotificationPermission | "unsupported") => void
+): Promise<void> {
+  if (typeof Notification === "undefined") {
+    setPermission("unsupported");
+    return;
+  }
+
+  const nextPermission = await Notification.requestPermission();
+  setPermission(nextPermission);
 }

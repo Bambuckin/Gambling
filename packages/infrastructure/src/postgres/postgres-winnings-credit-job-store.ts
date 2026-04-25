@@ -63,6 +63,18 @@ export class PostgresWinningsCreditJobStore implements WinningsCreditJobStore {
     return row ? deepClone(row.job as WinningsCreditJob) : null;
   }
 
+  async listJobs(): Promise<readonly WinningsCreditJob[]> {
+    const result = await this.pool.query(
+      `
+        select job
+        from lottery_winnings_credit_jobs
+        order by created_at desc, job_id desc
+      `
+    );
+
+    return result.rows.map((row: { job: WinningsCreditJob }) => deepClone(row.job));
+  }
+
   async listQueuedJobs(): Promise<readonly WinningsCreditJob[]> {
     const result = await this.pool.query(
       `

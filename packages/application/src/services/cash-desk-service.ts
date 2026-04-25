@@ -17,6 +17,8 @@ export class CashDeskService {
   }
 
   async createCashDeskRequest(input: {
+    readonly requestId: string;
+    readonly purchaseId: string;
     readonly ticketId: string;
     readonly userId: string;
     readonly lotteryCode: string;
@@ -30,11 +32,19 @@ export class CashDeskService {
       return existing;
     }
 
-    await this.ticketClaimService.startCashDeskClaim(input.ticketId);
+    await this.startCashDeskClaimIfLegacyTicketExists(input.ticketId);
 
     const request = createCashDeskRequest({
       cashDeskRequestId: `${input.ticketId}:cash-desk`,
-      ...input
+      requestId: input.requestId,
+      purchaseId: input.purchaseId,
+      ticketId: input.ticketId,
+      userId: input.userId,
+      lotteryCode: input.lotteryCode,
+      drawId: input.drawId,
+      winningAmountMinor: input.winningAmountMinor,
+      currency: input.currency,
+      createdAt: input.createdAt
     });
 
     await this.cashDeskRequestStore.saveCashDeskRequest(request);
@@ -53,11 +63,35 @@ export class CashDeskService {
 
     const paid = payCashDeskRequest(request, paidBy, paidAt);
     await this.cashDeskRequestStore.saveCashDeskRequest(paid);
-    await this.ticketClaimService.markTicketCashDeskPaid(request.ticketId);
+    await this.markTicketCashDeskPaidIfLegacyTicketExists(request.ticketId);
     return paid;
   }
 
   async listCashDeskRequests(): Promise<readonly CashDeskRequest[]> {
     return this.cashDeskRequestStore.listCashDeskRequests();
+  }
+
+  private async startCashDeskClaimIfLegacyTicketExists(ticketId: string): Promise<void> {
+    try {
+      await this.ticketClaimService.startCashDeskClaim(ticketId);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return;
+      }
+
+      throw error;
+    }
+  }
+
+  private async markTicketCashDeskPaidIfLegacyTicketExists(ticketId: string): Promise<void> {
+    try {
+      await this.ticketClaimService.markTicketCashDeskPaid(ticketId);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return;
+      }
+
+      throw error;
+    }
   }
 }

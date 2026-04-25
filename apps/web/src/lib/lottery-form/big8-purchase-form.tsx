@@ -29,6 +29,7 @@ const BIG8_BOARD_VALUES = Array.from({ length: 20 }, (_, index) => index + 1);
 const BIG8_EXTRA_VALUES = [1, 2, 3, 4] as const;
 const BIG8_REQUIRED_NUMBERS = 8;
 const BIG8_MAX_MULTIPLIER = 10;
+const DRAW_REFRESH_INTERVAL_MS = 5_000;
 
 export function Big8PurchaseForm({
   lotteryCode,
@@ -76,7 +77,7 @@ export function Big8PurchaseForm({
     void refreshDraws();
     const intervalId = window.setInterval(() => {
       void refreshDraws();
-    }, 20_000);
+    }, DRAW_REFRESH_INTERVAL_MS);
 
     return () => {
       cancelled = true;
@@ -90,8 +91,10 @@ export function Big8PurchaseForm({
   );
   const totalAmountMinor = totalMultiplier * baseAmountMinor;
   const selectedDrawLabel = drawOptions.find((draw) => draw.drawId === selectedDrawId)?.label ?? "Выбери тираж";
+  const drawBlockedReason =
+    liveBlockedReason ?? (drawOptions.length === 0 ? "нет открытых тиражей" : null);
   const canSubmit =
-    !liveBlockedReason &&
+    !drawBlockedReason &&
     selectedDrawId.length > 0 &&
     tickets.every((ticket) => ticket.boardNumbers.length === BIG8_REQUIRED_NUMBERS && ticket.extraNumber !== null);
 
@@ -110,18 +113,18 @@ export function Big8PurchaseForm({
               ))}
             </select>
           </label>
-          <div className="big8-live-note">
+          <div className="big8-live-note" aria-live="polite">
             <span>Активно: {selectedDrawLabel}</span>
-            <span>{liveBlockedReason ? `Блок: ${liveBlockedReason}` : "Terminal sync активен"}</span>
+            {drawBlockedReason ? <span className="big8-live-warning">Блок: {drawBlockedReason}</span> : null}
           </div>
         </div>
         <div className="big8-ticket-counter">
           <span>Билетов</span>
           <div className="big8-counter-controls">
             <button type="button" onClick={() => setTickets((current) => shrinkTickets(current))} disabled={tickets.length === 1}>
-              −
+              -
             </button>
-            <strong>{tickets.length}</strong>
+            <strong className="big8-counter-value">{tickets.length}</strong>
             <button type="button" onClick={() => setTickets((current) => [...current, createEmptyTicket()])}>
               +
             </button>
@@ -249,7 +252,7 @@ export function Big8PurchaseForm({
                       }
                       disabled={ticket.multiplier <= 1}
                     >
-                      −
+                      -
                     </button>
                     <strong>x{ticket.multiplier}</strong>
                     <button
@@ -292,22 +295,14 @@ export function Big8PurchaseForm({
               <strong>{selectedDrawLabel}</strong>
             </div>
             <div>
-              <span>Ставок по множителю</span>
+              <span>Множитель</span>
               <strong>x{totalMultiplier}</strong>
             </div>
             <div>
-              <span>К оплате после подтверждения</span>
+              <span>К оплате</span>
               <strong>{formatMinorAsRub(totalAmountMinor)}</strong>
             </div>
           </div>
-          <p className="muted">
-            Телефон жестко берется из учетной записи. На клиенте его не редактируешь, только проверяешь.
-          </p>
-          <p className={`alert-row ${canSubmit ? "ok" : "warn"}`}>
-            {canSubmit
-              ? "Все билеты валидны, можно готовить заявку."
-              : "Для каждого билета выбери ровно 8 чисел, 1 дополнительное число и активный тираж."}
-          </p>
         </aside>
       </div>
 

@@ -191,7 +191,30 @@ describe("admin test reset service", () => {
       sessionStore,
       executionLock,
       walletLedgerService,
-      timeSource
+      timeSource,
+      resetSeedDraws: [
+        {
+          lotteryCode: "bolshaya-8",
+          drawId: "draw-seed-1",
+          drawAt: "2026-04-18T12:30:00.000Z",
+          fetchedAt: "2026-04-18T11:00:00.000Z",
+          freshnessTtlSeconds: 1800
+        }
+      ],
+      resetSeedLedgerEntries: [
+        {
+          entryId: "seed-user-credit",
+          userId: "seed-user",
+          operation: "credit",
+          amountMinor: 220_000,
+          currency: "RUB",
+          idempotencyKey: "seed-user-credit",
+          reference: {
+            requestId: "seed-user-credit"
+          },
+          createdAt: "2026-04-18T10:55:00.000Z"
+        }
+      ]
     });
 
     const result = await service.resetTestData();
@@ -201,14 +224,27 @@ describe("admin test reset service", () => {
     expect(result.clearedCanonicalPurchases).toBe(true);
     expect(result.clearedCanonicalDraws).toBe(true);
     expect(result.clearedPurchaseAttempts).toBe(true);
-    expect((await drawStore.listSnapshots())).toHaveLength(0);
+    expect(result.restoredSeedDraws).toBe(1);
+    expect(result.restoredSeedLedgerEntries).toBe(1);
+    expect(await drawStore.listSnapshots()).toEqual([
+      expect.objectContaining({
+        lotteryCode: "bolshaya-8",
+        drawId: "draw-seed-1"
+      })
+    ]);
     expect((await requestStore.listRequests())).toHaveLength(0);
     expect((await queueStore.listQueueItems())).toHaveLength(0);
     expect((await canonicalPurchaseStore.listPurchases())).toHaveLength(0);
     expect((await canonicalDrawStore.listDraws())).toHaveLength(0);
     expect((await purchaseAttemptStore.listAttemptsByPurchaseId("missing"))).toHaveLength(0);
     expect((await ticketStore.listTickets())).toHaveLength(0);
-    expect((await ledgerStore.listEntries())).toHaveLength(0);
+    expect(await ledgerStore.listEntries()).toEqual([
+      expect.objectContaining({
+        entryId: "seed-user-credit",
+        userId: "seed-user",
+        operation: "credit"
+      })
+    ]);
     expect((await drawClosureStore.listClosures())).toHaveLength(0);
     expect((await cashDeskRequestStore.listCashDeskRequests())).toHaveLength(0);
     expect((await winningsCreditJobStore.listQueuedJobs())).toHaveLength(0);
@@ -568,6 +604,10 @@ class MemoryWinningsCreditJobStore implements WinningsCreditJobStore {
 
   async getJobByTicketId(ticketId: string): Promise<WinningsCreditJob | null> {
     return this.jobs.find((job) => job.ticketId === ticketId) ?? null;
+  }
+
+  async listJobs(): Promise<readonly WinningsCreditJob[]> {
+    return [...this.jobs];
   }
 
   async listQueuedJobs(): Promise<readonly WinningsCreditJob[]> {

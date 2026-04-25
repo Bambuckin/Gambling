@@ -17,7 +17,7 @@ Primary safety invariant:
 ## 2. Repository map
 
 - `apps/web` - UI routes, server actions, admin panel, debug pages.
-- `apps/terminal-worker` - queue loop, terminal lock, execution attempts, ticket verification.
+- `apps/terminal-worker` - queue loop, terminal lock, execution attempts, Big 8 terminal purchase, winnings credit.
 - `packages/domain` - lifecycle contracts and state rules.
 - `packages/application` - use-case services and ports.
 - `packages/infrastructure` - concrete adapters (`in-memory` and `postgres`).
@@ -38,7 +38,7 @@ Implemented:
 - shared Postgres runtime for web + worker;
 - persisted queue/lock/ledger/tickets/audit storage;
 - bootstrap + seed + preflight scripts;
-- current working contour for Big 8: draft -> queue -> worker pickup -> admin draw closure -> visible result;
+- current working contour for Big 8: login -> draft -> queue -> worker pickup -> admin draw closure -> visible result -> credit or cash-desk fulfillment;
 - deployment and handoff runbooks.
 
 Still required before production go-live:
@@ -54,6 +54,11 @@ Read and execute in this order:
 3. `docs/runbooks/current-working-contour-smoke.md`
 4. `docs/runbooks/launch-readiness-checklist.md`
 5. `docs/handoff-runtime.md`
+
+If you need copyable folders for handoff:
+
+- build `dist/lan-bundles/client-workstation` for cashier/client PCs;
+- build `dist/lan-bundles/terminal-receiver` for the terminal PC.
 
 Templates:
 

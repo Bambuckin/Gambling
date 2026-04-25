@@ -6,26 +6,51 @@ import {
   PurchaseDraftService,
   PurchaseDraftServiceError,
   PurchaseOrchestrationServiceError,
-  PurchaseRequestServiceError
+  PurchaseRequestServiceError,
+  WinningFulfillmentServiceError
 } from "@lottery/application";
 import type {
+  DrawOption,
   DrawAvailabilityState,
-  PurchaseDraftPayload,
-  RequestState
+  PurchaseDraftPayload
 } from "@lottery/domain";
 import { isBig8PurchaseDraftPayload, sanitizePurchaseDraftPayload } from "@lottery/domain";
 import { requireLotteryAccess, submitLogout } from "../../../lib/access/entry-flow";
 import { loadPurchasableDrawContext } from "../../../lib/draw/purchasable-draws";
-import { LEDGER_DEFAULT_CURRENCY, getWalletLedgerService } from "../../../lib/ledger/ledger-runtime";
+import {
+  ensureDefaultLedgerEntries,
+  LEDGER_DEFAULT_CURRENCY,
+  getWalletLedgerService
+} from "../../../lib/ledger/ledger-runtime";
 import { Big8PurchaseForm } from "../../../lib/lottery-form/big8-purchase-form";
 import { LotteryFormFields } from "../../../lib/lottery-form/render-lottery-form-fields";
 import {
   getNotificationService,
   getPurchaseOrchestrationService,
   getPurchaseRequestQueryService,
-  getPurchaseRequestService
+  getPurchaseRequestService,
+  recoverInterruptedLotteryPurchaseRequests,
+  getUserCabinetStatsService,
+  getWinningFulfillmentService
 } from "../../../lib/purchase/purchase-runtime";
-import { LotteryLiveMonitor } from "../../../lib/purchase/lottery-live-monitor";
+import {
+  LotteryLiveCabinetWarning,
+  LotteryLiveCabinetProvider,
+  LotteryLivePurchaseFacts,
+  LotteryLiveRequestAction,
+  LotteryLiveRequestAttemptCount,
+  LotteryLiveRequestResult,
+  LotteryLiveRequestStatus,
+  LotteryLiveRequestUpdatedAt,
+  LotteryLiveTicketAction,
+  LotteryLiveTicketClaimState,
+  LotteryLiveTicketOutcome,
+  LotteryLiveTicketStatus
+} from "../../../lib/purchase/lottery-live-cabinet";
+import {
+  presentLotteryLiveRequest
+} from "../../../lib/purchase/lottery-live-request-presenter";
+import { presentLotteryLiveTicket } from "../../../lib/purchase/lottery-live-ticket-presenter";
 import { LotteryNotificationMonitor } from "../../../lib/purchase/lottery-notification-monitor";
 import { getLotteryRegistryService } from "../../../lib/registry/registry-runtime";
 import { getTicketQueryService } from "../../../lib/ticket/ticket-runtime";
@@ -65,14 +90,22 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
   const drawState = drawContext.drawState;
   const availableDraws = drawContext.draws;
   const purchaseBlockedReason = drawContext.blockedReason;
+  await ensureDefaultLedgerEntries();
   const walletLedgerService = getWalletLedgerService();
   const walletSnapshot = await walletLedgerService.getWalletSnapshot(access.identity.identityId, LEDGER_DEFAULT_CURRENCY);
+  const cabinetSummary = await getUserCabinetStatsService().getCabinetSummary(
+    access.identity.identityId,
+    LEDGER_DEFAULT_CURRENCY
+  );
   const confirmationDraft = decodeConfirmationToken(quoteToken, lottery.lotteryCode);
+  await recoverInterruptedLotteryPurchaseRequests(access.identity.identityId, lottery.lotteryCode);
   const purchaseRequests = (await getPurchaseRequestQueryService().listUserRequests(access.identity.identityId))
     .filter((request) => request.lotteryCode === lottery.lotteryCode);
+  const liveRequestRows = purchaseRequests.map((request) => presentLotteryLiveRequest(request));
   const tickets = (await getTicketQueryService().listUserTickets(access.identity.identityId)).filter(
     (ticket) => ticket.lotteryCode === lottery.lotteryCode
   );
+  const liveTicketRows = tickets.map((ticket) => presentLotteryLiveTicket(ticket));
   const notifications = (await getNotificationService().listUserNotifications(access.identity.identityId)).filter(
     (notification) => notification.referenceLotteryCode === lottery.lotteryCode
   );
@@ -84,6 +117,7 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
     ? `Покупка заблокирована: ${purchaseBlockedReason}.`
     : resolvePurchaseStatusMessage(drawState);
   const isBig8Lottery = lottery.formSchemaVersion === "v3-big8-live";
+  const hasCancelableRequests = liveRequestRows.some((request) => request.canCancel);
 
   return (
     <section className="lottery-page">
@@ -121,181 +155,177 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
         <p className={`alert-row ${purchaseStatusTone}`}>{purchaseStatusMessage}</p>
       )}
 
-      <section className="split-grid">
-        <article className="panel">
-          <h2>Новый билет</h2>
-          <p className="muted">
-            {isBig8Lottery
-              ? `Базовая ставка: ${formatMinorAsRub(lottery.pricing.baseAmountMinor)} • список тиражей синхронизируется каждые 20 секунд`
-              : `Стоимость билета: ${formatMinorAsRub(lottery.pricing.baseAmountMinor)} • схема: ${lottery.formSchemaVersion}`}
-          </p>
-          {isBig8Lottery ? (
-            <form action={submitPurchaseDraftAction} className="page-column">
-              <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
-              <Big8PurchaseForm
-                lotteryCode={lottery.lotteryCode}
-                baseAmountMinor={lottery.pricing.baseAmountMinor}
-                accountPhone={access.identity.phone}
-                purchaseBlockedReason={purchaseBlockedReason}
-                initialDrawOptions={availableDraws}
-              />
-            </form>
-          ) : (
-            <form action={submitPurchaseDraftAction} className="page-column">
-              <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
-              <LotteryFormFields fields={lottery.formFields} />
-              <div className="actions-row">
-                <button className="btn-primary" type="submit" disabled={Boolean(purchaseBlockedReason)}>
-                  Подготовить заявку
-                </button>
-              </div>
-            </form>
-          )}
-
-          {confirmationDraft ? (
-            <section className="panel">
-              <h3>{isBig8PurchaseDraftPayload(confirmationDraft.payload) ? "Подтверждение корзины Big 8" : "Подтверждение заявки"}</h3>
-              <div className="mini-grid">
-                <article className="mini-stat">
-                  <span className="label">Заявка</span>
-                  <span className="value">{confirmationDraft.requestId}</span>
-                </article>
-                <article className="mini-stat">
-                  <span className="label">Тираж</span>
-                  <span className="value">{confirmationDraft.drawLabel ?? confirmationDraft.drawId}</span>
-                </article>
-                <article className="mini-stat">
-                  <span className="label">Сумма</span>
-                  <span className="value">{formatMinorAsRub(confirmationDraft.costMinor)}</span>
-                </article>
-                {confirmationDraft.ticketCount ? (
-                  <article className="mini-stat">
-                    <span className="label">Билетов</span>
-                    <span className="value">{confirmationDraft.ticketCount}</span>
-                  </article>
-                ) : null}
-              </div>
-              {renderConfirmationPayloadDetails(confirmationDraft.payload, lottery.pricing.baseAmountMinor)}
-              <div className="actions-row">
-                <form action={confirmPurchaseRequestAction}>
-                  <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
-                  <input type="hidden" name="quoteToken" value={quoteToken ?? ""} />
+      <LotteryLiveCabinetProvider
+        lotteryCode={lottery.lotteryCode}
+        initialRequests={liveRequestRows}
+        initialTickets={liveTicketRows}
+        initialWallet={{
+          availableMinor: walletSnapshot.availableMinor,
+          reservedMinor: walletSnapshot.reservedMinor,
+          currency: walletSnapshot.currency
+        }}
+        initialCurrentDraw={resolveLiveCurrentDraw(drawState, availableDraws)}
+      >
+        <section className="split-grid purchase-split-grid">
+          <article className="panel">
+            <h2>Новый билет</h2>
+            <p className="muted">
+              {isBig8Lottery
+                ? `Базовая ставка: ${formatMinorAsRub(lottery.pricing.baseAmountMinor)} • список тиражей синхронизируется каждые 5 секунд`
+                : `Стоимость билета: ${formatMinorAsRub(lottery.pricing.baseAmountMinor)} • схема: ${lottery.formSchemaVersion}`}
+            </p>
+            {isBig8Lottery ? (
+              <form action={submitPurchaseDraftAction} className="page-column">
+                <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
+                <Big8PurchaseForm
+                  lotteryCode={lottery.lotteryCode}
+                  baseAmountMinor={lottery.pricing.baseAmountMinor}
+                  accountPhone={access.identity.phone}
+                  purchaseBlockedReason={purchaseBlockedReason}
+                  initialDrawOptions={availableDraws}
+                />
+              </form>
+            ) : (
+              <form action={submitPurchaseDraftAction} className="page-column">
+                <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
+                <LotteryFormFields fields={lottery.formFields} />
+                <div className="actions-row">
                   <button className="btn-primary" type="submit" disabled={Boolean(purchaseBlockedReason)}>
-                    Подтвердить и отправить в очередь
+                    Подготовить заявку
                   </button>
-                </form>
-                <Link className="btn-ghost" href={`/lottery/${lottery.lotteryCode}`}>
-                  Отменить и редактировать
-                </Link>
-              </div>
-            </section>
-          ) : null}
-        </article>
+                </div>
+              </form>
+            )}
 
-        <article className="panel">
-          <h2>Кошелёк и тираж</h2>
-          <p className="muted">Здесь только минимум, который нужен перед отправкой билета.</p>
-          <div className="mini-grid">
-            <article className="mini-stat">
-              <span className="label">Доступно</span>
-              <span className="value">{formatMinorAsRub(walletSnapshot.availableMinor)}</span>
-            </article>
-            <article className="mini-stat">
-              <span className="label">В резерве</span>
-              <span className="value">{formatMinorAsRub(walletSnapshot.reservedMinor)}</span>
-            </article>
-            <article className="mini-stat">
-              <span className="label">Текущий тираж</span>
-              <span className="value">{drawState.snapshot?.drawId ?? "нет данных"}</span>
-            </article>
-            <article className="mini-stat">
-              <span className="label">Время тиража</span>
-              <span className="value">{formatIso(drawState.snapshot?.drawAt)}</span>
-            </article>
-            <article className="mini-stat">
-              <span className="label">Обновлено</span>
-              <span className="value">{formatIso(drawState.snapshot?.fetchedAt)}</span>
-            </article>
-            <article className="mini-stat">
-              <span className="label">Свежесть</span>
-              <span className="value">{drawState.freshness?.isFresh ? "актуально" : "нужна проверка"}</span>
-            </article>
-          </div>
-          <p className="muted" style={{ marginTop: "0.75rem" }}>
-            Пользователь: {access.identity.displayName} | Телефон: {formatPhone(access.identity.phone)}
-          </p>
-        </article>
+            {confirmationDraft ? (
+              <section className="panel">
+                <h3>{isBig8PurchaseDraftPayload(confirmationDraft.payload) ? "Подтверждение корзины Big 8" : "Подтверждение заявки"}</h3>
+                <div className="mini-grid">
+                  <article className="mini-stat">
+                    <span className="label">Тираж</span>
+                    <span className="value">{confirmationDraft.drawLabel ?? confirmationDraft.drawId}</span>
+                  </article>
+                  <article className="mini-stat">
+                    <span className="label">Сумма</span>
+                    <span className="value">{formatMinorAsRub(confirmationDraft.costMinor)}</span>
+                  </article>
+                  {confirmationDraft.ticketCount ? (
+                    <article className="mini-stat">
+                      <span className="label">Билетов</span>
+                      <span className="value">{confirmationDraft.ticketCount}</span>
+                    </article>
+                  ) : null}
+                </div>
+                {renderConfirmationPayloadDetails(confirmationDraft.payload, lottery.pricing.baseAmountMinor)}
+                <div className="actions-row">
+                  <form action={confirmPurchaseRequestAction}>
+                    <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
+                    <input type="hidden" name="quoteToken" value={quoteToken ?? ""} />
+                    <button className="btn-primary" type="submit" disabled={Boolean(purchaseBlockedReason)}>
+                      Подтвердить и отправить в очередь
+                    </button>
+                  </form>
+                  <Link className="btn-ghost" href={`/lottery/${lottery.lotteryCode}`}>
+                    Отменить и редактировать
+                  </Link>
+                </div>
+              </section>
+            ) : null}
+          </article>
+
+          <LotteryLivePurchaseFacts />
+        </section>
+
+      <section className="panel account-summary-panel">
+        <h2>Итоги по аккаунту</h2>
+        <div className="mini-grid account-summary-grid">
+          <article className="mini-stat">
+            <span className="label">Билетов всего</span>
+            <span className="value">{cabinetSummary.totalTickets}</span>
+          </article>
+          <article className="mini-stat">
+            <span className="label">Выигрышных</span>
+            <span className="value">{cabinetSummary.winningTickets}</span>
+          </article>
+          <article className="mini-stat">
+            <span className="label">Ставки</span>
+            <span className="value">{formatMinorAsRub(cabinetSummary.totalStakesMinor)}</span>
+          </article>
+          <article className="mini-stat">
+            <span className="label">Выигрыши</span>
+            <span className="value">{formatMinorAsRub(cabinetSummary.totalWinningsMinor)}</span>
+          </article>
+          <article className="mini-stat">
+            <span className="label">Чистый результат</span>
+            <span className="value">{formatMinorAsRub(cabinetSummary.netResultMinor)}</span>
+          </article>
+        </div>
       </section>
 
-      <LotteryLiveMonitor
-        lotteryCode={lottery.lotteryCode}
-        initialRequests={purchaseRequests.map((request) => ({
-          requestId: request.requestId,
-          status: request.status,
-          drawId: request.drawId,
-          attemptCount: request.attemptCount,
-          updatedAt: request.updatedAt,
-          finalResult: request.finalResult
-        }))}
-      />
-
-      <LotteryNotificationMonitor
-        lotteryCode={lottery.lotteryCode}
-        initialNotifications={notifications.map((notification) => ({
-          notificationId: notification.notificationId,
-          type: notification.type,
-          title: notification.title,
-          body: notification.body,
-          read: notification.read,
-          createdAt: notification.createdAt,
-          referenceTicketId: notification.referenceTicketId,
-          referenceDrawId: notification.referenceDrawId
-        }))}
-      />
-
-      <section className="two-col">
-        <article className="panel">
-          <h2>Заявки на покупку</h2>
+        <section className="two-col">
+        <article className="panel request-status-panel">
+          <h2>Статус заявок</h2>
+          <LotteryLiveCabinetWarning />
           {purchaseRequests.length === 0 ? (
             <p className="muted">Заявок пока нет.</p>
           ) : (
             <div className="table-wrap">
-              <table>
+              <table className="request-status-table">
                 <thead>
                   <tr>
-                    <th>Заявка</th>
                     <th>Статус</th>
                     <th>Тираж</th>
                     <th>Попытки</th>
-                    <th>Сумма</th>
-                    <th>Создана</th>
+                    <th>Обновлено</th>
                     <th>Итог</th>
-                    <th>Действие</th>
+                    {hasCancelableRequests ? <th>Действие</th> : null}
                   </tr>
                 </thead>
                 <tbody>
-                  {purchaseRequests.map((request) => (
+                  {liveRequestRows.map((request) => (
                     <tr key={request.requestId}>
-                      <td>{request.requestId}</td>
-                      <td>{formatRequestStatus(request.status)}</td>
-                      <td>{request.drawId}</td>
-                      <td>{request.attemptCount}</td>
-                      <td>{formatMinorAsRub(request.costMinor)}</td>
-                      <td>{formatIso(request.createdAt)}</td>
-                      <td>{formatRequestResult(request.finalResult)}</td>
                       <td>
-                        {isRequestCancelableStatus(request.status) ? (
-                          <form action={cancelPurchaseRequestAction}>
-                            <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
-                            <input type="hidden" name="requestId" value={request.requestId} />
-                            <button className="btn-danger" type="submit">
-                              Отменить
-                            </button>
-                          </form>
-                        ) : (
-                          <span className="muted">закрыта</span>
-                        )}
+                        <LotteryLiveRequestStatus
+                          requestId={request.requestId}
+                          initialStatusLabel={request.statusLabel}
+                        />
                       </td>
+                      <td>{request.drawId}</td>
+                      <td>
+                        <LotteryLiveRequestAttemptCount
+                          requestId={request.requestId}
+                          initialAttemptCount={request.attemptCount}
+                        />
+                      </td>
+                      <td>
+                        <LotteryLiveRequestUpdatedAt
+                          requestId={request.requestId}
+                          initialUpdatedAt={request.updatedAt}
+                        />
+                      </td>
+                      <td>
+                        <LotteryLiveRequestResult
+                          requestId={request.requestId}
+                          initialResultLabel={request.resultLabel}
+                        />
+                      </td>
+                      {hasCancelableRequests ? (
+                        <td>
+                          <LotteryLiveRequestAction requestId={request.requestId} initialCanCancel={request.canCancel}>
+                            {request.canCancel ? (
+                              <form action={cancelPurchaseRequestAction}>
+                                <input type="hidden" name="lotteryCode" value={lottery.lotteryCode} />
+                                <input type="hidden" name="requestId" value={request.requestId} />
+                                <button className="btn-danger" type="submit">
+                                  Отменить
+                                </button>
+                              </form>
+                            ) : (
+                              <span className="muted">закрыта</span>
+                            )}
+                          </LotteryLiveRequestAction>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
@@ -306,30 +336,51 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
 
         <article className="panel">
           <h2>Билеты и результаты</h2>
-          {tickets.length === 0 ? (
+          {liveTicketRows.length === 0 ? (
             <p className="muted">Результатов проверки пока нет.</p>
           ) : (
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Билет</th>
                     <th>Тираж</th>
                     <th>Статус</th>
-                    <th>Выигрыш</th>
-                    <th>Источник</th>
-                    <th>Статус выплаты</th>
+                    <th>Итог</th>
+                    <th>Выплата</th>
+                    <th>Действие</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {tickets.map((ticket) => (
+                  {liveTicketRows.map((ticket) => (
                     <tr key={ticket.ticketId}>
-                      <td>{ticket.ticketId}</td>
                       <td>{ticket.drawId}</td>
-                      <td>{formatTicketVerificationStatus(ticket.verificationStatus)}</td>
-                      <td>{formatTicketOutcome(ticket.verificationStatus, ticket.winningAmountMinor)}</td>
-                      <td>{formatTicketResultSource(ticket.resultSource)}</td>
-                      <td>{formatClaimState(ticket.claimState)}</td>
+                      <td>
+                        <LotteryLiveTicketStatus
+                          ticketId={ticket.ticketId}
+                          initialStatusLabel={ticket.statusLabel}
+                        />
+                      </td>
+                      <td>
+                        <LotteryLiveTicketOutcome
+                          ticketId={ticket.ticketId}
+                          initialOutcomeLabel={ticket.outcomeLabel}
+                        />
+                      </td>
+                      <td>
+                        <LotteryLiveTicketClaimState
+                          ticketId={ticket.ticketId}
+                          initialClaimStateLabel={ticket.claimStateLabel}
+                        />
+                      </td>
+                      <td>
+                        <LotteryLiveTicketAction
+                          ticketId={ticket.ticketId}
+                          initialCanFulfill={ticket.canFulfill}
+                          initialClaimStateLabel={ticket.claimStateLabel}
+                        >
+                          {renderTicketFulfillmentActions(ticket, lottery.lotteryCode)}
+                        </LotteryLiveTicketAction>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -338,6 +389,19 @@ export default async function LotteryPage({ params, searchParams }: LotteryPageP
           )}
         </article>
       </section>
+
+        <LotteryNotificationMonitor
+          lotteryCode={lottery.lotteryCode}
+          initialNotifications={notifications.map((notification) => ({
+            notificationId: notification.notificationId,
+            type: notification.type,
+            title: notification.title,
+            body: notification.body,
+            read: notification.read,
+            createdAt: notification.createdAt
+          }))}
+        />
+      </LotteryLiveCabinetProvider>
     </section>
   );
 }
@@ -347,6 +411,84 @@ async function handleLogoutAction(): Promise<void> {
 
   await submitLogout();
   redirect("/login");
+}
+
+async function enqueueWinningsCreditAction(formData: FormData): Promise<void> {
+  "use server";
+
+  const requestedLotteryCode = String(formData.get("lotteryCode") ?? "");
+  const requestId = String(formData.get("requestId") ?? "").trim();
+  const access = await requireLotteryAccess(requestedLotteryCode);
+  const registryService = getLotteryRegistryService();
+  const lottery = await registryService.getLotteryByCode(access.lotteryCode);
+  if (!lottery) {
+    return redirect(`/lottery/${access.lotteryCode}?draft=error&message=Lottery+not+found`);
+  }
+
+  if (!requestId) {
+    return redirect(
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Не найдена заявка для зачисления выигрыша.")}`
+    );
+  }
+
+  try {
+    const job = await getWinningFulfillmentService().enqueueCreditForRequest({
+      requestId,
+      userId: access.identity.identityId
+    });
+    const message =
+      job.status === "done"
+        ? "Выигрыш уже зачислен."
+        : "Выигрыш поставлен в очередь на зачисление.";
+    return redirect(`/lottery/${lottery.lotteryCode}?draft=queued&message=${encodeURIComponent(message)}`);
+  } catch (error) {
+    rethrowIfRedirectError(error);
+
+    const message =
+      error instanceof WinningFulfillmentServiceError || error instanceof Error
+        ? error.message
+        : "Не удалось поставить выигрыш на зачисление.";
+    return redirect(`/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(message)}`);
+  }
+}
+
+async function createCashDeskRequestAction(formData: FormData): Promise<void> {
+  "use server";
+
+  const requestedLotteryCode = String(formData.get("lotteryCode") ?? "");
+  const requestId = String(formData.get("requestId") ?? "").trim();
+  const access = await requireLotteryAccess(requestedLotteryCode);
+  const registryService = getLotteryRegistryService();
+  const lottery = await registryService.getLotteryByCode(access.lotteryCode);
+  if (!lottery) {
+    return redirect(`/lottery/${access.lotteryCode}?draft=error&message=Lottery+not+found`);
+  }
+
+  if (!requestId) {
+    return redirect(
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Не найдена заявка для кассовой выплаты.")}`
+    );
+  }
+
+  try {
+    const cashDeskRequest = await getWinningFulfillmentService().createCashDeskRequestForRequest({
+      requestId,
+      userId: access.identity.identityId
+    });
+    const message =
+      cashDeskRequest.status === "paid"
+        ? "Выигрыш уже выдан в кассе."
+        : "Выигрыш отправлен в кассу.";
+    return redirect(`/lottery/${lottery.lotteryCode}?draft=queued&message=${encodeURIComponent(message)}`);
+  } catch (error) {
+    rethrowIfRedirectError(error);
+
+    const message =
+      error instanceof WinningFulfillmentServiceError || error instanceof Error
+        ? error.message
+        : "Не удалось отправить выигрыш в кассу.";
+    return redirect(`/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent(message)}`);
+  }
 }
 
 async function submitPurchaseDraftAction(formData: FormData): Promise<void> {
@@ -470,6 +612,7 @@ async function confirmPurchaseRequestAction(formData: FormData): Promise<void> {
   }
 
   try {
+    await ensureDefaultLedgerEntries();
     await getPurchaseRequestService().createAwaitingConfirmation({
       requestId: confirmationDraft.requestId,
       userId: access.identity.identityId,
@@ -480,14 +623,31 @@ async function confirmPurchaseRequestAction(formData: FormData): Promise<void> {
       currency: confirmationDraft.currency
     });
 
-    const queueResult = await getPurchaseOrchestrationService().confirmAndQueueRequest({
-      requestId: confirmationDraft.requestId,
-      userId: access.identity.identityId
-    });
+    const purchaseOrchestrationService = getPurchaseOrchestrationService();
+    let queueResult;
+    try {
+      queueResult = await purchaseOrchestrationService.confirmAndQueueRequest({
+        requestId: confirmationDraft.requestId,
+        userId: access.identity.identityId
+      });
+    } catch (queueError) {
+      const recovered = await purchaseOrchestrationService.recoverInterruptedRequests({
+        userId: access.identity.identityId,
+        requestId: confirmationDraft.requestId
+      });
+      if (!recovered.some((result) => result.recovered)) {
+        throw queueError;
+      }
+
+      queueResult = await purchaseOrchestrationService.confirmAndQueueRequest({
+        requestId: confirmationDraft.requestId,
+        userId: access.identity.identityId
+      });
+    }
 
     const message = queueResult.replayed
-      ? `Заявка ${queueResult.request.snapshot.requestId} уже стоит в очереди (попытка ${queueResult.queueItem.attemptCount}).`
-      : `Заявка ${queueResult.request.snapshot.requestId} отправлена в очередь со статусом ${queueResult.request.state}.`;
+      ? "Заявка уже стоит в очереди."
+      : "Заявка отправлена в очередь.";
 
     return redirect(`/lottery/${lottery.lotteryCode}?draft=queued&message=${encodeURIComponent(message)}`);
   } catch (error) {
@@ -517,7 +677,7 @@ async function cancelPurchaseRequestAction(formData: FormData): Promise<void> {
 
   if (!requestId.trim()) {
     return redirect(
-      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Нужен request id для отмены.")}`
+      `/lottery/${lottery.lotteryCode}?draft=error&message=${encodeURIComponent("Не найдена заявка для отмены.")}`
     );
   }
 
@@ -527,8 +687,8 @@ async function cancelPurchaseRequestAction(formData: FormData): Promise<void> {
       userId: access.identity.identityId
     });
     const message = canceled.replayed
-      ? `Заявка ${canceled.request.snapshot.requestId} уже была отменена.`
-      : `Заявка ${canceled.request.snapshot.requestId} отменена со статусом ${canceled.request.state}.`;
+      ? "Заявка уже была отменена."
+      : "Заявка отменена.";
 
     return redirect(`/lottery/${lottery.lotteryCode}?draft=canceled&message=${encodeURIComponent(message)}`);
   } catch (error) {
@@ -742,105 +902,36 @@ function renderConfirmationPayloadDetails(payload: PurchaseDraftPayload, baseAmo
   );
 }
 
-function isRequestCancelableStatus(state: RequestState): boolean {
-  return state === "queued" || state === "retrying";
-}
-
-function formatRequestStatus(state: RequestState): string {
-  switch (state) {
-    case "awaiting_confirmation":
-      return "Ждёт подтверждения";
-    case "confirmed":
-      return "Подтверждена";
-    case "queued":
-      return "В очереди";
-    case "executing":
-      return "Исполняется";
-    case "retrying":
-      return "Повторная попытка";
-    case "added_to_cart":
-      return "В корзине";
-    case "success":
-      return "Завершена";
-    case "error":
-      return "Ошибка";
-    case "canceled":
-      return "Отменена";
-    default:
-      return state;
-  }
-}
-
-function formatRequestResult(result: string | null): string {
-  if (!result) {
-    return "Нет";
+function renderTicketFulfillmentActions(
+  ticket: {
+    readonly requestId: string;
+    readonly canFulfill: boolean;
+    readonly claimStateLabel: string;
+  },
+  lotteryCode: string
+): ReactElement {
+  if (!ticket.canFulfill) {
+    return <span className="muted">{ticket.claimStateLabel}</span>;
   }
 
-  switch (result) {
-    case "ticket_purchased":
-      return "Билет куплен";
-    case "added_to_cart":
-      return "В корзине";
-    default:
-      return result;
-  }
-}
-
-function formatTicketVerificationStatus(status: string): string {
-  switch (status) {
-    case "pending":
-      return "Ожидает";
-    case "verified":
-      return "Проверен";
-    case "failed":
-      return "Ошибка";
-    default:
-      return status;
-  }
-}
-
-function formatTicketOutcome(verificationStatus: string, winningAmountMinor: number | null | undefined): string {
-  if (verificationStatus === "pending") {
-    return "Ждёт результата";
-  }
-
-  if (verificationStatus === "failed") {
-    return "Проверка завершилась ошибкой";
-  }
-
-  if ((winningAmountMinor ?? 0) > 0) {
-    return formatMinorAsRub(winningAmountMinor ?? 0);
-  }
-
-  return "Проигрыш";
-}
-
-function formatTicketResultSource(resultSource: string | null | undefined): string {
-  switch (resultSource) {
-    case "terminal":
-      return "Терминал";
-    case "admin_emulated":
-      return "Администратор";
-    default:
-      return "—";
-  }
-}
-
-function formatClaimState(claimState: string): string {
-  switch (claimState) {
-    case "unclaimed":
-      return "Не обработан";
-    case "credit_pending":
-      return "Зачисление в очереди";
-    case "credited":
-      return "Зачислен";
-    case "cash_desk_pending":
-      return "Ожидает кассу";
-    case "cash_desk_paid":
-      return "Выдан в кассе";
-    default:
-      return claimState;
-  }
+  return (
+    <div className="actions-row">
+      <form action={enqueueWinningsCreditAction}>
+        <input type="hidden" name="lotteryCode" value={lotteryCode} />
+        <input type="hidden" name="requestId" value={ticket.requestId} />
+        <button className="btn-primary" type="submit">
+          Зачислить
+        </button>
+      </form>
+      <form action={createCashDeskRequestAction}>
+        <input type="hidden" name="lotteryCode" value={lotteryCode} />
+        <input type="hidden" name="requestId" value={ticket.requestId} />
+        <button className="btn-ghost" type="submit">
+          В кассу
+        </button>
+      </form>
+    </div>
+  );
 }
 
 function readSingleParam(value: string | string[] | undefined): string | null {
@@ -942,6 +1033,39 @@ function formatPhone(phone: string): string {
   }
 
   return phone;
+}
+
+function resolveLiveCurrentDraw(
+  drawState: DrawAvailabilityState,
+  draws: readonly DrawOption[]
+): {
+  readonly drawId: string;
+  readonly label: string;
+  readonly drawAt: string | null;
+} | null {
+  const snapshot = drawState.snapshot;
+  if (snapshot) {
+    const matchedDraw =
+      draws.find((draw) => draw.drawId === snapshot.drawId) ??
+      snapshot.availableDraws?.find((draw) => draw.drawId === snapshot.drawId);
+
+    return {
+      drawId: snapshot.drawId,
+      label: matchedDraw?.label ?? snapshot.drawId,
+      drawAt: matchedDraw?.drawAt ?? snapshot.drawAt
+    };
+  }
+
+  const fallbackDraw = draws[0];
+  if (!fallbackDraw) {
+    return null;
+  }
+
+  return {
+    drawId: fallbackDraw.drawId,
+    label: fallbackDraw.label,
+    drawAt: fallbackDraw.drawAt
+  };
 }
 
 

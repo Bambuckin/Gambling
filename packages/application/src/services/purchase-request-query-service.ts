@@ -39,15 +39,40 @@ export class PurchaseRequestQueryService {
   }
 
   async listUserRequests(userId: string): Promise<PurchaseRequestStatusView[]> {
-    const normalizedUserId = userId.trim();
+    return this.listRequestViews({ userId });
+  }
+
+  async listRequestsByDraw(lotteryCode: string, drawId: string): Promise<PurchaseRequestStatusView[]> {
+    return this.listRequestViews({ lotteryCode, drawId });
+  }
+
+  async listQueueItems(): Promise<PurchaseQueueItem[]> {
+    const queueItems = await this.queueStore.listQueueItems();
+    return queueItems.map((item) => ({ ...item }));
+  }
+
+  private async listRequestViews(filter: {
+    readonly userId?: string;
+    readonly lotteryCode?: string;
+    readonly drawId?: string;
+  }): Promise<PurchaseRequestStatusView[]> {
+    const normalizedUserId = filter.userId?.trim() ?? null;
+    const normalizedLotteryCode = filter.lotteryCode?.trim().toLowerCase() ?? null;
+    const normalizedDrawId = filter.drawId?.trim() ?? null;
+
+    if (filter.userId !== undefined && !normalizedUserId) {
+      return [];
+    }
+
     const [records, queueItems, canonicalPurchases] = await Promise.all([
       this.requestStore.listRequests(),
       this.queueStore.listQueueItems(),
       this.canonicalPurchaseStore?.listPurchases() ?? Promise.resolve([])
     ]);
+    const filteredRecords = records.filter((record) => matchesRequestFilter(record, normalizedUserId, normalizedLotteryCode, normalizedDrawId));
     const queueByRequestId = new Map(queueItems.map((item) => [item.requestId, item]));
-    const filteredCanonicalPurchases = canonicalPurchases.filter(
-      (purchase) => purchase.snapshot.userId === normalizedUserId
+    const filteredCanonicalPurchases = canonicalPurchases.filter((purchase) =>
+      matchesCanonicalPurchaseFilter(purchase, normalizedUserId, normalizedLotteryCode, normalizedDrawId)
     );
     const attemptsByPurchaseId = buildCanonicalAttemptMap(await this.listCanonicalAttempts(filteredCanonicalPurchases));
     const canonicalByRequestId = new Map(
@@ -55,8 +80,7 @@ export class PurchaseRequestQueryService {
     );
     const coveredRequestIds = new Set<string>();
 
-    const statusViews = records
-      .filter((record) => record.snapshot.userId === normalizedUserId)
+    const statusViews = filteredRecords
       .map((record) => {
         const requestId = record.snapshot.requestId;
         coveredRequestIds.add(requestId);
@@ -75,11 +99,6 @@ export class PurchaseRequestQueryService {
       .sort((left, right) => compareStatusViews(left, right));
 
     return statusViews;
-  }
-
-  async listQueueItems(): Promise<PurchaseQueueItem[]> {
-    const queueItems = await this.queueStore.listQueueItems();
-    return queueItems.map((item) => ({ ...item }));
   }
 
   private async listCanonicalAttempts(
@@ -111,18 +130,18 @@ function toStatusView(
     queueItem?.attemptCount ?? 0,
     deriveAttemptCount(record.journal)
   );
-  const status = projected?.status ?? record.state;
+  const status = resolveRequestStatus(record, projected?.status, queueItem, canonicalAttempts);
   const finalResult = projected?.finalResult ?? resolveFinalResult(status, latestEntry?.note);
 
   return {
     requestId: record.snapshot.requestId,
-    lotteryCode: record.snapshot.lotteryCode,
-    drawId: record.snapshot.drawId,
+    lotteryCode: canonicalPurchase?.snapshot.lotteryCode ?? record.snapshot.lotteryCode,
+    drawId: canonicalPurchase?.snapshot.drawId ?? record.snapshot.drawId,
     status,
     attemptCount,
-    costMinor: record.snapshot.costMinor,
-    currency: record.snapshot.currency,
-    createdAt: record.snapshot.createdAt,
+    costMinor: canonicalPurchase?.snapshot.costMinor ?? record.snapshot.costMinor,
+    currency: canonicalPurchase?.snapshot.currency ?? record.snapshot.currency,
+    createdAt: canonicalPurchase?.snapshot.submittedAt ?? record.snapshot.createdAt,
     updatedAt,
     finalResult
   };
@@ -155,6 +174,28 @@ function deriveAttemptCount(
   return executionEvents;
 }
 
+function resolveRequestStatus(
+  record: Awaited<ReturnType<PurchaseRequestStore["listRequests"]>>[number],
+  projectedStatus: RequestState | undefined,
+  queueItem: PurchaseQueueItem | undefined,
+  canonicalAttempts: readonly import("@lottery/domain").PurchaseAttemptRecord[]
+): RequestState {
+  if (!projectedStatus) {
+    return record.state;
+  }
+
+  if (
+    record.state === "awaiting_confirmation" &&
+    projectedStatus === "confirmed" &&
+    !queueItem &&
+    canonicalAttempts.length === 0
+  ) {
+    return record.state;
+  }
+
+  return projectedStatus;
+}
+
 function resolveFinalResult(status: RequestState, note: string | undefined): string | null {
   if (
     status !== "added_to_cart" &&
@@ -175,4 +216,46 @@ function compareStatusViews(left: PurchaseRequestStatusView, right: PurchaseRequ
   }
 
   return right.requestId.localeCompare(left.requestId);
+}
+
+function matchesRequestFilter(
+  record: Awaited<ReturnType<PurchaseRequestStore["listRequests"]>>[number],
+  userId: string | null,
+  lotteryCode: string | null,
+  drawId: string | null
+): boolean {
+  if (userId && record.snapshot.userId !== userId) {
+    return false;
+  }
+
+  if (lotteryCode && record.snapshot.lotteryCode !== lotteryCode) {
+    return false;
+  }
+
+  if (drawId && record.snapshot.drawId !== drawId) {
+    return false;
+  }
+
+  return true;
+}
+
+function matchesCanonicalPurchaseFilter(
+  purchase: CanonicalPurchaseRecord,
+  userId: string | null,
+  lotteryCode: string | null,
+  drawId: string | null
+): boolean {
+  if (userId && purchase.snapshot.userId !== userId) {
+    return false;
+  }
+
+  if (lotteryCode && purchase.snapshot.lotteryCode !== lotteryCode) {
+    return false;
+  }
+
+  if (drawId && purchase.snapshot.drawId !== drawId) {
+    return false;
+  }
+
+  return true;
 }

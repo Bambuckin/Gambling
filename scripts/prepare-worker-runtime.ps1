@@ -16,7 +16,7 @@ param(
   [Parameter(Mandatory = $false)]
   [string]$TerminalBrowserUrl = "http://127.0.0.1:9222",
   [Parameter(Mandatory = $false)]
-  [string]$TerminalPageUrl = "https://webapp.cloud.nationallottery.ru/",
+  [string]$TerminalPageUrl = "",
   [Parameter(Mandatory = $false)]
   [switch]$OpenTerminalChrome,
   [Parameter(Mandatory = $false)]
@@ -30,6 +30,8 @@ param(
   [Parameter(Mandatory = $false)]
   [switch]$ForceEnv
 )
+
+$ErrorActionPreference = "Stop"
 
 function Resolve-BrowserPath {
   param(
@@ -110,9 +112,33 @@ if ($shouldGenerateEnv) {
 if (-not $SkipInstall.IsPresent) {
   Write-Host "[prepare-worker] installing dependencies"
   corepack pnpm install
+  if ($LASTEXITCODE -ne 0) {
+    throw "workspace dependency install failed"
+  }
 }
 
+. (Join-Path $root "scripts/load-env.ps1") -Path $envPath
+
 if ($OpenTerminalChrome.IsPresent) {
+  $resolvedTerminalMode = if ([string]::IsNullOrWhiteSpace($env:LOTTERY_BIG8_TERMINAL_MODE)) {
+    "mock"
+  } else {
+    $env:LOTTERY_BIG8_TERMINAL_MODE.Trim().ToLowerInvariant()
+  }
+  if ($resolvedTerminalMode -ne "real") {
+    throw "OpenTerminalChrome is only valid when LOTTERY_BIG8_TERMINAL_MODE=real."
+  }
+
+  $resolvedTerminalPageUrl = if (-not [string]::IsNullOrWhiteSpace($TerminalPageUrl)) {
+    $TerminalPageUrl
+  } else {
+    $env:LOTTERY_TERMINAL_PAGE_URL
+  }
+
+  if ([string]::IsNullOrWhiteSpace($resolvedTerminalPageUrl)) {
+    throw "OpenTerminalChrome requires LOTTERY_TERMINAL_PAGE_URL in env or -TerminalPageUrl explicitly."
+  }
+
   $resolvedBrowserPath = Resolve-BrowserPath -PreferredPath $ChromePath
   if (-not $resolvedBrowserPath) {
     throw "No Chromium-based browser binary found (Chrome/Edge). Provide -ChromePath explicitly."
@@ -122,7 +148,7 @@ if ($OpenTerminalChrome.IsPresent) {
   Start-Process -FilePath $resolvedBrowserPath -ArgumentList @(
     "--remote-debugging-port=9222",
     "--user-data-dir=$ChromeUserDataDir",
-    $TerminalPageUrl
+    $resolvedTerminalPageUrl
   ) | Out-Null
 }
 

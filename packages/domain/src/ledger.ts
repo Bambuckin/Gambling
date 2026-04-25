@@ -3,6 +3,7 @@ export const LEDGER_OPERATIONS = ["reserve", "debit", "release", "credit", "manu
 export type LedgerOperationType = (typeof LEDGER_OPERATIONS)[number];
 
 export interface LedgerReference {
+  readonly purchaseId?: string;
   readonly requestId?: string;
   readonly ticketId?: string;
   readonly drawId?: string;
@@ -99,12 +100,14 @@ export function normalizeLedgerEntry(entry: LedgerEntry): LedgerEntry {
 }
 
 export function normalizeLedgerReference(reference: LedgerReference): LedgerReference {
+  const purchaseId = reference.purchaseId?.trim();
   const requestId = reference.requestId?.trim();
   const ticketId = reference.ticketId?.trim();
   const drawId = reference.drawId?.trim();
   const adminAdjustmentId = reference.adminAdjustmentId?.trim();
 
   return {
+    ...(purchaseId ? { purchaseId } : {}),
     ...(requestId ? { requestId } : {}),
     ...(ticketId ? { ticketId } : {}),
     ...(drawId ? { drawId } : {}),
@@ -113,7 +116,7 @@ export function normalizeLedgerReference(reference: LedgerReference): LedgerRefe
 }
 
 export function hasLedgerReference(reference: LedgerReference): boolean {
-  return Boolean(reference.requestId || reference.ticketId || reference.adminAdjustmentId);
+  return Boolean(reference.purchaseId || reference.requestId || reference.ticketId || reference.adminAdjustmentId);
 }
 
 export function requiresRequestReference(operation: LedgerOperationType): boolean {

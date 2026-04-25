@@ -1,16 +1,24 @@
 import {
   appendCanonicalPurchaseTransition,
   applyCanonicalPurchaseResult,
+  createCashDeskRequest,
+  createWinningsCreditJob,
+  completeWinningsCreditJob,
+  startWinningsCreditJob,
   applyTicketVerificationOutcome,
   createPurchasedTicketRecord,
   createSubmittedCanonicalPurchase,
   setCanonicalPurchaseResultVisibility,
+  type CashDeskRequest,
   type CanonicalPurchaseRecord,
-  type TicketRecord
+  type TicketRecord,
+  type WinningsCreditJob
 } from "@lottery/domain";
 import { describe, expect, it } from "vitest";
 import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
+import type { CashDeskRequestStore } from "../ports/cash-desk-request-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
+import type { WinningsCreditJobStore } from "../ports/winnings-credit-job-store.js";
 import { TicketQueryService } from "../services/ticket-query-service.js";
 
 describe("TicketQueryService", () => {
@@ -213,6 +221,95 @@ describe("TicketQueryService", () => {
       })
     ]);
   });
+
+  it("projects fulfillment claim state from cash desk requests for canonical-only tickets", async () => {
+    const purchase = createCanonicalVisibleResultRecord({
+      purchaseId: "purchase-998",
+      legacyRequestId: "req-998",
+      userId: "seed-user",
+      drawId: "draw-998",
+      resultStatus: "win",
+      settledAt: "2026-04-06T02:20:00.000Z"
+    });
+    const service = new TicketQueryService({
+      ticketStore: new InMemoryTicketStore([]),
+      canonicalPurchaseStore: new InMemoryCanonicalPurchaseStore([purchase]),
+      cashDeskRequestStore: new InMemoryCashDeskRequestStore([
+        createCashDeskRequest({
+          cashDeskRequestId: "canonical:purchase-998:cash-desk",
+          requestId: "req-998",
+          purchaseId: "purchase-998",
+          ticketId: "canonical:purchase-998",
+          userId: "seed-user",
+          lotteryCode: "demo-lottery",
+          drawId: "draw-998",
+          winningAmountMinor: 50_000,
+          currency: "RUB",
+          createdAt: "2026-04-06T02:21:00.000Z"
+        })
+      ])
+    });
+
+    const tickets = await service.listUserTickets("seed-user");
+
+    expect(tickets).toEqual([
+      expect.objectContaining({
+        ticketId: "canonical:purchase-998",
+        claimState: "cash_desk_pending"
+      })
+    ]);
+  });
+
+  it("projects credited state from winnings credit jobs onto legacy compatibility tickets", async () => {
+    const legacyPending = createPurchasedTicketRecord({
+      ticketId: "req-999:ticket",
+      requestId: "req-999",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-999",
+      purchasedAt: "2026-04-06T02:00:00.000Z",
+      externalReference: "ext-999"
+    });
+    const creditedJob = completeWinningsCreditJob(
+      startWinningsCreditJob(
+        createWinningsCreditJob({
+          jobId: "purchase-999:credit",
+          requestId: "req-999",
+          purchaseId: "purchase-999",
+          ticketId: "req-999:ticket",
+          userId: "seed-user",
+          drawId: "draw-999",
+          winningAmountMinor: 50_000,
+          currency: "RUB",
+          createdAt: "2026-04-06T02:21:00.000Z"
+        })
+      ),
+      "2026-04-06T02:22:00.000Z"
+    );
+    const service = new TicketQueryService({
+      ticketStore: new InMemoryTicketStore([legacyPending]),
+      canonicalPurchaseStore: new InMemoryCanonicalPurchaseStore([
+        createCanonicalVisibleResultRecord({
+          purchaseId: "purchase-999",
+          legacyRequestId: "req-999",
+          userId: "seed-user",
+          drawId: "draw-999",
+          resultStatus: "win",
+          settledAt: "2026-04-06T02:20:00.000Z"
+        })
+      ]),
+      winningsCreditJobStore: new InMemoryWinningsCreditJobStore([creditedJob])
+    });
+
+    const tickets = await service.listAllTickets();
+
+    expect(tickets).toEqual([
+      expect.objectContaining({
+        ticketId: "req-999:ticket",
+        claimState: "credited"
+      })
+    ]);
+  });
 });
 
 function createCanonicalPurchasedRecord(input: {
@@ -396,6 +493,50 @@ class InMemoryCanonicalPurchaseStore implements CanonicalPurchaseStore {
 
   async savePurchase(): Promise<void> {
     throw new Error("read-only test double");
+  }
+
+  async clearAll(): Promise<void> {}
+}
+
+class InMemoryCashDeskRequestStore implements CashDeskRequestStore {
+  constructor(private readonly requests: readonly CashDeskRequest[]) {}
+
+  async saveCashDeskRequest(): Promise<void> {
+    throw new Error("read-only test double");
+  }
+
+  async getCashDeskRequestById(cashDeskRequestId: string): Promise<CashDeskRequest | null> {
+    return this.requests.find((entry) => entry.cashDeskRequestId === cashDeskRequestId) ?? null;
+  }
+
+  async getCashDeskRequestByTicketId(ticketId: string): Promise<CashDeskRequest | null> {
+    return this.requests.find((entry) => entry.ticketId === ticketId) ?? null;
+  }
+
+  async listCashDeskRequests(): Promise<readonly CashDeskRequest[]> {
+    return this.requests.map((request) => ({ ...request }));
+  }
+
+  async clearAll(): Promise<void> {}
+}
+
+class InMemoryWinningsCreditJobStore implements WinningsCreditJobStore {
+  constructor(private readonly jobs: readonly WinningsCreditJob[]) {}
+
+  async saveJob(): Promise<void> {
+    throw new Error("read-only test double");
+  }
+
+  async getJobByTicketId(ticketId: string): Promise<WinningsCreditJob | null> {
+    return this.jobs.find((entry) => entry.ticketId === ticketId) ?? null;
+  }
+
+  async listJobs(): Promise<readonly WinningsCreditJob[]> {
+    return this.jobs.map((job) => ({ ...job }));
+  }
+
+  async listQueuedJobs(): Promise<readonly WinningsCreditJob[]> {
+    return this.jobs.filter((job) => job.status === "queued").map((job) => ({ ...job }));
   }
 
   async clearAll(): Promise<void> {}

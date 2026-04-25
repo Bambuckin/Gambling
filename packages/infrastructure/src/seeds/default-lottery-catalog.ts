@@ -43,7 +43,7 @@ const DEFAULT_LOTTERY_SEED_DEFINITIONS: readonly LotterySeedDefinition[] = [
     freshnessTtlSeconds: 60 * 30,
     formSchemaVersion: "v3-big8-live",
     formFields: [textField("ticket_payload", "Big 8 payload")],
-    purchaseCompletionMode: "emulate_after_cart",
+    purchaseCompletionMode: "direct",
     drawFreshnessMode: "warn_only"
   }),
   seed({

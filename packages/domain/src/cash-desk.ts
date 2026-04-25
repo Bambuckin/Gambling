@@ -3,6 +3,8 @@ export type CashDeskStatus = (typeof CASH_DESK_STATUSES)[number];
 
 export interface CashDeskRequest {
   readonly cashDeskRequestId: string;
+  readonly requestId: string;
+  readonly purchaseId: string;
   readonly ticketId: string;
   readonly userId: string;
   readonly lotteryCode: string;
@@ -17,6 +19,8 @@ export interface CashDeskRequest {
 
 export function createCashDeskRequest(input: {
   readonly cashDeskRequestId: string;
+  readonly requestId: string;
+  readonly purchaseId: string;
   readonly ticketId: string;
   readonly userId: string;
   readonly lotteryCode: string;
@@ -27,6 +31,8 @@ export function createCashDeskRequest(input: {
 }): CashDeskRequest {
   return {
     cashDeskRequestId: input.cashDeskRequestId.trim(),
+    requestId: input.requestId.trim(),
+    purchaseId: input.purchaseId.trim(),
     ticketId: input.ticketId.trim(),
     userId: input.userId.trim(),
     lotteryCode: input.lotteryCode.trim().toLowerCase(),
@@ -58,8 +64,11 @@ export type WinningsCreditJobStatus = (typeof WINNINGS_CREDIT_JOB_STATUSES)[numb
 
 export interface WinningsCreditJob {
   readonly jobId: string;
+  readonly requestId: string;
+  readonly purchaseId: string;
   readonly ticketId: string;
   readonly userId: string;
+  readonly drawId: string;
   readonly winningAmountMinor: number;
   readonly currency: string;
   readonly status: WinningsCreditJobStatus;
@@ -70,16 +79,22 @@ export interface WinningsCreditJob {
 
 export function createWinningsCreditJob(input: {
   readonly jobId: string;
+  readonly requestId: string;
+  readonly purchaseId: string;
   readonly ticketId: string;
   readonly userId: string;
+  readonly drawId: string;
   readonly winningAmountMinor: number;
   readonly currency: string;
   readonly createdAt: string;
 }): WinningsCreditJob {
   return {
     jobId: input.jobId.trim(),
+    requestId: input.requestId.trim(),
+    purchaseId: input.purchaseId.trim(),
     ticketId: input.ticketId.trim(),
     userId: input.userId.trim(),
+    drawId: input.drawId.trim(),
     winningAmountMinor: input.winningAmountMinor,
     currency: input.currency.trim().toUpperCase(),
     status: "queued",

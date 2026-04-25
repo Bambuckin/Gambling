@@ -27,14 +27,13 @@ For ownership and constraints, treat `docs/modules/boundary-catalog.md` as sourc
 11. On success, `TicketPersistenceService` stores ticket record; on cancel/failure, reserve is released.
 12. Web/admin projections read status via query services.
 
-## Ticket Verification And Winnings Pipeline
+## Settlement And Winnings Pipeline
 
-1. `TicketVerificationQueueService` enqueues pending tickets after draw readiness.
-2. Worker reserves next verification job.
-3. Result handler is resolved and executed for `verify`.
-4. `TicketVerificationResultService` normalizes result and stores verification outcome.
-5. Winning amounts are credited through `WalletLedgerService`.
-6. Verification job transitions to done/error and becomes visible in user/admin surfaces.
+1. `DrawClosureService` closes and settles canonical draws after admin result marking.
+2. Canonical purchase result visibility becomes the source of truth for user/admin ticket views.
+3. `TicketQueryService` projects canonical results and fulfillment state into the current compatibility ticket surface.
+4. User or admin chooses the payout path through `WinningFulfillmentService`.
+5. `WinningsCreditService` writes idempotent ledger credits, or `CashDeskService` persists cash-desk payout work.
 
 ## Admin Observability Pipeline
 

@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
+import {
+  ADMIN_EMULATED_WIN_AMOUNT_MINOR,
+  appendCanonicalPurchaseTransition,
+  applyCanonicalPurchaseResult,
+  createSubmittedCanonicalPurchase,
+  setCanonicalPurchaseResultVisibility,
+  type CanonicalPurchaseRecord,
+  type LedgerEntry,
+  type TicketRecord
+} from "@lottery/domain";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
+import { TicketQueryService } from "../services/ticket-query-service.js";
 import { UserCabinetStatsService } from "../services/user-cabinet-stats-service.js";
-import type { TicketRecord } from "@lottery/domain";
-import type { LedgerEntry } from "@lottery/domain";
 
 function createTicket(overrides: Partial<TicketRecord> = {}): TicketRecord {
   return {
@@ -104,4 +114,168 @@ describe("UserCabinetStatsService", () => {
     expect(summary.totalTickets).toBe(0);
     expect(summary.availableMinor).toBe(0);
   });
+
+  it("uses ticket query service so canonical-only tickets appear in cabinet summary", async () => {
+    const canonicalTicketQueryService = new TicketQueryService({
+      ticketStore: {
+        listTickets: async () => [],
+        getTicketById: async () => null,
+        getTicketByRequestId: async () => null,
+        saveTicket: async () => {},
+        clearAll: async () => {}
+      },
+      canonicalPurchaseStore: new InMemoryCanonicalPurchaseStore([
+        createVisibleWinningCanonicalPurchase({
+          purchaseId: "purchase-2001",
+          legacyRequestId: "req-2001",
+          userId: "user-1",
+          drawId: "draw-2001",
+          settledAt: "2026-04-20T10:00:00.000Z"
+        })
+      ])
+    });
+    const { entries } = createEnv();
+    const service = new UserCabinetStatsService({
+      ticketStore: {
+        listTickets: async () => [],
+        getTicketById: async () => null,
+        getTicketByRequestId: async () => null,
+        saveTicket: async () => {},
+        clearAll: async () => {}
+      },
+      ledgerStore: {
+        listEntries: async () => [...entries],
+        listEntriesByUser: async (userId: string) => entries.filter((entry) => entry.userId === userId),
+        appendEntry: async () => {},
+        clearAll: async () => {}
+      },
+      requestStore: {
+        listRequests: async () => [],
+        getRequestById: async () => null,
+        saveRequest: async () => {},
+        clearAll: async () => {}
+      },
+      ticketQueryService: canonicalTicketQueryService
+    });
+
+    const [summary, tickets] = await Promise.all([
+      service.getCabinetSummary("user-1", "RUB"),
+      service.getCabinetTickets("user-1", { status: "winning" })
+    ]);
+
+    expect(summary.totalTickets).toBe(1);
+    expect(summary.winningTickets).toBe(1);
+    expect(summary.totalWinningsMinor).toBe(ADMIN_EMULATED_WIN_AMOUNT_MINOR);
+    expect(tickets).toEqual([
+      expect.objectContaining({
+        ticketId: "canonical:purchase-2001",
+        requestId: "req-2001",
+        winningAmountMinor: ADMIN_EMULATED_WIN_AMOUNT_MINOR
+      })
+    ]);
+  });
 });
+
+function createVisibleWinningCanonicalPurchase(input: {
+  readonly purchaseId: string;
+  readonly legacyRequestId: string;
+  readonly userId: string;
+  readonly drawId: string;
+  readonly settledAt: string;
+}): CanonicalPurchaseRecord {
+  const purchased = appendCanonicalPurchaseTransition(
+    appendCanonicalPurchaseTransition(
+      appendCanonicalPurchaseTransition(
+        createSubmittedCanonicalPurchase({
+          purchaseId: input.purchaseId,
+          legacyRequestId: input.legacyRequestId,
+          userId: input.userId,
+          lotteryCode: "bolshaya-8",
+          drawId: input.drawId,
+          payload: { draw_count: 1 },
+          costMinor: 100,
+          currency: "RUB",
+          submittedAt: "2026-04-20T09:50:00.000Z"
+        }),
+        "queued",
+        {
+          eventId: `${input.purchaseId}:queued`,
+          occurredAt: "2026-04-20T09:51:00.000Z"
+        }
+      ),
+      "processing",
+      {
+        eventId: `${input.purchaseId}:processing`,
+        occurredAt: "2026-04-20T09:52:00.000Z"
+      }
+    ),
+    "purchased",
+    {
+      eventId: `${input.purchaseId}:purchased`,
+      occurredAt: "2026-04-20T09:53:00.000Z",
+      externalTicketReference: `ext-${input.purchaseId}`
+    }
+  );
+  const awaitingDrawClose = appendCanonicalPurchaseTransition(purchased, "awaiting_draw_close", {
+    eventId: `${input.purchaseId}:awaiting-draw-close`,
+    occurredAt: "2026-04-20T09:54:00.000Z"
+  });
+  const settled = appendCanonicalPurchaseTransition(
+    applyCanonicalPurchaseResult(awaitingDrawClose, {
+      eventId: `${input.purchaseId}:result`,
+      occurredAt: input.settledAt,
+      resultStatus: "win"
+    }),
+    "settled",
+    {
+      eventId: `${input.purchaseId}:settled`,
+      occurredAt: input.settledAt
+    }
+  );
+
+  return setCanonicalPurchaseResultVisibility(settled, {
+    eventId: `${input.purchaseId}:visible`,
+    occurredAt: input.settledAt,
+    resultVisibility: "visible"
+  });
+}
+
+class InMemoryCanonicalPurchaseStore implements CanonicalPurchaseStore {
+  constructor(private readonly purchases: readonly CanonicalPurchaseRecord[]) {}
+
+  async listPurchases(): Promise<readonly CanonicalPurchaseRecord[]> {
+    return this.purchases.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async getPurchaseById(purchaseId: string): Promise<CanonicalPurchaseRecord | null> {
+    const purchase = this.purchases.find((entry) => entry.snapshot.purchaseId === purchaseId) ?? null;
+    return purchase ? cloneCanonicalPurchaseRecord(purchase) : null;
+  }
+
+  async getPurchaseByLegacyRequestId(legacyRequestId: string): Promise<CanonicalPurchaseRecord | null> {
+    const purchase = this.purchases.find((entry) => entry.snapshot.legacyRequestId === legacyRequestId) ?? null;
+    return purchase ? cloneCanonicalPurchaseRecord(purchase) : null;
+  }
+
+  async savePurchase(): Promise<void> {
+    throw new Error("read-only test double");
+  }
+
+  async clearAll(): Promise<void> {}
+}
+
+function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): CanonicalPurchaseRecord {
+  return {
+    snapshot: {
+      ...record.snapshot,
+      payload: { ...record.snapshot.payload }
+    },
+    status: record.status,
+    resultStatus: record.resultStatus,
+    resultVisibility: record.resultVisibility,
+    purchasedAt: record.purchasedAt,
+    settledAt: record.settledAt,
+    externalTicketReference: record.externalTicketReference,
+    journal: record.journal.map((entry) => ({ ...entry }))
+  };
+}

@@ -219,11 +219,13 @@ function validateWorkerConfig(issues: PreflightIssue[], env: NodeJS.ProcessEnv):
   }
 
   const liveDrawSyncEnabled = (env.LOTTERY_BIG8_LIVE_DRAW_SYNC_ENABLED ?? "true").trim().toLowerCase() !== "false";
-  const cartAutomationEnabled =
-    (env.LOTTERY_BIG8_CART_AUTOMATION_ENABLED ?? "true").trim().toLowerCase() !== "false";
+  const purchaseAutomationEnabled =
+    (env.LOTTERY_BIG8_PURCHASE_AUTOMATION_ENABLED ?? env.LOTTERY_BIG8_CART_AUTOMATION_ENABLED ?? "true")
+      .trim()
+      .toLowerCase() !== "false";
   const terminalMode = (env.LOTTERY_BIG8_TERMINAL_MODE ?? "mock").trim().toLowerCase();
 
-  if (!liveDrawSyncEnabled && !cartAutomationEnabled) {
+  if (!liveDrawSyncEnabled && !purchaseAutomationEnabled) {
     return;
   }
 

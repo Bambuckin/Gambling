@@ -40,7 +40,7 @@ export class PostgresLedgerStore implements LedgerStore {
   async appendEntry(entry: LedgerEntry): Promise<void> {
     const normalizedEntry = normalizeLedgerEntry(entry);
 
-    await this.pool.query(
+    const result = await this.pool.query(
       `
         insert into lottery_ledger_entries (
           entry_id,
@@ -49,6 +49,8 @@ export class PostgresLedgerStore implements LedgerStore {
           idempotency_key,
           entry
         ) values ($1, $2, $3, $4, $5::jsonb)
+        on conflict (idempotency_key) do nothing
+        returning entry
       `,
       [
         normalizedEntry.entryId,
@@ -58,9 +60,40 @@ export class PostgresLedgerStore implements LedgerStore {
         JSON.stringify(normalizedEntry)
       ]
     );
+    if (result.rowCount === 1) {
+      return;
+    }
+
+    const existing = await this.pool.query(
+      `
+        select entry
+        from lottery_ledger_entries
+        where idempotency_key = $1
+        limit 1
+      `,
+      [normalizedEntry.idempotencyKey]
+    );
+    const existingEntry = existing.rows[0]?.entry ? normalizeLedgerEntry(existing.rows[0].entry as LedgerEntry) : null;
+    if (!existingEntry || !isReplayCompatible(existingEntry, normalizedEntry)) {
+      throw new Error(`idempotency key "${normalizedEntry.idempotencyKey}" already exists with different payload`);
+    }
   }
 
   async clearAll(): Promise<void> {
     await this.pool.query("delete from lottery_ledger_entries");
   }
+}
+
+function isReplayCompatible(existingEntry: LedgerEntry, nextEntry: LedgerEntry): boolean {
+  return (
+    existingEntry.userId === nextEntry.userId &&
+    existingEntry.operation === nextEntry.operation &&
+    existingEntry.amountMinor === nextEntry.amountMinor &&
+    existingEntry.currency === nextEntry.currency &&
+    (existingEntry.reference.purchaseId ?? null) === (nextEntry.reference.purchaseId ?? null) &&
+    (existingEntry.reference.requestId ?? null) === (nextEntry.reference.requestId ?? null) &&
+    (existingEntry.reference.ticketId ?? null) === (nextEntry.reference.ticketId ?? null) &&
+    (existingEntry.reference.drawId ?? null) === (nextEntry.reference.drawId ?? null) &&
+    (existingEntry.reference.adminAdjustmentId ?? null) === (nextEntry.reference.adminAdjustmentId ?? null)
+  );
 }

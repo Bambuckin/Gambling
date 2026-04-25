@@ -177,13 +177,6 @@ create table if not exists lottery_operations_audit_events (
 create index if not exists lottery_operations_audit_events_occurred_at_idx on lottery_operations_audit_events(occurred_at);
 create index if not exists lottery_operations_audit_events_severity_idx on lottery_operations_audit_events(severity);
 
-create table if not exists lottery_terminal_execution_locks (
-  lock_name text primary key,
-  owner_id text not null,
-  acquired_at timestamptz not null,
-  expires_at timestamptz not null
-);
-
 create table if not exists lottery_notifications (
   notification_id text primary key,
   user_id text not null,
@@ -224,6 +217,9 @@ create index if not exists lottery_winnings_credit_jobs_status_idx on lottery_wi
 
 export async function initializeLotteryPostgresSchema(pool: Pool): Promise<void> {
   await pool.query(LOTTERY_POSTGRES_SCHEMA_SQL);
+  await pool.query(`
+    drop table if exists lottery_terminal_execution_locks;
+  `);
   await pool.query(`
     alter table lottery_identities
     add column if not exists phone text;

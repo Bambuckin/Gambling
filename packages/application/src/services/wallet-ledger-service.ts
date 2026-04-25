@@ -46,8 +46,10 @@ export interface WalletLedgerRequestCommandInput {
 
 export interface WalletLedgerWinningsCommandInput {
   readonly userId: string;
+  readonly purchaseId?: string;
   readonly requestId: string;
   readonly ticketId: string;
+  readonly sourceEventId?: string;
   readonly verificationEventId: string;
   readonly amountMinor: number;
   readonly currency: string;
@@ -105,6 +107,26 @@ export class WalletLedgerService {
     });
   }
 
+  async ensureEntries(entries: readonly LedgerEntry[]): Promise<number> {
+    const existingEntries = await this.listAllEntries();
+    const entriesByIdempotencyKey = new Map(existingEntries.map((entry) => [entry.idempotencyKey, entry] as const));
+    let insertedCount = 0;
+
+    for (const nextEntry of sortLedgerEntries(entries.map((entry) => normalizeLedgerEntry(entry)))) {
+      const existingEntry = entriesByIdempotencyKey.get(nextEntry.idempotencyKey);
+      if (existingEntry) {
+        assertReplayMatches(existingEntry, nextEntry);
+        continue;
+      }
+
+      await this.ledgerStore.appendEntry(nextEntry);
+      entriesByIdempotencyKey.set(nextEntry.idempotencyKey, nextEntry);
+      insertedCount += 1;
+    }
+
+    return insertedCount;
+  }
+
   async reserveFunds(input: WalletLedgerRequestCommandInput): Promise<WalletLedgerRecordResult> {
     return this.recordEntry({
       userId: input.userId,
@@ -146,15 +168,16 @@ export class WalletLedgerService {
 
   async creditWinnings(input: WalletLedgerWinningsCommandInput): Promise<WalletLedgerRecordResult> {
     const ticketId = requireNonEmpty(input.ticketId, "ticketId");
-    const verificationEventId = requireNonEmpty(input.verificationEventId, "verificationEventId");
+    const sourceEventId = requireNonEmpty(input.sourceEventId ?? input.verificationEventId, "verificationEventId");
+    const purchaseId = normalizeOptionalText(input.purchaseId);
 
     return this.recordEntry({
       userId: input.userId,
       operation: "credit",
       amountMinor: input.amountMinor,
       currency: input.currency,
-      idempotencyKey: `${ticketId}:winnings:${verificationEventId}`,
-      reference: buildWinningsReference(input, ticketId),
+      idempotencyKey: `${purchaseId ?? ticketId}:winnings:${sourceEventId}`,
+      reference: buildWinningsReference(input, ticketId, purchaseId),
       ...(input.entryId ? { entryId: input.entryId } : {}),
       ...(input.createdAt ? { createdAt: input.createdAt } : {})
     });
@@ -256,6 +279,7 @@ function assertReplayMatches(existingEntry: LedgerEntry, nextEntry: LedgerEntry)
 
 function isSameReference(left: LedgerReference, right: LedgerReference): boolean {
   return (
+    (left.purchaseId ?? null) === (right.purchaseId ?? null) &&
     (left.requestId ?? null) === (right.requestId ?? null) &&
     (left.ticketId ?? null) === (right.ticketId ?? null) &&
     (left.drawId ?? null) === (right.drawId ?? null)
@@ -284,7 +308,11 @@ function buildRequestReference(input: WalletLedgerRequestCommandInput): LedgerRe
   };
 }
 
-function buildWinningsReference(input: WalletLedgerWinningsCommandInput, ticketId: string): LedgerReference {
+function buildWinningsReference(
+  input: WalletLedgerWinningsCommandInput,
+  ticketId: string,
+  purchaseId: string | null
+): LedgerReference {
   const requestId = input.requestId.trim();
   if (!requestId) {
     throw new WalletLedgerValidationError("requestId is required for winnings credit operations");
@@ -293,6 +321,7 @@ function buildWinningsReference(input: WalletLedgerWinningsCommandInput, ticketI
   const drawId = input.drawId?.trim();
 
   return {
+    ...(purchaseId ? { purchaseId } : {}),
     requestId,
     ticketId,
     ...(drawId ? { drawId } : {})
@@ -306,4 +335,13 @@ function requireNonEmpty(value: string, field: string): string {
   }
 
   return normalized;
+}
+
+function normalizeOptionalText(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized ? normalized : null;
 }

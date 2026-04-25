@@ -1,12 +1,15 @@
 import { rankQueueForExecution, type RequestState } from "@lottery/domain";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { PurchaseQueuePriority, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { ConfirmAndQueueResult } from "./purchase-orchestration-service.js";
 import { PurchaseOrchestrationService } from "./purchase-orchestration-service.js";
+import { mapCanonicalPurchaseStatusToRequestState } from "./canonical-compatibility.js";
 
 export interface AdminQueueServiceDependencies {
   readonly requestStore: PurchaseRequestStore;
   readonly queueStore: PurchaseQueueStore;
+  readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
   readonly purchaseOrchestrationService: PurchaseOrchestrationService;
 }
 
@@ -45,23 +48,36 @@ export interface EnqueueAsAdminPriorityInput {
 export class AdminQueueService {
   private readonly requestStore: PurchaseRequestStore;
   private readonly queueStore: PurchaseQueueStore;
+  private readonly canonicalPurchaseStore: CanonicalPurchaseStore | null;
   private readonly purchaseOrchestrationService: PurchaseOrchestrationService;
 
   constructor(dependencies: AdminQueueServiceDependencies) {
     this.requestStore = dependencies.requestStore;
     this.queueStore = dependencies.queueStore;
+    this.canonicalPurchaseStore = dependencies.canonicalPurchaseStore ?? null;
     this.purchaseOrchestrationService = dependencies.purchaseOrchestrationService;
   }
 
   async getQueueSnapshot(): Promise<AdminQueueSnapshot> {
-    const [queueItems, requests] = await Promise.all([
+    const [queueItems, requests, canonicalPurchases] = await Promise.all([
       this.queueStore.listQueueItems(),
-      this.requestStore.listRequests()
+      this.requestStore.listRequests(),
+      this.canonicalPurchaseStore?.listPurchases() ?? Promise.resolve([])
     ]);
 
-    const requestStateById = new Map(
-      requests.map((record) => [record.snapshot.requestId, record.state] as const)
+    const canonicalStateByRequestId = new Map(
+      canonicalPurchases.map((purchase) => [
+        purchase.snapshot.legacyRequestId ?? purchase.snapshot.purchaseId,
+        mapCanonicalPurchaseStatusToRequestState(purchase)
+      ] as const)
     );
+    const requestStateById = new Map(canonicalStateByRequestId);
+    for (const record of requests) {
+      requestStateById.set(
+        record.snapshot.requestId,
+        canonicalStateByRequestId.get(record.snapshot.requestId) ?? record.state
+      );
+    }
 
     const queuedItems = queueItems.filter((item) => item.status === "queued");
     const executingItems = queueItems.filter((item) => item.status === "executing");

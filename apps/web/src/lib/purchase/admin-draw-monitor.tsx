@@ -1,6 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactElement } from "react";
+import {
+  formatAdminDrawMark,
+  formatAdminDrawStatus,
+  formatAdminDrawTicketOutcome,
+  formatAdminDrawVerificationStatus,
+  resolveAdminDrawBadgeClass
+} from "./admin-status-presenter";
 
 interface AdminDrawTicket {
   readonly ticketId: string;
@@ -33,13 +40,24 @@ interface AdminDrawsResponse {
 interface AdminDrawMonitorProps {
   readonly onMarkTicket: (requestId: string, mark: "win" | "lose") => Promise<void>;
   readonly onCloseDraw: (lotteryCode: string, drawId: string, drawAt: string) => Promise<void>;
-  readonly onSettleDraw: (lotteryCode: string, drawId: string) => Promise<void>;
   readonly onDeleteDraw: (lotteryCode: string, drawId: string) => Promise<string>;
   readonly onClearQueue: () => Promise<string>;
   readonly onResetAll: () => Promise<string>;
 }
 
-const REFRESH_INTERVAL_MS = 3_000;
+const REFRESH_INTERVAL_MS = 5_000;
+const drawCreateFieldStyle = { minWidth: 0 };
+const drawCreateControlStyle = { width: "100%" };
+const CONFIRM_CLOSE_DRAW =
+  "\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0442\u0438\u0440\u0430\u0436 \u0438 \u0441\u0440\u0430\u0437\u0443 \u043e\u043f\u0443\u0431\u043b\u0438\u043a\u043e\u0432\u0430\u0442\u044c \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u0434\u043b\u044f \u043a\u043b\u0438\u0435\u043d\u0442\u043e\u0432? \u041f\u043e\u0441\u043b\u0435 \u044d\u0442\u043e\u0433\u043e \u0441\u043f\u0438\u0441\u043e\u043a \u0431\u0438\u043b\u0435\u0442\u043e\u0432 \u0438 \u043e\u0442\u043c\u0435\u0442\u043a\u0438 \u043f\u043e \u0442\u0438\u0440\u0430\u0436\u0443 \u043c\u0435\u043d\u044f\u0442\u044c \u043d\u0435\u043b\u044c\u0437\u044f.";
+const CONFIRM_CLEAR_QUEUE =
+  "\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c \u043e\u0447\u0435\u0440\u0435\u0434\u044c \u0438 \u0441\u043d\u044f\u0442\u044c \u0437\u0430\u0432\u0438\u0441\u0448\u0438\u0435 pending-\u0437\u0430\u044f\u0432\u043a\u0438?";
+const CONFIRM_RESET_RUNTIME =
+  "\u041f\u043e\u043b\u043d\u043e\u0441\u0442\u044c\u044e \u043e\u0447\u0438\u0441\u0442\u0438\u0442\u044c \u0442\u0435\u0441\u0442\u043e\u0432\u044b\u0439 runtime? \u042d\u0442\u043e \u0443\u0434\u0430\u043b\u0438\u0442 \u0442\u0438\u0440\u0430\u0436\u0438, \u043e\u0447\u0435\u0440\u0435\u0434\u044c, \u0431\u0438\u043b\u0435\u0442\u044b, \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f \u0438 \u0438\u0441\u0442\u043e\u0440\u0438\u044e \u0442\u0435\u0441\u0442\u043e\u0432\u043e\u0433\u043e \u043a\u043e\u043d\u0442\u0443\u0440\u0430.";
+
+function confirmDeleteDrawText(drawId: string): string {
+  return `\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0442\u0438\u0440\u0430\u0436 ${drawId}? \u0420\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u043e \u0442\u043e\u043b\u044c\u043a\u043e \u0434\u043b\u044f \u043f\u0443\u0441\u0442\u043e\u0433\u043e \u0442\u0435\u0441\u0442\u043e\u0432\u043e\u0433\u043e \u0442\u0438\u0440\u0430\u0436\u0430.`;
+}
 
 export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
   const [draws, setDraws] = useState<readonly AdminDraw[]>([]);
@@ -58,7 +76,7 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
     try {
       const response = await fetch("/api/admin/draws", { cache: "no-store" });
       if (!response.ok) {
-        throw new Error(`status=${response.status}`);
+        throw new Error(`Ошибка загрузки (${response.status})`);
       }
 
       const payload = (await response.json()) as AdminDrawsResponse;
@@ -105,7 +123,7 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
   };
 
   const handleClose = async (lotteryCode: string, drawId: string, drawAt: string): Promise<void> => {
-    const confirmed = window.confirm("Закрыть тираж? После этого можно только помечать результаты и публиковать settlement.");
+    const confirmed = window.confirm(CONFIRM_CLOSE_DRAW);
     if (!confirmed) {
       return;
     }
@@ -115,25 +133,7 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
 
     try {
       await props.onCloseDraw(lotteryCode, drawId, drawAt);
-      setActionMessage(`Тираж ${drawId} закрыт.`);
-      await refresh();
-    } catch (actionFailure) {
-      setActionError(actionFailure instanceof Error ? actionFailure.message : String(actionFailure));
-    }
-  };
-
-  const handleSettle = async (lotteryCode: string, drawId: string): Promise<void> => {
-    const confirmed = window.confirm("Опубликовать settlement? После этого результат станет видимым пользователю.");
-    if (!confirmed) {
-      return;
-    }
-
-    setActionError(null);
-    setActionMessage(null);
-
-    try {
-      await props.onSettleDraw(lotteryCode, drawId);
-      setActionMessage(`Тираж ${drawId} опубликован.`);
+      setActionMessage(`Тираж ${drawId} закрыт, результаты опубликованы.`);
       await refresh();
     } catch (actionFailure) {
       setActionError(actionFailure instanceof Error ? actionFailure.message : String(actionFailure));
@@ -180,7 +180,7 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
   };
 
   const handleDelete = async (lotteryCode: string, drawId: string): Promise<void> => {
-    const confirmed = window.confirm(`Удалить тираж ${drawId}? Разрешено только для пустого тестового тиража.`);
+    const confirmed = window.confirm(confirmDeleteDrawText(drawId));
     if (!confirmed) {
       return;
     }
@@ -198,7 +198,7 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
   };
 
   const handleClearQueue = async (): Promise<void> => {
-    const confirmed = window.confirm("Очистить очередь и снять зависшие pending-заявки?");
+    const confirmed = window.confirm(CONFIRM_CLEAR_QUEUE);
     if (!confirmed) {
       return;
     }
@@ -219,9 +219,7 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
   };
 
   const handleResetAll = async (): Promise<void> => {
-    const confirmed = window.confirm(
-      "Полностью очистить тестовый runtime? Это удалит тиражи, очередь, билеты, уведомления и историю тестового контура."
-    );
+    const confirmed = window.confirm(CONFIRM_RESET_RUNTIME);
     if (!confirmed) {
       return;
     }
@@ -241,8 +239,7 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
     }
   };
 
-  const openDraws = draws.filter((draw) => draw.status === "open");
-  const closedDraws = draws.filter((draw) => draw.status === "closed");
+  const unfinishedDraws = draws.filter((draw) => draw.status !== "settled");
   const settledDraws = draws.filter((draw) => draw.status === "settled");
 
   return (
@@ -289,18 +286,22 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
             void handleCreate();
           }}
           style={{
-            display: "flex",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))",
             gap: "0.75rem",
-            flexWrap: "wrap",
             alignItems: "end",
             marginTop: "0.75rem"
           }}
         >
-          <div>
+          <div style={drawCreateFieldStyle}>
             <label>
               <small>Лотерея</small>
             </label>
-            <select value={newLottery} onChange={(event) => setNewLottery(event.target.value)}>
+            <select
+              value={newLottery}
+              onChange={(event) => setNewLottery(event.target.value)}
+              style={drawCreateControlStyle}
+            >
               <option value="bolshaya-8">Большая 8</option>
               <option value="mechtallion">Мечталлион</option>
               <option value="velikolepnaya-8">Великолепная 8</option>
@@ -309,7 +310,7 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
             </select>
           </div>
 
-          <div>
+          <div style={drawCreateFieldStyle}>
             <label>
               <small>ID тиража</small>
             </label>
@@ -317,11 +318,12 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
               value={newDrawId}
               onChange={(event) => setNewDrawId(event.target.value)}
               placeholder="draw-001"
+              style={drawCreateControlStyle}
               required
             />
           </div>
 
-          <div>
+          <div style={drawCreateFieldStyle}>
             <label>
               <small>Дата и время</small>
             </label>
@@ -329,33 +331,28 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
               type="datetime-local"
               value={newDrawAt}
               onChange={(event) => setNewDrawAt(event.target.value)}
+              style={drawCreateControlStyle}
               required
             />
           </div>
 
-          <button type="submit" className="btn-primary" disabled={creating || !newDrawId || !newDrawAt}>
+          <button
+            type="submit"
+            className="btn-primary"
+            style={drawCreateControlStyle}
+            disabled={creating || !newDrawId || !newDrawAt}
+          >
             {creating ? "Создание..." : "Создать тираж"}
           </button>
         </form>
       </details>
 
       <DrawGroup
-        title={`Открытые тиражи (${openDraws.length})`}
-        emptyText="Открытых тиражей нет."
-        draws={openDraws}
+        title={`Тиражи к закрытию (${unfinishedDraws.length})`}
+        emptyText="Тиражей к закрытию нет."
+        draws={unfinishedDraws}
         onMark={handleMark}
         onClose={handleClose}
-        onSettle={handleSettle}
-        onDelete={handleDelete}
-      />
-
-      <DrawGroup
-        title={`Закрытые, ждут settlement (${closedDraws.length})`}
-        emptyText="Закрытых тиражей без публикации нет."
-        draws={closedDraws}
-        onMark={handleMark}
-        onClose={handleClose}
-        onSettle={handleSettle}
         onDelete={handleDelete}
       />
 
@@ -366,7 +363,6 @@ export function AdminDrawMonitor(props: AdminDrawMonitorProps): ReactElement {
           draws={settledDraws}
           onMark={handleMark}
           onClose={handleClose}
-          onSettle={handleSettle}
           onDelete={handleDelete}
         />
       ) : null}
@@ -380,7 +376,6 @@ function DrawGroup(props: {
   readonly draws: readonly AdminDraw[];
   readonly onMark: (requestId: string, mark: "win" | "lose") => Promise<void>;
   readonly onClose: (lotteryCode: string, drawId: string, drawAt: string) => Promise<void>;
-  readonly onSettle: (lotteryCode: string, drawId: string) => Promise<void>;
   readonly onDelete: (lotteryCode: string, drawId: string) => Promise<void>;
 }): ReactElement {
   return (
@@ -395,7 +390,6 @@ function DrawGroup(props: {
             draw={draw}
             onMark={props.onMark}
             onClose={props.onClose}
-            onSettle={props.onSettle}
             onDelete={props.onDelete}
           />
         ))
@@ -408,11 +402,10 @@ function DrawSection(props: {
   readonly draw: AdminDraw;
   readonly onMark: (requestId: string, mark: "win" | "lose") => Promise<void>;
   readonly onClose: (lotteryCode: string, drawId: string, drawAt: string) => Promise<void>;
-  readonly onSettle: (lotteryCode: string, drawId: string) => Promise<void>;
   readonly onDelete: (lotteryCode: string, drawId: string) => Promise<void>;
 }): ReactElement {
-  const { draw, onMark, onClose, onSettle, onDelete } = props;
-  const showRowActions = draw.status === "closed";
+  const { draw, onMark, onClose, onDelete } = props;
+  const showRowActions = draw.status !== "settled";
 
   return (
     <section
@@ -439,12 +432,14 @@ function DrawSection(props: {
           <p className="muted" style={{ margin: "0.35rem 0 0" }}>
             Тираж: {formatIso(draw.drawAt) ?? draw.drawAt}
             {draw.closedAt ? ` | Закрыт: ${formatIso(draw.closedAt)}` : ""}
-            {draw.settledAt ? ` | Settlement: ${formatIso(draw.settledAt)}` : ""}
+            {draw.settledAt ? ` | Опубликован: ${formatIso(draw.settledAt)}` : ""}
           </p>
         </div>
 
         <div className="actions-row">
-          <span className={`badge ${resolveDrawBadgeClass(draw.status)}`}>{formatDrawStatus(draw.status)}</span>
+          <span className={`badge ${resolveAdminDrawBadgeClass(draw.status)}`}>
+            {formatAdminDrawStatus(draw.status)}
+          </span>
           <button
             type="button"
             onClick={() => {
@@ -461,18 +456,18 @@ function DrawSection(props: {
                 void onClose(draw.lotteryCode, draw.drawId, draw.drawAt);
               }}
             >
-              Закрыть тираж
+              Закрыть и опубликовать
             </button>
           ) : null}
           {draw.status === "closed" ? (
             <button
               type="button"
-              className="btn-primary"
+              className="btn-danger"
               onClick={() => {
-                void onSettle(draw.lotteryCode, draw.drawId);
+                void onClose(draw.lotteryCode, draw.drawId, draw.drawAt);
               }}
             >
-              Опубликовать settlement
+              Завершить закрытие
             </button>
           ) : null}
         </div>
@@ -504,9 +499,9 @@ function DrawSection(props: {
                   <td className="mono">{ticket.requestId}</td>
                   <td>{ticket.userId}</td>
                   <td>{formatIso(ticket.purchasedAt)}</td>
-                  <td>{formatVerificationStatus(ticket.verificationStatus)}</td>
-                  <td>{formatAdminMark(ticket.adminResultMark)}</td>
-                  <td>{formatTicketOutcome(ticket)}</td>
+                  <td>{formatAdminDrawVerificationStatus(ticket.verificationStatus)}</td>
+                  <td>{formatAdminDrawMark(ticket.adminResultMark)}</td>
+                  <td>{formatAdminDrawTicketOutcome(ticket)}</td>
                   {showRowActions ? (
                     <td>
                       <div className="actions-row">
@@ -540,28 +535,6 @@ function DrawSection(props: {
   );
 }
 
-function formatDrawStatus(status: AdminDraw["status"]): string {
-  switch (status) {
-    case "open":
-      return "Открыт";
-    case "closed":
-      return "Закрыт";
-    case "settled":
-      return "Опубликован";
-  }
-}
-
-function resolveDrawBadgeClass(status: AdminDraw["status"]): string {
-  switch (status) {
-    case "open":
-      return "warning";
-    case "closed":
-      return "warning";
-    case "settled":
-      return "success";
-  }
-}
-
 function formatIso(value: string | null | undefined): string | null {
   if (!value) {
     return null;
@@ -580,63 +553,4 @@ function formatIso(value: string | null | undefined): string | null {
     minute: "2-digit",
     second: "2-digit"
   });
-}
-
-function formatVerificationStatus(status: AdminDrawTicket["verificationStatus"]): string {
-  switch (status) {
-    case "pending":
-      return "Скрыт до settlement";
-    case "verified":
-      return "Опубликован";
-    case "failed":
-      return "Ошибка проверки";
-    default:
-      return status;
-  }
-}
-
-function formatAdminMark(mark: AdminDrawTicket["adminResultMark"]): string {
-  if (mark === "win") {
-    return "Выигрыш";
-  }
-
-  if (mark === "lose") {
-    return "Проигрыш";
-  }
-
-  return "Не задана";
-}
-
-function formatTicketOutcome(ticket: AdminDrawTicket): string {
-  if (ticket.verificationStatus === "pending") {
-    return ticket.adminResultMark === "win"
-      ? "Будет выигрышным"
-      : ticket.adminResultMark === "lose"
-        ? "Будет проигрышным"
-        : "Ещё не решён";
-  }
-
-  if (ticket.verificationStatus === "failed") {
-    return "Проверка завершилась ошибкой";
-  }
-
-  if ((ticket.winningAmountMinor ?? 0) > 0) {
-    return `Выигрыш ${formatMinorAsRub(ticket.winningAmountMinor ?? 0)}`;
-  }
-
-  if (ticket.resultSource === "admin_emulated") {
-    return "Проигрыш по settlement";
-  }
-
-  return "Проигрыш";
-}
-
-function formatMinorAsRub(amountMinor: number): string {
-  const amount = amountMinor / 100;
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: "RUB",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(amount);
 }

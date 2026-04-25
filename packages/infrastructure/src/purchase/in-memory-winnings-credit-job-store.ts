@@ -13,6 +13,10 @@ export class InMemoryWinningsCreditJobStore implements WinningsCreditJobStore {
     return this.jobs.find((j) => j.ticketId === ticketId) ?? null;
   }
 
+  async listJobs(): Promise<readonly WinningsCreditJob[]> {
+    return [...this.jobs].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
   async listQueuedJobs(): Promise<readonly WinningsCreditJob[]> {
     return this.jobs.filter((j) => j.status === "queued");
   }

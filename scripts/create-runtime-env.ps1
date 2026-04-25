@@ -23,7 +23,7 @@ param(
   [Parameter(Mandatory = $false)]
   [string]$TerminalBrowserUrl = "http://127.0.0.1:9222",
   [Parameter(Mandatory = $false)]
-  [string]$TerminalPageUrl = "https://webapp.cloud.nationallottery.ru/",
+  [string]$TerminalPageUrl = "",
   [Parameter(Mandatory = $false)]
   [switch]$Force
 )

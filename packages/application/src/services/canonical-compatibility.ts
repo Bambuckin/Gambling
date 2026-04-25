@@ -13,6 +13,15 @@ export interface CanonicalRequestProjection {
   readonly attemptCount: number;
 }
 
+export function buildCanonicalTicketId(purchaseId: string): string {
+  const normalizedPurchaseId = purchaseId.trim();
+  if (!normalizedPurchaseId) {
+    throw new Error("purchaseId is required");
+  }
+
+  return `canonical:${normalizedPurchaseId}`;
+}
+
 export function buildCanonicalAttemptMap(
   attempts: readonly PurchaseAttemptRecord[]
 ): Map<string, readonly PurchaseAttemptRecord[]> {

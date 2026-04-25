@@ -1,10 +1,9 @@
 import {
-  type CanonicalDrawStore,
   type CanonicalPurchaseStore,
   DrawRefreshService,
-  PurchaseCompletionService,
   PurchaseExecutionQueueService,
   type PurchaseAttemptStore,
+  type PurchaseQueueTransport,
   type PurchaseQueueStore,
   type PurchaseRequestStore,
   SystemTimeSource,
@@ -13,21 +12,14 @@ import {
   TerminalRetryService,
   TicketClaimService,
   type TicketStore,
-  type TicketVerificationJobStore,
-  TicketVerificationResultService,
   TicketPersistenceService,
-  TicketVerificationQueueService,
   type WinningsCreditJobStore,
   WinningsCreditService,
   WalletLedgerService,
   type TerminalExecutionResult
 } from "@lottery/application";
-import type { LotteryPurchaseCompletionMode } from "@lottery/domain";
 import {
-  createDefaultLotteryRegistryEntries,
   InMemoryCanonicalPurchaseStore,
-  InMemoryCanonicalDrawStore,
-  InMemoryDrawClosureStore,
   InMemoryDrawStore,
   InMemoryLedgerStore,
   InMemoryNotificationStore,
@@ -36,20 +28,16 @@ import {
   InMemoryPurchaseRequestStore,
   InMemoryTerminalExecutionLock,
   InMemoryTicketStore,
-  InMemoryTicketVerificationJobStore,
   InMemoryWinningsCreditJobStore,
-  PostgresDrawClosureStore,
   PostgresDrawStore,
   PostgresLedgerStore,
   PostgresNotificationStore,
   PostgresCanonicalPurchaseStore,
-  PostgresCanonicalDrawStore,
   PostgresPurchaseAttemptStore,
   PostgresPurchaseQueueStore,
   PostgresPurchaseRequestStore,
   PostgresTerminalExecutionLock,
   PostgresTicketStore,
-  PostgresTicketVerificationJobStore,
   PostgresWinningsCreditJobStore
 } from "@lottery/infrastructure";
 import { Big8LiveDrawProvider } from "./lib/big8-live-draw-provider.js";
@@ -63,9 +51,9 @@ const workerEnvPath = loadWorkerEnvFromFile();
 const WORKER_ID = "terminal-worker";
 const rawPollIntervalMs = Number(process.env.LOTTERY_TERMINAL_POLL_INTERVAL_MS ?? 3000);
 const POLL_INTERVAL_MS = Number.isFinite(rawPollIntervalMs) && rawPollIntervalMs >= 250 ? rawPollIntervalMs : 3000;
-const rawDrawSyncIntervalMs = Number(process.env.LOTTERY_BIG8_DRAW_SYNC_INTERVAL_MS ?? 20000);
+const rawDrawSyncIntervalMs = Number(process.env.LOTTERY_BIG8_DRAW_SYNC_INTERVAL_MS ?? 5000);
 const DRAW_SYNC_INTERVAL_MS =
-  Number.isFinite(rawDrawSyncIntervalMs) && rawDrawSyncIntervalMs >= 1000 ? rawDrawSyncIntervalMs : 20000;
+  Number.isFinite(rawDrawSyncIntervalMs) && rawDrawSyncIntervalMs >= 1000 ? rawDrawSyncIntervalMs : 5000;
 const bootTimestamp = new Date().toISOString();
 const timeSource = new SystemTimeSource();
 const big8TerminalMode = (process.env.LOTTERY_BIG8_TERMINAL_MODE ?? "mock").trim().toLowerCase();
@@ -75,23 +63,15 @@ const storageBackend = getWorkerStorageBackend();
 const postgresPool = storageBackend === "postgres" ? getWorkerPostgresPool() : null;
 const drawStore =
   storageBackend === "postgres" && postgresPool ? new PostgresDrawStore(postgresPool) : new InMemoryDrawStore();
-const drawClosureStore =
-  storageBackend === "postgres" && postgresPool
-    ? new PostgresDrawClosureStore(postgresPool)
-    : new InMemoryDrawClosureStore();
 const requestStore: PurchaseRequestStore =
   storageBackend === "postgres" && postgresPool
     ? new PostgresPurchaseRequestStore(postgresPool)
     : new InMemoryPurchaseRequestStore();
-const canonicalDrawStore: CanonicalDrawStore =
-  storageBackend === "postgres" && postgresPool
-    ? new PostgresCanonicalDrawStore(postgresPool)
-    : new InMemoryCanonicalDrawStore();
 const canonicalPurchaseStore: CanonicalPurchaseStore =
   storageBackend === "postgres" && postgresPool
     ? new PostgresCanonicalPurchaseStore(postgresPool)
     : new InMemoryCanonicalPurchaseStore();
-const queueStore: PurchaseQueueStore =
+const queueStore: PurchaseQueueStore & PurchaseQueueTransport =
   storageBackend === "postgres" && postgresPool
     ? new PostgresPurchaseQueueStore(postgresPool)
     : new InMemoryPurchaseQueueStore();
@@ -117,10 +97,6 @@ const notificationStore =
   storageBackend === "postgres" && postgresPool
     ? new PostgresNotificationStore(postgresPool)
     : new InMemoryNotificationStore();
-const verificationJobStore: TicketVerificationJobStore =
-  storageBackend === "postgres" && postgresPool
-    ? new PostgresTicketVerificationJobStore(postgresPool)
-    : new InMemoryTicketVerificationJobStore();
 const winningsCreditJobStore: WinningsCreditJobStore =
   storageBackend === "postgres" && postgresPool
     ? new PostgresWinningsCreditJobStore(postgresPool)
@@ -135,7 +111,8 @@ const drawRefreshService = new DrawRefreshService({
 });
 const ticketPersistenceService = new TicketPersistenceService({
   ticketStore,
-  notificationStore
+  notificationStore,
+  persistLegacyTicket: false
 });
 const big8LiveDrawProvider = new Big8LiveDrawProvider({
   ...(process.env.LOTTERY_TERMINAL_BROWSER_URL
@@ -158,23 +135,11 @@ const attemptService = new TerminalExecutionAttemptService({
   queueStore,
   canonicalPurchaseStore,
   purchaseAttemptStore,
-  ticketPersistenceService
+  ticketPersistenceService,
+  walletLedgerService
 });
 const retryService = new TerminalRetryService({
   maxAttempts: 3
-});
-const verificationQueueService = new TicketVerificationQueueService({
-  ticketStore,
-  jobStore: verificationJobStore,
-  drawClosureStore,
-  canonicalDrawStore,
-  timeSource
-});
-const verificationResultService = new TicketVerificationResultService({
-  ticketStore,
-  purchaseRequestStore: requestStore,
-  walletLedgerService,
-  timeSource
 });
 const ticketClaimService = new TicketClaimService({ ticketStore });
 const winningsCreditService = new WinningsCreditService({
@@ -185,17 +150,6 @@ const winningsCreditService = new WinningsCreditService({
   timeSource
 });
 const handlerRuntime = new TerminalHandlerRuntime();
-const completionService = new PurchaseCompletionService({
-  requestStore,
-  canonicalPurchaseStore,
-  ticketPersistenceService,
-  timeSource
-});
-const completionModeByLotteryCode = new Map<string, LotteryPurchaseCompletionMode>(
-  createDefaultLotteryRegistryEntries()
-    .filter((entry) => entry.purchaseCompletionMode)
-    .map((entry) => [entry.lotteryCode, entry.purchaseCompletionMode!])
-);
 
 let state: WorkerBootState = "booting";
 let isPolling = false;
@@ -222,8 +176,6 @@ async function pollQueueForExecution(): Promise<void> {
       workerId: WORKER_ID
     });
     if (!reservation) {
-      await repairPendingCartCompletions();
-      await processTicketVerificationQueue();
       await processCreditQueue();
       return;
     }
@@ -277,23 +229,6 @@ async function pollQueueForExecution(): Promise<void> {
       `[terminal-worker] attempt recorded request=${attemptRecord.request.snapshot.requestId} outcome=${attemptRecord.request.state}${attemptRecord.ticket ? ` ticket=${attemptRecord.ticket.ticketId}` : ""}`
     );
 
-    if (attemptRecord.request.state === "added_to_cart") {
-      const completionMode = completionModeByLotteryCode.get(reservation.request.snapshot.lotteryCode);
-      if (completionMode) {
-        const completionResult = await completionService.completeAfterCartStage({
-          request: attemptRecord.request,
-          completionMode,
-          cartExternalReference: terminalResult.externalTicketReference ?? null
-        });
-        if (completionResult.completed) {
-          console.log(
-            `[terminal-worker] purchase completion request=${completionResult.request.snapshot.requestId} mode=${completionMode}${completionResult.ticket ? ` ticket=${completionResult.ticket.ticketId}` : ""}`
-          );
-        }
-      }
-    }
-
-    await processTicketVerificationQueue();
     await processCreditQueue();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -303,66 +238,6 @@ async function pollQueueForExecution(): Promise<void> {
       workerId: WORKER_ID
     });
     isPolling = false;
-  }
-}
-
-async function processTicketVerificationQueue(): Promise<void> {
-  const enqueueResult = await verificationQueueService.enqueuePendingVerificationTickets();
-  if (enqueueResult.enqueuedCount > 0) {
-    console.log(
-      `[terminal-worker] verification jobs enqueued pending=${enqueueResult.pendingCount} enqueued=${enqueueResult.enqueuedCount}`
-    );
-  }
-
-  const verificationJob = await verificationQueueService.reserveNextVerificationJob({
-    workerId: WORKER_ID
-  });
-  if (!verificationJob) {
-    return;
-  }
-
-  const result = await handlerRuntime.verifyTicketResult({
-    lotteryCode: verificationJob.lotteryCode,
-    drawId: verificationJob.drawId,
-    externalTicketReference: verificationJob.externalReference
-  });
-  const verificationEventId = `${verificationJob.jobId}:attempt:${verificationJob.attemptCount}`;
-
-  try {
-    const recorded = await verificationResultService.recordVerificationResult({
-      ticketId: verificationJob.ticketId,
-      verificationEventId,
-      terminalStatus: result.status,
-      winningAmountMinor: result.winningAmountMinor,
-      rawOutput: result.rawTerminalOutput
-    });
-
-    if (result.status === "error") {
-      await verificationQueueService.markVerificationJobError(verificationJob.jobId, {
-        error: "terminal verification error",
-        rawTerminalOutput: result.rawTerminalOutput
-      });
-      console.warn(
-        `[terminal-worker] verification job failed job=${verificationJob.jobId} status=${result.status}`
-      );
-      return;
-    }
-
-    await verificationQueueService.markVerificationJobDone(verificationJob.jobId, {
-      rawTerminalOutput: result.rawTerminalOutput
-    });
-    console.log(
-      `[terminal-worker] verification job done job=${verificationJob.jobId} status=${result.status} ticket=${recorded.ticket.ticketId} replayed=${recorded.replayed}`
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await verificationQueueService.markVerificationJobError(verificationJob.jobId, {
-      error: message,
-      rawTerminalOutput: result.rawTerminalOutput
-    });
-    console.warn(
-      `[terminal-worker] verification result apply failed job=${verificationJob.jobId} message=${message}`
-    );
   }
 }
 
@@ -377,31 +252,6 @@ async function processCreditQueue(): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[terminal-worker] credit job processing failed: ${message}`);
-  }
-}
-
-async function repairPendingCartCompletions(): Promise<void> {
-  const requests = await requestStore.listRequests();
-  const pendingCompletions = requests.filter((request) => {
-    const completionMode = completionModeByLotteryCode.get(request.snapshot.lotteryCode);
-    if (completionMode !== "emulate_after_cart") {
-      return false;
-    }
-
-    return request.state === "added_to_cart" || request.state === "success";
-  });
-
-  for (const request of pendingCompletions) {
-    const completionResult = await completionService.completeAfterCartStage({
-      request,
-      completionMode: "emulate_after_cart",
-      cartExternalReference: null
-    });
-    if (completionResult.completed) {
-      console.log(
-        `[terminal-worker] repaired cart completion request=${completionResult.request.snapshot.requestId}${completionResult.ticket ? ` ticket=${completionResult.ticket.ticketId}` : ""}`
-      );
-    }
   }
 }
 
@@ -497,6 +347,9 @@ function resolveTerminalOutcome(input: {
 }): TerminalExecutionResult["nextState"] {
   if (input.executionOutcome === "added_to_cart") {
     return "added_to_cart";
+  }
+  if (input.executionOutcome === "ticket_purchased") {
+    return "success";
   }
 
   return classifyTerminalOutcome(input.rawTerminalOutput);

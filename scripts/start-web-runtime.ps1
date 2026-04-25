@@ -123,6 +123,18 @@ function Stop-LotteryWebProcess {
   Wait-ForPortRelease -Port $Port
 }
 
+function Write-WebEntryPoints {
+  param(
+    [Parameter(Mandatory = $true)]
+    [int]$Port
+  )
+
+  Write-Host "[web] login:    http://127.0.0.1:$Port/login"
+  Write-Host "[web] admin:    http://127.0.0.1:$Port/admin"
+  Write-Host "[web] receiver: http://127.0.0.1:$Port/terminal/receiver"
+  Write-Host "[web] lottery:  http://127.0.0.1:$Port/lottery/bolshaya-8"
+}
+
 function Is-LotteryWebProcess {
   param(
     [Parameter(Mandatory = $true)]
@@ -185,6 +197,7 @@ if ($listener) {
   } elseif ($endpointHealthy -or $isLotteryWebProcess) {
     $displayCssPath = if ($runningCssPath) { $runningCssPath } else { "unknown" }
     Write-Host "[web] server already running on http://127.0.0.1:$port (pid=$($listener.OwningProcess), css=$displayCssPath, build=$currentBuildId)"
+    Write-WebEntryPoints -Port $port
     return
   }
 }
@@ -192,6 +205,9 @@ if ($listener) {
 if ($listener) {
   throw "port $port is already occupied by another process (pid=$($listener.OwningProcess))"
 }
+
+Write-Host "[web] starting production server on port $port"
+Write-WebEntryPoints -Port $port
 
 corepack pnpm start:web
 if ($LASTEXITCODE -ne 0) {

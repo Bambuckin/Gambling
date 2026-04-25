@@ -4,16 +4,19 @@ import {
   createAwaitingConfirmationRequest,
   createSubmittedCanonicalPurchase,
   type CanonicalPurchaseRecord,
+  type LedgerEntry,
   type NotificationRecord
 } from "@lottery/domain";
 import { describe, expect, it } from "vitest";
 import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
+import type { LedgerStore } from "../ports/ledger-store.js";
 import type { NotificationStore } from "../ports/notification-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
 import type { TimeSource } from "../ports/time-source.js";
 import { PurchaseCompletionService } from "../services/purchase-completion-service.js";
 import { TicketPersistenceService } from "../services/ticket-persistence-service.js";
+import { WalletLedgerService, type WalletLedgerEntryFactory } from "../services/wallet-ledger-service.js";
 
 describe("PurchaseCompletionService", () => {
   it("completes added_to_cart request with emulate_after_cart mode", async () => {
@@ -103,21 +106,77 @@ describe("PurchaseCompletionService", () => {
       status: "awaiting_draw_close"
     });
   });
+
+  it("debits reserved funds when cart-stage completion persists the purchased ticket", async () => {
+    const ticketStore = new StubTicketStore();
+    const requestStore = new StubPurchaseRequestStore();
+    const walletLedgerService = createWalletLedgerService();
+    await walletLedgerService.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 100_000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit",
+      reference: {
+        requestId: "seed-user-credit"
+      },
+      createdAt: "2026-04-16T11:50:00.000Z"
+    });
+    await walletLedgerService.reserveFunds({
+      userId: "seed-user",
+      requestId: "req-805",
+      amountMinor: 25_000,
+      currency: "RUB",
+      idempotencyKey: "req-805:reserve",
+      createdAt: "2026-04-16T11:55:00.000Z"
+    });
+    const service = createService(ticketStore, requestStore, undefined, walletLedgerService);
+    const request = createAddedToCartRequest("req-805");
+
+    const result = await service.completeAfterCartStage({
+      request,
+      completionMode: "emulate_after_cart",
+      cartExternalReference: "cart-ref-805"
+    });
+
+    expect(result.completed).toBe(true);
+    await expect(walletLedgerService.getWalletSnapshot("seed-user", "RUB")).resolves.toEqual({
+      userId: "seed-user",
+      availableMinor: 75_000,
+      reservedMinor: 0,
+      currency: "RUB"
+    });
+    expect((await walletLedgerService.listEntries("seed-user")).map((entry) => entry.idempotencyKey)).toEqual([
+      "seed-user-credit",
+      "req-805:reserve",
+      "req-805:purchase-debit"
+    ]);
+  });
 });
 
 function createService(
   ticketStore: StubTicketStore,
   requestStore: PurchaseRequestStore = new StubPurchaseRequestStore(),
-  canonicalPurchaseStore?: CanonicalPurchaseStore
+  canonicalPurchaseStore?: CanonicalPurchaseStore,
+  walletLedgerService?: Pick<WalletLedgerService, "debitReservedFunds">
 ): PurchaseCompletionService {
   return new PurchaseCompletionService({
     requestStore,
     ...(canonicalPurchaseStore ? { canonicalPurchaseStore } : {}),
+    ...(walletLedgerService ? { walletLedgerService } : {}),
     ticketPersistenceService: new TicketPersistenceService({
       ticketStore,
       notificationStore: new StubNotificationStore()
     }),
     timeSource: new StubTimeSource()
+  });
+}
+
+function createWalletLedgerService(): WalletLedgerService {
+  return new WalletLedgerService({
+    ledgerStore: new StubLedgerStore(),
+    timeSource: new StubTimeSource(),
+    entryFactory: new SequentialLedgerEntryFactory()
   });
 }
 
@@ -219,6 +278,35 @@ class StubCanonicalPurchaseStore implements CanonicalPurchaseStore {
   async clearAll(): Promise<void> {}
 }
 
+class StubLedgerStore implements LedgerStore {
+  private entries: LedgerEntry[] = [];
+
+  async listEntries(): Promise<readonly LedgerEntry[]> {
+    return this.entries.map(cloneLedgerEntry);
+  }
+
+  async listEntriesByUser(userId: string): Promise<readonly LedgerEntry[]> {
+    return this.entries.filter((entry) => entry.userId === userId).map(cloneLedgerEntry);
+  }
+
+  async appendEntry(entry: LedgerEntry): Promise<void> {
+    this.entries = [...this.entries, cloneLedgerEntry(entry)];
+  }
+
+  async clearAll(): Promise<void> {
+    this.entries = [];
+  }
+}
+
+class SequentialLedgerEntryFactory implements WalletLedgerEntryFactory {
+  private index = 0;
+
+  nextEntryId(): string {
+    this.index += 1;
+    return `ledger-${this.index}`;
+  }
+}
+
 function createAddedToCartRequest(requestId: string) {
   const executing = createExecutingRequest(requestId);
   return appendPurchaseRequestTransition(executing, "added_to_cart", {
@@ -277,6 +365,13 @@ function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): Canonica
     settledAt: record.settledAt,
     externalTicketReference: record.externalTicketReference,
     journal: record.journal.map((entry) => ({ ...entry }))
+  };
+}
+
+function cloneLedgerEntry(entry: LedgerEntry): LedgerEntry {
+  return {
+    ...entry,
+    reference: { ...entry.reference }
   };
 }
 

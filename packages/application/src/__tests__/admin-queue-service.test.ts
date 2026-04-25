@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { LedgerEntry, PurchaseRequestRecord } from "@lottery/domain";
-import { appendPurchaseRequestTransition, createAwaitingConfirmationRequest } from "@lottery/domain";
+import type { CanonicalPurchaseRecord, LedgerEntry, PurchaseRequestRecord } from "@lottery/domain";
+import {
+  appendCanonicalPurchaseTransition,
+  appendPurchaseRequestTransition,
+  createAwaitingConfirmationRequest,
+  createSubmittedCanonicalPurchase
+} from "@lottery/domain";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { LedgerStore } from "../ports/ledger-store.js";
+import type { PurchaseQueueTransport } from "../ports/purchase-queue-transport.js";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TimeSource } from "../ports/time-source.js";
@@ -62,6 +69,108 @@ describe("AdminQueueService", () => {
     expect(snapshot.adminPriorityQueuedCount).toBe(1);
     expect(snapshot.rows.map((row) => row.requestId)).toEqual(["req-403", "req-402", "req-401"]);
     expect(snapshot.rows.map((row) => row.executionOrder)).toEqual([null, 1, 2]);
+  });
+
+  it("prefers canonical request state for queued rows when canonical truth exists", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([
+      createQueuedRequest({
+        requestId: "req-406",
+        userId: "seed-user",
+        amountMinor: 100
+      })
+    ]);
+    const queueStore = new InMemoryPurchaseQueueStore([
+      createQueueItem({
+        requestId: "req-406",
+        priority: "regular",
+        status: "queued",
+        enqueuedAt: "2026-04-05T20:05:00.000Z"
+      })
+    ]);
+    const service = createAdminQueueService({
+      requestStore,
+      queueStore,
+      canonicalPurchases: [
+        appendCanonicalPurchaseTransition(
+          appendCanonicalPurchaseTransition(
+            createSubmittedCanonicalPurchase({
+              purchaseId: "purchase-406",
+              legacyRequestId: "req-406",
+              userId: "seed-user",
+              lotteryCode: "demo-lottery",
+              drawId: "draw-100",
+              payload: { draw_count: 1 },
+              costMinor: 100,
+              currency: "RUB",
+              submittedAt: "2026-04-05T20:00:00.000Z"
+            }),
+            "queued",
+            {
+              eventId: "purchase-406:queued",
+              occurredAt: "2026-04-05T20:01:00.000Z"
+            }
+          ),
+          "processing",
+          {
+            eventId: "purchase-406:processing",
+            occurredAt: "2026-04-05T20:03:00.000Z"
+          }
+        )
+      ]
+    });
+
+    const snapshot = await service.getQueueSnapshot();
+
+    expect(snapshot.rows).toEqual([
+      expect.objectContaining({
+        requestId: "req-406",
+        requestState: "executing"
+      })
+    ]);
+  });
+
+  it("fills request state from canonical purchases when queue item has no legacy request row", async () => {
+    const queueStore = new InMemoryPurchaseQueueStore([
+      createQueueItem({
+        requestId: "req-407",
+        priority: "regular",
+        status: "executing",
+        enqueuedAt: "2026-04-05T20:05:00.000Z"
+      })
+    ]);
+    const service = createAdminQueueService({
+      requestStore: new InMemoryPurchaseRequestStore([]),
+      queueStore,
+      canonicalPurchases: [
+        appendCanonicalPurchaseTransition(
+          createSubmittedCanonicalPurchase({
+            purchaseId: "purchase-407",
+            legacyRequestId: "req-407",
+            userId: "seed-user",
+            lotteryCode: "demo-lottery",
+            drawId: "draw-100",
+            payload: { draw_count: 1 },
+            costMinor: 100,
+            currency: "RUB",
+            submittedAt: "2026-04-05T20:00:00.000Z"
+          }),
+          "queued",
+          {
+            eventId: "purchase-407:queued",
+            occurredAt: "2026-04-05T20:01:00.000Z"
+          }
+        )
+      ]
+    });
+
+    const snapshot = await service.getQueueSnapshot();
+
+    expect(snapshot.rows).toEqual([
+      expect.objectContaining({
+        requestId: "req-407",
+        requestState: "queued"
+      })
+    ]);
   });
 
   it("sets queued request priority through orchestration boundary", async () => {
@@ -132,12 +241,18 @@ describe("AdminQueueService", () => {
 
 function createAdminQueueService(input: {
   readonly requestStore: PurchaseRequestStore;
-  readonly queueStore: PurchaseQueueStore;
+  readonly queueStore: PurchaseQueueStore & PurchaseQueueTransport;
   readonly walletLedgerService?: WalletLedgerService;
+  readonly canonicalPurchases?: readonly CanonicalPurchaseRecord[];
 }): AdminQueueService {
   return new AdminQueueService({
     requestStore: input.requestStore,
     queueStore: input.queueStore,
+    ...(input.canonicalPurchases
+      ? {
+          canonicalPurchaseStore: new InMemoryCanonicalPurchaseStore(input.canonicalPurchases)
+        }
+      : {}),
     purchaseOrchestrationService: new PurchaseOrchestrationService({
       requestStore: input.requestStore,
       queueStore: input.queueStore,
@@ -269,6 +384,59 @@ class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
     return item ? { ...item } : null;
   }
 
+  async listSnapshot(): Promise<readonly PurchaseQueueItem[]> {
+    return this.listQueueItems();
+  }
+
+  async getByRequestId(requestId: string): Promise<PurchaseQueueItem | null> {
+    return this.getQueueItemByRequestId(requestId);
+  }
+
+  async enqueue(item: PurchaseQueueItem): Promise<void> {
+    await this.saveQueueItem(item);
+  }
+
+  async reserve(requestId: string): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing || existing.status !== "queued") {
+      return null;
+    }
+
+    const nextItem: PurchaseQueueItem = {
+      ...existing,
+      attemptCount: existing.attemptCount + 1,
+      status: "executing"
+    };
+    await this.saveQueueItem(nextItem);
+    return nextItem;
+  }
+
+  async requeue(requestId: string): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing) {
+      return null;
+    }
+
+    const nextItem = existing.status === "queued" ? existing : { ...existing, status: "queued" as const };
+    await this.saveQueueItem(nextItem);
+    return nextItem;
+  }
+
+  async reprioritize(requestId: string, priority: PurchaseQueueItem["priority"]): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing) {
+      return null;
+    }
+
+    const nextItem = existing.priority === priority ? existing : { ...existing, priority };
+    await this.saveQueueItem(nextItem);
+    return nextItem;
+  }
+
+  async complete(requestId: string): Promise<void> {
+    await this.removeQueueItem(requestId);
+  }
+
   async saveQueueItem(item: PurchaseQueueItem): Promise<void> {
     const filtered = this.items.filter((entry) => entry.requestId !== item.requestId);
     this.items = [...filtered, { ...item }];
@@ -276,6 +444,34 @@ class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
 
   async removeQueueItem(requestId: string): Promise<void> {
     this.items = this.items.filter((entry) => entry.requestId !== requestId);
+  }
+
+  async clearAll(): Promise<void> {}
+}
+
+class InMemoryCanonicalPurchaseStore implements CanonicalPurchaseStore {
+  private readonly purchases: CanonicalPurchaseRecord[];
+
+  constructor(initialPurchases: readonly CanonicalPurchaseRecord[]) {
+    this.purchases = initialPurchases.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async listPurchases(): Promise<readonly CanonicalPurchaseRecord[]> {
+    return this.purchases.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async getPurchaseById(purchaseId: string): Promise<CanonicalPurchaseRecord | null> {
+    const purchase = this.purchases.find((entry) => entry.snapshot.purchaseId === purchaseId) ?? null;
+    return purchase ? cloneCanonicalPurchaseRecord(purchase) : null;
+  }
+
+  async getPurchaseByLegacyRequestId(legacyRequestId: string): Promise<CanonicalPurchaseRecord | null> {
+    const purchase = this.purchases.find((entry) => entry.snapshot.legacyRequestId === legacyRequestId) ?? null;
+    return purchase ? cloneCanonicalPurchaseRecord(purchase) : null;
+  }
+
+  async savePurchase(): Promise<void> {
+    throw new Error("not needed in test");
   }
 
   async clearAll(): Promise<void> {}
@@ -323,5 +519,21 @@ function cloneLedgerEntry(entry: LedgerEntry): LedgerEntry {
   return {
     ...entry,
     reference: { ...entry.reference }
+  };
+}
+
+function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): CanonicalPurchaseRecord {
+  return {
+    snapshot: {
+      ...record.snapshot,
+      payload: { ...record.snapshot.payload }
+    },
+    status: record.status,
+    resultStatus: record.resultStatus,
+    resultVisibility: record.resultVisibility,
+    purchasedAt: record.purchasedAt,
+    settledAt: record.settledAt,
+    externalTicketReference: record.externalTicketReference,
+    journal: record.journal.map((entry) => ({ ...entry }))
   };
 }

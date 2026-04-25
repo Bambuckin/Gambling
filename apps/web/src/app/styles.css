@@ -405,6 +405,10 @@ a {
   color: #1a0f30;
 }
 
+.account-summary-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .lottery-form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -557,15 +561,21 @@ th {
 
 .big8-live-note {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   font-size: 0.84rem;
   color: #7a4599;
+}
+
+.big8-live-warning {
+  color: #8f540a;
+  font-weight: 700;
 }
 
 .big8-ticket-counter {
   padding: 16px;
   display: grid;
   gap: 10px;
+  align-content: start;
 }
 
 .big8-ticket-counter span,
@@ -579,6 +589,12 @@ th {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+}
+
+.big8-counter-value {
+  min-width: 2.5ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .big8-counter-controls button,
@@ -689,6 +705,35 @@ th {
   align-content: start;
 }
 
+.purchase-facts-panel {
+  align-content: start;
+}
+
+.purchase-facts-panel > .muted {
+  max-width: 30ch;
+}
+
+.purchase-facts-panel .mini-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.purchase-facts-panel .mini-stat {
+  min-height: 104px;
+  align-content: space-between;
+}
+
+.request-status-panel {
+  align-content: start;
+}
+
+.request-status-table {
+  min-width: 680px;
+}
+
+.request-status-table td {
+  white-space: nowrap;
+}
+
 .big8-summary-list {
   display: grid;
   gap: 10px;
@@ -721,6 +766,14 @@ th {
     grid-template-columns: 1fr;
   }
 
+  .purchase-facts-panel .mini-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .main-wrap {
     padding-inline: 14px;
   }
@@ -732,5 +785,11 @@ th {
   .hero-card,
   .lottery-hero {
     padding: 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .account-summary-grid {
+    grid-template-columns: 1fr;
   }
 }

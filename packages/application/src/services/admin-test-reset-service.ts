@@ -1,4 +1,4 @@
-import { appendPurchaseRequestTransition, type PurchaseRequestRecord } from "@lottery/domain";
+import { appendPurchaseRequestTransition, type DrawSnapshot, type LedgerEntry, type PurchaseRequestRecord } from "@lottery/domain";
 import type { CanonicalDrawStore } from "../ports/canonical-draw-store.js";
 import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { DrawStore } from "../ports/draw-store.js";
@@ -33,6 +33,8 @@ export interface AdminTestResetServiceDependencies {
   readonly executionLock: TerminalExecutionLock;
   readonly walletLedgerService: WalletLedgerService;
   readonly timeSource: TimeSource;
+  readonly resetSeedDraws?: readonly DrawSnapshot[] | (() => readonly DrawSnapshot[]);
+  readonly resetSeedLedgerEntries?: readonly LedgerEntry[] | (() => readonly LedgerEntry[]);
 }
 
 export interface ClearQueueResult {
@@ -56,6 +58,8 @@ export interface ResetTestDataResult {
   readonly clearedCreditJobs: boolean;
   readonly clearedExecutionLocks: boolean;
   readonly revokedSessions: boolean;
+  readonly restoredSeedDraws: number;
+  readonly restoredSeedLedgerEntries: number;
 }
 
 export class AdminTestResetService {
@@ -75,6 +79,8 @@ export class AdminTestResetService {
   private readonly executionLock: TerminalExecutionLock;
   private readonly walletLedgerService: WalletLedgerService;
   private readonly timeSource: TimeSource;
+  private readonly resetSeedDraws: readonly DrawSnapshot[] | (() => readonly DrawSnapshot[]);
+  private readonly resetSeedLedgerEntries: readonly LedgerEntry[] | (() => readonly LedgerEntry[]);
 
   constructor(dependencies: AdminTestResetServiceDependencies) {
     this.drawStore = dependencies.drawStore;
@@ -93,6 +99,8 @@ export class AdminTestResetService {
     this.executionLock = dependencies.executionLock;
     this.walletLedgerService = dependencies.walletLedgerService;
     this.timeSource = dependencies.timeSource;
+    this.resetSeedDraws = dependencies.resetSeedDraws ?? [];
+    this.resetSeedLedgerEntries = dependencies.resetSeedLedgerEntries ?? [];
   }
 
   async clearQueue(): Promise<ClearQueueResult> {
@@ -151,6 +159,16 @@ export class AdminTestResetService {
     await this.executionLock.clearAll();
     await this.sessionStore.revokeAll(this.timeSource.nowIso());
 
+    const seedDraws = this.resolveSeedDraws();
+    for (const snapshot of seedDraws) {
+      await this.drawStore.upsertSnapshot(snapshot);
+    }
+
+    const seedLedgerEntries = this.resolveSeedLedgerEntries();
+    for (const entry of seedLedgerEntries) {
+      await this.ledgerStore.appendEntry(entry);
+    }
+
     return {
       clearedDraws: true,
       clearedRequests: true,
@@ -165,8 +183,29 @@ export class AdminTestResetService {
       clearedCashDeskRequests: true,
       clearedCreditJobs: true,
       clearedExecutionLocks: true,
-      revokedSessions: true
+      revokedSessions: true,
+      restoredSeedDraws: seedDraws.length,
+      restoredSeedLedgerEntries: seedLedgerEntries.length
     };
+  }
+
+  private resolveSeedDraws(): readonly DrawSnapshot[] {
+    const value = typeof this.resetSeedDraws === "function" ? this.resetSeedDraws() : this.resetSeedDraws;
+    return value.map((snapshot) => ({
+      ...snapshot,
+      ...(snapshot.availableDraws ? { availableDraws: snapshot.availableDraws.map((draw) => ({ ...draw })) } : {})
+    }));
+  }
+
+  private resolveSeedLedgerEntries(): readonly LedgerEntry[] {
+    const value =
+      typeof this.resetSeedLedgerEntries === "function"
+        ? this.resetSeedLedgerEntries()
+        : this.resetSeedLedgerEntries;
+    return value.map((entry) => ({
+      ...entry,
+      reference: { ...entry.reference }
+    }));
   }
 
   private async releaseRequestForTestReset(request: PurchaseRequestRecord): Promise<boolean> {

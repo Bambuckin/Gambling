@@ -1,4 +1,4 @@
-import type { DemoIdentitySeed } from "@lottery/domain";
+import type { DemoIdentitySeed, LedgerEntry } from "@lottery/domain";
 
 export interface DemoIdentityLedgerSeed {
   readonly identityId: string;
@@ -69,6 +69,40 @@ export function listDefaultIdentitySeeds(): readonly DemoIdentitySeed[] {
 
 export function listDefaultLedgerSeeds(): readonly DemoIdentityLedgerSeed[] {
   return DEFAULT_LEDGER_SEEDS;
+}
+
+export function createDefaultLedgerEntries(now: Date = new Date()): readonly LedgerEntry[] {
+  const nowTime = now.getTime();
+  const creditSeeds = listDefaultLedgerSeeds();
+
+  const creditEntries = creditSeeds.map((seed, index): LedgerEntry => ({
+    entryId: seed.entryId,
+    userId: seed.identityId,
+    operation: "credit",
+    amountMinor: seed.amountMinor,
+    currency: "RUB",
+    idempotencyKey: seed.idempotencyKey,
+    reference: {
+      requestId: seed.idempotencyKey
+    },
+    createdAt: new Date(nowTime - (creditSeeds.length - index + 1) * 60 * 1000).toISOString()
+  }));
+
+  return [
+    ...creditEntries,
+    {
+      entryId: "seed-tester-reserve",
+      userId: "seed-tester",
+      operation: "reserve",
+      amountMinor: 20_000,
+      currency: "RUB",
+      idempotencyKey: "seed-tester-reserve",
+      reference: {
+        requestId: "seed-tester-reserve"
+      },
+      createdAt: new Date(nowTime - 60 * 1000).toISOString()
+    }
+  ];
 }
 
 export function isUserSeed(seed: DemoIdentitySeed): boolean {

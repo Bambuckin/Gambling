@@ -8,7 +8,9 @@ export function getTicketQueryService(): TicketQueryService {
     const stores = getPurchaseRuntimeStores();
     cachedTicketQueryService = new TicketQueryService({
       ticketStore: stores.ticketStore,
-      canonicalPurchaseStore: stores.canonicalPurchaseStore
+      canonicalPurchaseStore: stores.canonicalPurchaseStore,
+      cashDeskRequestStore: stores.cashDeskRequestStore,
+      winningsCreditJobStore: stores.winningsCreditJobStore
     });
   }
 

@@ -1,6 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { hashAccessPassword, listDefaultIdentitySeeds, listDefaultLedgerSeeds } from "@lottery/infrastructure";
+import {
+  createDefaultLedgerEntries,
+  hashAccessPassword,
+  listDefaultIdentitySeeds,
+  selectSeedDrawSnapshots
+} from "@lottery/infrastructure";
 import {
   createDefaultDrawSnapshots,
   createDefaultLotteryRegistryEntries,
@@ -81,8 +86,9 @@ async function main(): Promise<void> {
   }
 
   const drawSnapshots = await drawStore.listSnapshots();
-  if (drawSnapshots.length === 0) {
-    for (const snapshot of defaultDrawSnapshots()) {
+  const seedDrawSnapshots = selectSeedDrawSnapshots(drawSnapshots, defaultDrawSnapshots());
+  if (seedDrawSnapshots.length > 0) {
+    for (const snapshot of seedDrawSnapshots) {
       await drawStore.upsertSnapshot(snapshot);
     }
     console.log("[bootstrap] seeded draw snapshots");
@@ -91,11 +97,13 @@ async function main(): Promise<void> {
   }
 
   const ledgerEntries = await ledgerStore.listEntries();
-  if (ledgerEntries.length === 0) {
-    for (const entry of defaultLedgerEntries()) {
+  const existingLedgerKeys = new Set(ledgerEntries.map((entry) => entry.idempotencyKey));
+  const missingLedgerEntries = defaultLedgerEntries().filter((entry) => !existingLedgerKeys.has(entry.idempotencyKey));
+  if (missingLedgerEntries.length > 0) {
+    for (const entry of missingLedgerEntries) {
       await ledgerStore.appendEntry(entry);
     }
-    console.log("[bootstrap] seeded ledger entries");
+    console.log(`[bootstrap] ensured ledger entries (${missingLedgerEntries.length} added)`);
   } else {
     console.log(`[bootstrap] ledger entries already present (${ledgerEntries.length})`);
   }
@@ -185,7 +193,6 @@ async function truncateSeededTables(pool: ReturnType<typeof getPostgresPool>): P
 
 async function resetRuntimeTables(pool: ReturnType<typeof getPostgresPool>): Promise<void> {
   await pool.query(`
-    delete from lottery_terminal_execution_locks;
     delete from lottery_operations_audit_events;
     delete from lottery_access_audit_events;
     delete from lottery_notifications;
@@ -216,38 +223,7 @@ function defaultDrawSnapshots(): readonly DrawSnapshot[] {
 }
 
 function defaultLedgerEntries(): readonly LedgerEntry[] {
-  const now = Date.now();
-  const ledgerSeeds = listDefaultLedgerSeeds();
-  const extraEntries: readonly LedgerEntry[] = [
-    {
-      entryId: "seed-tester-reserve",
-      userId: "seed-tester",
-      operation: "reserve",
-      amountMinor: 20_000,
-      currency: "RUB",
-      idempotencyKey: "seed-tester-reserve",
-      reference: {
-        requestId: "seed-tester-reserve"
-      },
-      createdAt: new Date(now - 60 * 1000).toISOString()
-    }
-  ];
-
-  return [
-    ...ledgerSeeds.map((seed, index): LedgerEntry => ({
-      entryId: seed.entryId,
-      userId: seed.identityId,
-      operation: "credit",
-      amountMinor: seed.amountMinor,
-      currency: "RUB",
-      idempotencyKey: seed.idempotencyKey,
-      reference: {
-        requestId: seed.idempotencyKey
-      },
-      createdAt: new Date(now - (4 - index) * 60 * 1000).toISOString()
-    })),
-    ...extraEntries
-  ];
+  return createDefaultLedgerEntries(new Date());
 }
 
 void main().catch((error) => {

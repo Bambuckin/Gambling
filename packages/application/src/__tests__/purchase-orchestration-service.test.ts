@@ -6,6 +6,7 @@ import {
 } from "@lottery/domain";
 import type { LedgerStore } from "../ports/ledger-store.js";
 import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
+import type { PurchaseQueueTransport } from "../ports/purchase-queue-transport.js";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TimeSource } from "../ports/time-source.js";
@@ -13,7 +14,10 @@ import {
   PurchaseOrchestrationService,
   PurchaseOrchestrationServiceError
 } from "../services/purchase-orchestration-service.js";
-import { type WalletLedgerEntryFactory, WalletLedgerService } from "../services/wallet-ledger-service.js";
+import {
+  type WalletLedgerEntryFactory,
+  WalletLedgerService
+} from "../services/wallet-ledger-service.js";
 
 describe("PurchaseOrchestrationService", () => {
   it("confirms awaiting request, reserves funds, and enqueues request", async () => {
@@ -113,6 +117,120 @@ describe("PurchaseOrchestrationService", () => {
     ]);
   });
 
+  it("recovers interrupted awaiting and confirmed requests for the same user and lottery", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([
+      createAwaitingRequest({
+        requestId: "req-301a",
+        userId: "seed-user",
+        amountMinor: 100
+      }),
+      appendPurchaseRequestTransition(
+        createAwaitingRequest({
+          requestId: "req-301b",
+          userId: "seed-user",
+          amountMinor: 120
+        }),
+        "confirmed",
+        {
+          eventId: "req-301b:confirmed",
+          occurredAt: "2026-04-05T20:11:00.000Z"
+        }
+      ),
+      createAwaitingRequest({
+        requestId: "req-301c",
+        userId: "other-user",
+        amountMinor: 140
+      })
+    ]);
+    const queueStore = new InMemoryPurchaseQueueStore();
+    const walletLedgerService = createWalletLedgerService();
+    await walletLedgerService.recordEntry({
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 1000,
+      currency: "RUB",
+      idempotencyKey: "seed-user-credit",
+      reference: {
+        requestId: "seed-credit"
+      }
+    });
+
+    const service = createService({
+      requestStore,
+      queueStore,
+      walletLedgerService
+    });
+
+    const recovered = await service.recoverInterruptedRequests({
+      userId: "seed-user",
+      lotteryCode: "demo-lottery"
+    });
+
+    expect(recovered).toEqual([
+      {
+        requestId: "req-301a",
+        recovered: true,
+        replayed: false,
+        state: "queued",
+        message: null
+      },
+      {
+        requestId: "req-301b",
+        recovered: true,
+        replayed: false,
+        state: "queued",
+        message: null
+      }
+    ]);
+    await expect(requestStore.getRequestById("req-301a")).resolves.toMatchObject({
+      state: "queued"
+    });
+    await expect(requestStore.getRequestById("req-301b")).resolves.toMatchObject({
+      state: "queued"
+    });
+    await expect(requestStore.getRequestById("req-301c")).resolves.toMatchObject({
+      state: "awaiting_confirmation"
+    });
+    await expect(queueStore.listQueueItems()).resolves.toHaveLength(2);
+  });
+
+  it("reports interrupted requests that still cannot be queued without crashing recovery", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([
+      createAwaitingRequest({
+        requestId: "req-301d",
+        userId: "seed-user",
+        amountMinor: 500
+      })
+    ]);
+    const queueStore = new InMemoryPurchaseQueueStore();
+    const walletLedgerService = createWalletLedgerService();
+
+    const service = createService({
+      requestStore,
+      queueStore,
+      walletLedgerService
+    });
+
+    await expect(
+      service.recoverInterruptedRequests({
+        userId: "seed-user",
+        requestId: "req-301d"
+      })
+    ).resolves.toEqual([
+      {
+        requestId: "req-301d",
+        recovered: false,
+        replayed: false,
+        state: "awaiting_confirmation",
+        message: expect.stringContaining("reserve")
+      }
+    ]);
+    await expect(requestStore.getRequestById("req-301d")).resolves.toMatchObject({
+      state: "awaiting_confirmation"
+    });
+    await expect(queueStore.listQueueItems()).resolves.toHaveLength(0);
+  });
+
   it("rejects queueing from invalid lifecycle state", async () => {
     const canceled = appendPurchaseRequestTransition(
       createAwaitingRequest({
@@ -155,6 +273,38 @@ describe("PurchaseOrchestrationService", () => {
     await expect(action).rejects.toMatchObject({
       code: "request_state_invalid"
     });
+  });
+
+  it("does not materialize canonical purchase when reserve fails before queueing", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([
+      createAwaitingRequest({
+        requestId: "req-302-funds",
+        userId: "seed-user",
+        amountMinor: 500
+      })
+    ]);
+    const queueStore = new InMemoryPurchaseQueueStore();
+    const canonicalPurchaseStore = new InMemoryCanonicalPurchaseStore();
+    const walletLedgerService = createWalletLedgerService();
+
+    const service = createService({
+      requestStore,
+      queueStore,
+      canonicalPurchaseStore,
+      walletLedgerService
+    });
+
+    const action = service.confirmAndQueueRequest({
+      requestId: "req-302-funds",
+      userId: "seed-user"
+    });
+
+    await expect(action).rejects.toThrow("reserve");
+    await expect(canonicalPurchaseStore.getPurchaseByLegacyRequestId("req-302-funds")).resolves.toBeNull();
+    await expect(requestStore.getRequestById("req-302-funds")).resolves.toMatchObject({
+      state: "awaiting_confirmation"
+    });
+    await expect(queueStore.listQueueItems()).resolves.toHaveLength(0);
   });
 
   it("queues awaiting request as admin-priority through admin enqueue path", async () => {
@@ -389,6 +539,147 @@ describe("PurchaseOrchestrationService", () => {
     ]);
   });
 
+  it("debits stale reserve when a purchased request is no longer in the queue", async () => {
+    const purchasedRequest = appendPurchaseRequestTransition(
+      appendPurchaseRequestTransition(
+        appendPurchaseRequestTransition(
+          appendPurchaseRequestTransition(
+            createAwaitingRequest({
+              requestId: "req-reconcile-debit",
+              userId: "seed-user",
+              amountMinor: 150
+            }),
+            "confirmed",
+            {
+              eventId: "req-reconcile-debit:confirmed",
+              occurredAt: "2026-04-05T20:01:00.000Z"
+            }
+          ),
+          "queued",
+          {
+            eventId: "req-reconcile-debit:queued",
+            occurredAt: "2026-04-05T20:02:00.000Z"
+          }
+        ),
+        "executing",
+        {
+          eventId: "req-reconcile-debit:executing",
+          occurredAt: "2026-04-05T20:02:30.000Z"
+        }
+      ),
+      "success",
+      {
+        eventId: "req-reconcile-debit:success",
+        occurredAt: "2026-04-05T20:03:00.000Z"
+      }
+    );
+    const requestStore = new InMemoryPurchaseRequestStore([purchasedRequest]);
+    const queueStore = new InMemoryPurchaseQueueStore();
+    const walletLedgerService = createWalletLedgerService();
+    await seedCredit(walletLedgerService, "seed-user", 1000);
+    await walletLedgerService.reserveFunds({
+      userId: "seed-user",
+      requestId: "req-reconcile-debit",
+      amountMinor: 150,
+      currency: "RUB",
+      drawId: "draw-100",
+      idempotencyKey: "req-reconcile-debit:reserve"
+    });
+    const service = createService({
+      requestStore,
+      queueStore,
+      walletLedgerService
+    });
+
+    const result = await service.reconcileDetachedReserves({
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      currency: "RUB"
+    });
+
+    expect(result).toEqual({
+      debitedRequests: 1,
+      releasedRequests: 0,
+      skippedActiveRequests: 0
+    });
+    await expect(walletLedgerService.getWalletSnapshot("seed-user", "RUB")).resolves.toEqual({
+      userId: "seed-user",
+      availableMinor: 850,
+      reservedMinor: 0,
+      currency: "RUB"
+    });
+    expect((await walletLedgerService.listEntries("seed-user")).map((entry) => entry.operation)).toEqual([
+      "credit",
+      "reserve",
+      "debit"
+    ]);
+  });
+
+  it("releases stale reserve when a non-purchased request is no longer in the queue", async () => {
+    const detachedQueuedRequest = appendPurchaseRequestTransition(
+      appendPurchaseRequestTransition(
+        createAwaitingRequest({
+          requestId: "req-reconcile-release",
+          userId: "seed-user",
+          amountMinor: 120
+        }),
+        "confirmed",
+        {
+          eventId: "req-reconcile-release:confirmed",
+          occurredAt: "2026-04-05T20:01:00.000Z"
+        }
+      ),
+      "queued",
+      {
+        eventId: "req-reconcile-release:queued",
+        occurredAt: "2026-04-05T20:02:00.000Z"
+      }
+    );
+    const requestStore = new InMemoryPurchaseRequestStore([detachedQueuedRequest]);
+    const queueStore = new InMemoryPurchaseQueueStore();
+    const walletLedgerService = createWalletLedgerService();
+    await seedCredit(walletLedgerService, "seed-user", 1000);
+    await walletLedgerService.reserveFunds({
+      userId: "seed-user",
+      requestId: "req-reconcile-release",
+      amountMinor: 120,
+      currency: "RUB",
+      drawId: "draw-100",
+      idempotencyKey: "req-reconcile-release:reserve"
+    });
+    const service = createService({
+      requestStore,
+      queueStore,
+      walletLedgerService
+    });
+
+    const result = await service.reconcileDetachedReserves({
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      currency: "RUB"
+    });
+
+    expect(result).toEqual({
+      debitedRequests: 0,
+      releasedRequests: 1,
+      skippedActiveRequests: 0
+    });
+    await expect(walletLedgerService.getWalletSnapshot("seed-user", "RUB")).resolves.toEqual({
+      userId: "seed-user",
+      availableMinor: 1000,
+      reservedMinor: 0,
+      currency: "RUB"
+    });
+    expect((await walletLedgerService.listEntries("seed-user")).map((entry) => entry.operation)).toEqual([
+      "credit",
+      "reserve",
+      "release"
+    ]);
+    await expect(requestStore.getRequestById("req-reconcile-release")).resolves.toMatchObject({
+      state: "reserve_released"
+    });
+  });
+
   it("creates queued canonical purchase during confirm-and-queue", async () => {
     const requestStore = new InMemoryPurchaseRequestStore([
       createAwaitingRequest({
@@ -478,7 +769,7 @@ describe("PurchaseOrchestrationService", () => {
 
 function createService(input: {
   readonly requestStore: PurchaseRequestStore;
-  readonly queueStore: PurchaseQueueStore;
+  readonly queueStore: PurchaseQueueTransport;
   readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
   readonly walletLedgerService: WalletLedgerService;
 }): PurchaseOrchestrationService {
@@ -504,6 +795,23 @@ function createWalletLedgerService(): WalletLedgerService {
       }
     } satisfies TimeSource,
     entryFactory: new SequentialEntryFactory()
+  });
+}
+
+async function seedCredit(
+  walletLedgerService: WalletLedgerService,
+  userId: string,
+  amountMinor: number
+): Promise<void> {
+  await walletLedgerService.recordEntry({
+    userId,
+    operation: "credit",
+    amountMinor,
+    currency: "RUB",
+    idempotencyKey: `${userId}:seed-credit:${amountMinor}`,
+    reference: {
+      requestId: `${userId}:seed-credit`
+    }
   });
 }
 
@@ -587,6 +895,59 @@ class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
   async getQueueItemByRequestId(requestId: string): Promise<PurchaseQueueItem | null> {
     const item = this.items.find((entry) => entry.requestId === requestId) ?? null;
     return item ? { ...item } : null;
+  }
+
+  async listSnapshot(): Promise<readonly PurchaseQueueItem[]> {
+    return this.listQueueItems();
+  }
+
+  async getByRequestId(requestId: string): Promise<PurchaseQueueItem | null> {
+    return this.getQueueItemByRequestId(requestId);
+  }
+
+  async enqueue(item: PurchaseQueueItem): Promise<void> {
+    await this.saveQueueItem(item);
+  }
+
+  async reserve(requestId: string): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing || existing.status !== "queued") {
+      return null;
+    }
+
+    const nextItem: PurchaseQueueItem = {
+      ...existing,
+      attemptCount: existing.attemptCount + 1,
+      status: "executing"
+    };
+    await this.saveQueueItem(nextItem);
+    return nextItem;
+  }
+
+  async requeue(requestId: string): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing) {
+      return null;
+    }
+
+    const nextItem = existing.status === "queued" ? existing : { ...existing, status: "queued" as const };
+    await this.saveQueueItem(nextItem);
+    return nextItem;
+  }
+
+  async reprioritize(requestId: string, priority: PurchaseQueueItem["priority"]): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing) {
+      return null;
+    }
+
+    const nextItem = existing.priority === priority ? existing : { ...existing, priority };
+    await this.saveQueueItem(nextItem);
+    return nextItem;
+  }
+
+  async complete(requestId: string): Promise<void> {
+    await this.removeQueueItem(requestId);
   }
 
   async saveQueueItem(item: PurchaseQueueItem): Promise<void> {

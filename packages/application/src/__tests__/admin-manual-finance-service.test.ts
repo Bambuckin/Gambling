@@ -129,4 +129,42 @@ describe("AdminManualFinanceService", () => {
     const balance = await service.getUserBalance("user-1", "RUB");
     expect(balance.availableMinor).toBe(100_000);
   });
+
+  it("lists user balances with available and reserved amounts", async () => {
+    const { service, entries } = createTestEnv();
+    entries.push({
+      entryId: "reserve-1",
+      userId: "user-1",
+      operation: "reserve",
+      amountMinor: 20_000,
+      currency: "RUB",
+      idempotencyKey: "reserve-idem",
+      reference: { requestId: "req-reserve" },
+      createdAt: "2026-04-01T10:05:00.000Z"
+    });
+
+    const balances = await service.listUserBalances({
+      userIds: ["user-2", "user-1", "user-1"],
+      currency: "RUB"
+    });
+
+    expect(balances).toEqual([
+      {
+        userId: "user-1",
+        availableMinor: 80_000,
+        reservedMinor: 20_000,
+        currency: "RUB",
+        entryCount: 2,
+        lastLedgerAt: "2026-04-01T10:05:00.000Z"
+      },
+      {
+        userId: "user-2",
+        availableMinor: 0,
+        reservedMinor: 0,
+        currency: "RUB",
+        entryCount: 0,
+        lastLedgerAt: null
+      }
+    ]);
+  });
 });

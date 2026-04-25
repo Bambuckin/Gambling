@@ -19,7 +19,7 @@ It is written for a new engineer or a new model session that has no previous cha
 ## Repository Shape
 
 - `apps/web` - Next.js runtime for login, lottery purchase pages, admin console, and verification pages.
-- `apps/terminal-worker` - single execution worker that polls queue items, resolves handlers, and applies ticket verification results.
+- `apps/terminal-worker` - single execution worker that polls queue items, resolves handlers, executes terminal purchase, and processes winnings credit jobs.
 - `packages/domain` - pure contracts and lifecycle rules.
 - `packages/application` - use-case services and typed ports.
 - `packages/infrastructure` - in-memory and Postgres adapters, schema bootstrap, seed catalog.
@@ -36,13 +36,12 @@ The implemented system is usable as a LAN-first orchestration platform, but runt
 
 - Shared storage works in `in-memory` and `postgres` modes.
 - Web runtime covers login, lottery shell, request drafting, request confirmation, wallet projection, ticket projection, and admin queue controls.
-- Worker runtime covers queue reservation, terminal lock, attempt journaling, retry classification, ticket persistence, and ticket verification queue processing.
+- Worker runtime covers queue reservation, terminal lock, attempt journaling, retry classification, canonical-first purchase success publication, and winnings credit job processing.
 - Big 8 has the only real browser automation path today:
   - live draw sync from the terminal page;
-  - add-to-cart purchase automation in real mode;
-  - mock terminal mode for payload verification without live checkout.
+  - direct terminal purchase automation in real mode;
+  - mock terminal mode for payload verification without live NL checkout.
 - Other lottery codes currently resolve to deterministic demo handlers rather than real terminal automation.
-- Final checkout/payment automation is still a documented gap; see `docs/handoff-runtime.md`.
 
 ## Fast Local Bootstrap
 

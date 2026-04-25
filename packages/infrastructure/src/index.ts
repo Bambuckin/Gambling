@@ -28,4 +28,5 @@ export * from "./postgres/postgres-purchase-store.js";
 export * from "./postgres/postgres-operations-audit-log.js";
 export * from "./postgres/postgres-winnings-credit-job-store.js";
 export * from "./seeds/default-lottery-catalog.js";
+export * from "./seeds/draw-snapshot-seeding.js";
 export * from "./seeds/default-identity-seeds.js";

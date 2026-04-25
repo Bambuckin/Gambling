@@ -68,6 +68,7 @@ export class AdminOperationsQueryService {
     this.terminalHealthService = new TerminalHealthService({
       requestStore: dependencies.requestStore,
       queueStore: dependencies.queueStore,
+      ...(dependencies.canonicalPurchaseStore ? { canonicalPurchaseStore: dependencies.canonicalPurchaseStore } : {}),
       timeSource: dependencies.timeSource
     });
     this.staleExecutingThresholdMs = normalizeStaleThresholdMs(dependencies.staleExecutingThresholdMs);

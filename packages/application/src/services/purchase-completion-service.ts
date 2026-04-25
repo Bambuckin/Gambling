@@ -10,6 +10,8 @@ import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.j
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TicketPersistenceService } from "./ticket-persistence-service.js";
 import type { TimeSource } from "../ports/time-source.js";
+import type { WalletLedgerService } from "./wallet-ledger-service.js";
+import { buildCanonicalTicketId } from "./canonical-compatibility.js";
 import {
   loadCanonicalPurchaseForRequest,
   markCanonicalPurchaseAwaitingDrawClose
@@ -19,6 +21,7 @@ export interface PurchaseCompletionServiceDependencies {
   readonly requestStore: PurchaseRequestStore;
   readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
   readonly ticketPersistenceService: TicketPersistenceService;
+  readonly walletLedgerService?: Pick<WalletLedgerService, "debitReservedFunds">;
   readonly timeSource: TimeSource;
 }
 
@@ -39,12 +42,14 @@ export class PurchaseCompletionService {
   private readonly requestStore: PurchaseRequestStore;
   private readonly canonicalPurchaseStore: CanonicalPurchaseStore | null;
   private readonly ticketPersistenceService: TicketPersistenceService;
+  private readonly walletLedgerService: Pick<WalletLedgerService, "debitReservedFunds"> | null;
   private readonly timeSource: TimeSource;
 
   constructor(dependencies: PurchaseCompletionServiceDependencies) {
     this.requestStore = dependencies.requestStore;
     this.canonicalPurchaseStore = dependencies.canonicalPurchaseStore ?? null;
     this.ticketPersistenceService = dependencies.ticketPersistenceService;
+    this.walletLedgerService = dependencies.walletLedgerService ?? null;
     this.timeSource = dependencies.timeSource;
   }
 
@@ -87,9 +92,15 @@ export class PurchaseCompletionService {
     const persisted = await this.ticketPersistenceService.persistSuccessfulPurchaseTicket({
       request: completedRequest,
       purchasedAt,
+      ...(canonicalPurchase
+        ? {
+            ticketId: buildCanonicalTicketId(canonicalPurchase.snapshot.purchaseId)
+          }
+        : {}),
       externalReference
     });
     const canonicalChanged = await this.saveCanonicalCompatibilityProgress(canonicalPurchase, nowIso);
+    await this.debitReservedFundsForCompletedPurchase(completedRequest, persisted.ticket, nowIso);
     if (!requestWasCompleted || !persisted.replayed) {
       await this.requestStore.saveRequest(completedRequest);
     }
@@ -100,6 +111,27 @@ export class PurchaseCompletionService {
       journalNote,
       completed: !requestWasCompleted || !persisted.replayed || canonicalChanged
     };
+  }
+
+  private async debitReservedFundsForCompletedPurchase(
+    request: PurchaseRequestRecord,
+    ticket: TicketRecord,
+    completedAt: string
+  ): Promise<void> {
+    if (!this.walletLedgerService) {
+      return;
+    }
+
+    await this.walletLedgerService.debitReservedFunds({
+      userId: request.snapshot.userId,
+      requestId: request.snapshot.requestId,
+      amountMinor: request.snapshot.costMinor,
+      currency: request.snapshot.currency,
+      ticketId: ticket.ticketId,
+      drawId: request.snapshot.drawId,
+      idempotencyKey: `${request.snapshot.requestId}:purchase-debit`,
+      createdAt: completedAt
+    });
   }
 
   private async saveCanonicalCompatibilityProgress(

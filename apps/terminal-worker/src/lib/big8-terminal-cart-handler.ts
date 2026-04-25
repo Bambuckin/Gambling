@@ -95,11 +95,16 @@ export class Big8TerminalCartHandler implements LotteryPurchaseHandlerContract {
         journal.push(`cart_snapshot=${cartSnapshot}`);
       }
 
+      await ensureCheckoutReady(page, journal, this.stepTimeoutMs);
+      await finalizePurchase(page, journal, this.stepTimeoutMs);
+      const purchaseReference = await readPurchaseReference(page, context.requestId);
+      journal.push(`purchase_reference=${purchaseReference}`);
+
       return {
-        executionOutcome: "added_to_cart",
-        externalTicketReference: null,
+        executionOutcome: "ticket_purchased",
+        externalTicketReference: purchaseReference,
         rawTerminalOutput: [
-          `[big8-cart-handler] request=${context.requestId} draw=${context.draw.drawId} tickets=${payload.tickets.length}`,
+          `[big8-purchase-handler] request=${context.requestId} draw=${context.draw.drawId} tickets=${payload.tickets.length}`,
           ...journal
         ].join(" | ")
       };
@@ -669,6 +674,304 @@ async function readCartSnapshot(page: Page): Promise<string | null> {
 
     return (cartButton.textContent ?? "").replace(/\s+/g, " ").trim() || "cart_button_visible";
   });
+}
+
+async function ensureCheckoutReady(page: Page, journal: string[], timeoutMs: number): Promise<void> {
+  const alreadyReady = await page.evaluate(() => {
+    const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+    const selectors = [
+      "#checkout-button",
+      "#submit-order-button",
+      "#complete-purchase-button",
+      "#payment-button"
+    ];
+    for (const selector of selectors) {
+      if (document.querySelector(selector)) {
+        return true;
+      }
+    }
+
+    const positiveTerms = [
+      "оплат",
+      "к оплате",
+      "оформ",
+      "подтверд",
+      "купить",
+      "заверш",
+      "continue",
+      "confirm",
+      "checkout",
+      "submit order",
+      "pay"
+    ];
+    const negativeTerms = ["добавить в корзину", "корзин", "случайные", "очистить", "назад", "удалить"];
+    const candidates = Array.from(document.querySelectorAll<HTMLElement>("button, a, [role='button']"));
+    return candidates.some((node) => {
+      const text = normalize(node.textContent ?? "");
+      const id = normalize(node.id);
+      const label = normalize(node.getAttribute("aria-label") ?? "");
+      const combined = `${text} ${id} ${label}`.trim();
+      if (!combined) {
+        return false;
+      }
+
+      const hasPositive = positiveTerms.some((term) => combined.includes(term));
+      const hasNegative = negativeTerms.some((term) => combined.includes(term));
+      return hasPositive && !hasNegative;
+    });
+  });
+  if (alreadyReady) {
+    journal.push("checkout_surface=ready");
+    return;
+  }
+
+  const opened = await page.evaluate(() => {
+    const direct =
+      document.querySelector<HTMLElement>("button.sc-bkUKrm") ??
+      document.querySelector<HTMLElement>("[data-testid*='cart']") ??
+      document.querySelector<HTMLElement>("#cart");
+    if (direct) {
+      direct.click();
+      return true;
+    }
+
+    const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+    const clickableNodes = Array.from(document.querySelectorAll<HTMLElement>("button, a, [role='button'], div"));
+    const candidate = clickableNodes.find((node) => {
+      const text = normalize(node.textContent ?? "");
+      const label = normalize(node.getAttribute("aria-label") ?? "");
+      return text.includes("корзин") || label.includes("корзин") || text === "cart" || label === "cart";
+    });
+    if (candidate) {
+      candidate.click();
+      return true;
+    }
+
+    return false;
+  });
+  if (!opened) {
+    throw new Error("unable to open terminal cart view for checkout");
+  }
+
+  await page.waitForFunction(() => {
+    const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+    const selectors = [
+      "#checkout-button",
+      "#submit-order-button",
+      "#complete-purchase-button",
+      "#payment-button"
+    ];
+    for (const selector of selectors) {
+      if (document.querySelector(selector)) {
+        return true;
+      }
+    }
+
+    const positiveTerms = [
+      "оплат",
+      "к оплате",
+      "оформ",
+      "подтверд",
+      "купить",
+      "заверш",
+      "continue",
+      "confirm",
+      "checkout",
+      "submit order",
+      "pay"
+    ];
+    const negativeTerms = ["добавить в корзину", "корзин", "случайные", "очистить", "назад", "удалить"];
+    const candidates = Array.from(document.querySelectorAll<HTMLElement>("button, a, [role='button']"));
+    return candidates.some((node) => {
+      const text = normalize(node.textContent ?? "");
+      const id = normalize(node.id);
+      const label = normalize(node.getAttribute("aria-label") ?? "");
+      const combined = `${text} ${id} ${label}`.trim();
+      if (!combined) {
+        return false;
+      }
+
+      const hasPositive = positiveTerms.some((term) => combined.includes(term));
+      const hasNegative = negativeTerms.some((term) => combined.includes(term));
+      return hasPositive && !hasNegative;
+    });
+  }, {
+    timeout: timeoutMs
+  });
+  journal.push("checkout_surface=open");
+}
+
+async function finalizePurchase(page: Page, journal: string[], timeoutMs: number): Promise<void> {
+  const maxSteps = 4;
+
+  for (let step = 0; step < maxSteps; step += 1) {
+    if (
+      await page.evaluate(() => {
+        const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+        const text = normalize(document.body?.innerText ?? "");
+        if (!text) {
+          return false;
+        }
+
+        const successTerms = [
+          "успеш",
+          "оформлен",
+          "оформлена",
+          "заказ принят",
+          "заказ оформ",
+          "билет куплен",
+          "покупка заверш",
+          "оплата прошла",
+          "оплачено"
+        ];
+        if (successTerms.some((term) => text.includes(term))) {
+          return true;
+        }
+
+        const selectors = [
+          "#checkout-button",
+          "#submit-order-button",
+          "#complete-purchase-button",
+          "#payment-button"
+        ];
+        for (const selector of selectors) {
+          if (document.querySelector(selector)) {
+            return false;
+          }
+        }
+
+        return !text.includes("добавить в корзину");
+      })
+    ) {
+      journal.push("checkout_result=success_signal_visible");
+      return;
+    }
+
+    const clickedAction = await page.evaluate(() => {
+      const selectors = [
+        "#checkout-button",
+        "#submit-order-button",
+        "#complete-purchase-button",
+        "#payment-button"
+      ];
+      for (const selector of selectors) {
+        const node = document.querySelector<HTMLElement>(selector);
+        if (node) {
+          node.click();
+          return node.textContent?.replace(/\s+/g, " ").trim() || node.id || "checkout_button";
+        }
+      }
+
+      const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+      const positiveTerms = [
+        "оплат",
+        "к оплате",
+        "оформ",
+        "подтверд",
+        "купить",
+        "заверш",
+        "continue",
+        "confirm",
+        "checkout",
+        "submit order",
+        "pay"
+      ];
+      const negativeTerms = ["добавить в корзину", "корзин", "случайные", "очистить", "назад", "удалить"];
+      const candidates = Array.from(document.querySelectorAll<HTMLElement>("button, a, [role='button']"));
+      const candidate =
+        candidates.find((node) => {
+          const text = normalize(node.textContent ?? "");
+          const id = normalize(node.id);
+          const label = normalize(node.getAttribute("aria-label") ?? "");
+          const combined = `${text} ${id} ${label}`.trim();
+          if (!combined) {
+            return false;
+          }
+
+          const hasPositive = positiveTerms.some((term) => combined.includes(term));
+          const hasNegative = negativeTerms.some((term) => combined.includes(term));
+          return hasPositive && !hasNegative;
+        }) ?? null;
+
+      if (!candidate) {
+        return null;
+      }
+
+      candidate.click();
+      return candidate.textContent?.replace(/\s+/g, " ").trim() || candidate.id || "checkout_button";
+    });
+    if (!clickedAction) {
+      break;
+    }
+
+    journal.push(`checkout_action=${clickedAction}`);
+    await sleep(900);
+  }
+
+  await page.waitForFunction(() => {
+    const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+    const text = normalize(document.body?.innerText ?? "");
+    if (!text) {
+      return false;
+    }
+
+    const successTerms = [
+      "успеш",
+      "оформлен",
+      "оформлена",
+      "заказ принят",
+      "заказ оформ",
+      "билет куплен",
+      "покупка заверш",
+      "оплата прошла",
+      "оплачено"
+    ];
+    if (successTerms.some((term) => text.includes(term))) {
+      return true;
+    }
+
+    const selectors = [
+      "#checkout-button",
+      "#submit-order-button",
+      "#complete-purchase-button",
+      "#payment-button"
+    ];
+    for (const selector of selectors) {
+      if (document.querySelector(selector)) {
+        return false;
+      }
+    }
+
+    return !text.includes("добавить в корзину");
+  }, {
+    timeout: timeoutMs
+  });
+  journal.push("checkout_result=success_signal_visible");
+}
+
+async function readPurchaseReference(page: Page, requestId: string): Promise<string> {
+  const extracted = await page.evaluate(() => {
+    const normalizedBody = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim();
+    if (!normalizedBody) {
+      return null;
+    }
+
+    const patterns = [
+      /(?:билет|заказ|номер|чек)[^A-ZА-Я0-9#№-]{0,24}(?:№|#)?\s*([A-ZА-Я0-9-]{6,})/i,
+      /(?:№|#)\s*([A-ZА-Я0-9-]{6,})/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = normalizedBody.match(pattern);
+      if (match?.[1]) {
+        return match[1];
+      }
+    }
+
+    return null;
+  });
+
+  return extracted?.trim() || `${requestId}:terminal-purchased`;
 }
 
 function parseBig8Payload(input: unknown): Big8PurchasePayload {

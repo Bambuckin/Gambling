@@ -1,25 +1,35 @@
 import {
   appendCanonicalPurchaseTransition,
+  applyTicketVerificationOutcome,
+  closeCanonicalDraw,
   createOpenCanonicalDraw,
   createPurchasedTicketRecord,
   createSubmittedCanonicalPurchase,
   type CanonicalDrawRecord,
   type CanonicalPurchaseRecord,
   type DrawClosureRecord,
+  type LedgerEntry,
   type NotificationRecord,
-  type TicketRecord
+  type TicketRecord,
+  type WinningsCreditJob
 } from "@lottery/domain";
 import { describe, expect, it } from "vitest";
 import type { CanonicalDrawStore } from "../ports/canonical-draw-store.js";
 import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { DrawClosureStore } from "../ports/draw-closure-store.js";
+import type { LedgerStore } from "../ports/ledger-store.js";
 import type { NotificationStore } from "../ports/notification-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
 import type { TimeSource } from "../ports/time-source.js";
+import type { WinningsCreditJobStore } from "../ports/winnings-credit-job-store.js";
 import { DrawClosureService } from "../services/draw-closure-service.js";
+import { TicketClaimService } from "../services/ticket-claim-service.js";
+import { TicketQueryService } from "../services/ticket-query-service.js";
+import { WalletLedgerService, type WalletLedgerEntryFactory } from "../services/wallet-ledger-service.js";
+import { WinningsCreditService } from "../services/winnings-credit-service.js";
 
 describe("DrawClosureService", () => {
-  it("creates and closes canonical draw without publishing results", async () => {
+  it("creates and settles canonical draw immediately on close", async () => {
     const service = createService();
 
     const created = await service.createDraw({
@@ -37,14 +47,14 @@ describe("DrawClosureService", () => {
     expect(created.alreadyExists).toBe(false);
     expect(closed.alreadyClosed).toBe(false);
     expect(closed.draw).toMatchObject({
-      status: "closed",
-      resultVisibility: "hidden",
+      status: "settled",
+      resultVisibility: "visible",
       closedBy: "admin-1",
-      settledAt: null
+      settledBy: "admin-1"
     });
   });
 
-  it("marks canonical result and settles draw into published compatibility outcome", async () => {
+  it("marks canonical result while draw is open and publishes compatibility outcome on close", async () => {
     const canonicalPurchaseStore = new StubCanonicalPurchaseStore([
       createAwaitingDrawClosePurchase({
         requestId: "req-200",
@@ -74,26 +84,24 @@ describe("DrawClosureService", () => {
       drawId: "draw-200",
       drawAt: "2026-04-20T10:00:00.000Z"
     });
-    await service.closeDraw({
+    const marked = await service.markTicketResult({
+      requestId: "req-200",
+      mark: "win",
+      markedBy: "admin-1"
+    });
+    const closed = await service.closeDraw({
       lotteryCode: "bolshaya-8",
       drawId: "draw-200",
       drawAt: "2026-04-20T10:00:00.000Z",
       closedBy: "admin-1"
     });
-    await service.markTicketResult({
-      requestId: "req-200",
-      mark: "win",
-      markedBy: "admin-1"
-    });
 
-    const settled = await service.settleDraw({
-      lotteryCode: "bolshaya-8",
-      drawId: "draw-200",
-      settledBy: "admin-1"
+    expect(marked.purchase).toMatchObject({
+      status: "awaiting_draw_close",
+      resultStatus: "win",
+      resultVisibility: "hidden"
     });
-
-    expect(settled.alreadySettled).toBe(false);
-    expect(settled.draw).toMatchObject({
+    expect(closed.draw).toMatchObject({
       status: "settled",
       resultVisibility: "visible",
       settledBy: "admin-1"
@@ -109,11 +117,187 @@ describe("DrawClosureService", () => {
       resultSource: "admin_emulated",
       adminResultMark: "win"
     });
-    expect(settled.notifications).toHaveLength(2);
     expect((await notificationStore.listUserNotifications("seed-user")).length).toBe(2);
   });
 
-  it("rejects settlement while canonical purchases are still unmarked", async () => {
+  it("keeps close-to-credit contour visible through wallet and ticket read models", async () => {
+    const canonicalPurchaseStore = new StubCanonicalPurchaseStore([
+      createAwaitingDrawClosePurchase({
+        requestId: "req-210",
+        drawId: "draw-210"
+      })
+    ]);
+    const ticketStore = new StubTicketStore([
+      createPurchasedTicketRecord({
+        ticketId: "ticket-210",
+        requestId: "req-210",
+        userId: "seed-user",
+        lotteryCode: "bolshaya-8",
+        drawId: "draw-210",
+        purchasedAt: "2026-04-18T10:00:00.000Z",
+        externalReference: "ext-210"
+      })
+    ]);
+    const notificationStore = new StubNotificationStore();
+    const winningsCreditJobStore = new StubWinningsCreditJobStore();
+    const walletLedgerService = new WalletLedgerService({
+      ledgerStore: new StubLedgerStore(),
+      timeSource: new StubTimeSource(),
+      entryFactory: new StubLedgerEntryFactory()
+    });
+    const winningsCreditService = new WinningsCreditService({
+      winningsCreditJobStore,
+      ticketStore,
+      ticketClaimService: new TicketClaimService({ ticketStore }),
+      walletLedgerService,
+      timeSource: new StubTimeSource()
+    });
+    const closeService = createService({
+      canonicalPurchaseStore,
+      ticketStore,
+      notificationStore,
+      winningsCreditService
+    });
+
+    await closeService.createDraw({
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-210",
+      drawAt: "2026-04-20T10:00:00.000Z"
+    });
+    await closeService.markTicketResult({
+      requestId: "req-210",
+      mark: "win",
+      markedBy: "admin-1"
+    });
+    await closeService.closeDraw({
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-210",
+      drawAt: "2026-04-20T10:00:00.000Z",
+      closedBy: "admin-1"
+    });
+
+    await expect(canonicalPurchaseStore.getPurchaseByLegacyRequestId("req-210")).resolves.toMatchObject({
+      status: "settled",
+      resultStatus: "win",
+      resultVisibility: "visible"
+    });
+    await expect(ticketStore.getTicketByRequestId("req-210")).resolves.toMatchObject({
+      verificationStatus: "verified",
+      winningAmountMinor: 50_000,
+      claimState: "credited"
+    });
+    await expect(winningsCreditJobStore.getJobByTicketId("ticket-210")).resolves.toMatchObject({
+      jobId: "req-210:credit",
+      status: "done"
+    });
+    await expect(walletLedgerService.getWalletSnapshot("seed-user", "RUB")).resolves.toEqual({
+      userId: "seed-user",
+      availableMinor: 50_000,
+      reservedMinor: 0,
+      currency: "RUB"
+    });
+    expect((await walletLedgerService.listEntries("seed-user")).map((entry) => entry.idempotencyKey)).toEqual([
+      "req-210:winnings:req-210:credit"
+    ]);
+
+    const ticketQueryService = new TicketQueryService({
+      ticketStore,
+      canonicalPurchaseStore,
+      winningsCreditJobStore
+    });
+
+    await expect(ticketQueryService.listUserTickets("seed-user")).resolves.toEqual([
+      expect.objectContaining({
+        requestId: "req-210",
+        verificationStatus: "verified",
+        winningAmountMinor: 50_000,
+        claimState: "credited"
+      })
+    ]);
+    expect((await notificationStore.listUserNotifications("seed-user")).map((notification) => notification.title)).toContain(
+      "Выигрыш зачислен"
+    );
+  });
+
+  it("auto-credits and notifies when a winning ticket was already verified before draw close", async () => {
+    const canonicalPurchaseStore = new StubCanonicalPurchaseStore([
+      createAwaitingDrawClosePurchase({
+        requestId: "req-211",
+        drawId: "draw-211"
+      })
+    ]);
+    const ticketStore = new StubTicketStore([
+      applyTicketVerificationOutcome(
+        createPurchasedTicketRecord({
+          ticketId: "ticket-211",
+          requestId: "req-211",
+          userId: "seed-user",
+          lotteryCode: "bolshaya-8",
+          drawId: "draw-211",
+          purchasedAt: "2026-04-18T10:00:00.000Z",
+          externalReference: "ext-211"
+        }),
+        {
+          verificationStatus: "verified",
+          verificationEventId: "ticket-211:verify",
+          verifiedAt: "2026-04-20T11:30:00.000Z",
+          rawTerminalOutput: "[admin] verified win",
+          winningAmountMinor: 50_000
+        }
+      )
+    ]);
+    const notificationStore = new StubNotificationStore();
+    const winningsCreditJobStore = new StubWinningsCreditJobStore();
+    const walletLedgerService = new WalletLedgerService({
+      ledgerStore: new StubLedgerStore(),
+      timeSource: new StubTimeSource(),
+      entryFactory: new StubLedgerEntryFactory()
+    });
+    const winningsCreditService = new WinningsCreditService({
+      winningsCreditJobStore,
+      ticketStore,
+      ticketClaimService: new TicketClaimService({ ticketStore }),
+      walletLedgerService,
+      timeSource: new StubTimeSource()
+    });
+    const closeService = createService({
+      canonicalPurchaseStore,
+      ticketStore,
+      notificationStore,
+      winningsCreditService
+    });
+
+    await closeService.createDraw({
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-211",
+      drawAt: "2026-04-20T10:00:00.000Z"
+    });
+    await closeService.markTicketResult({
+      requestId: "req-211",
+      mark: "win",
+      markedBy: "admin-1"
+    });
+    await closeService.closeDraw({
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-211",
+      drawAt: "2026-04-20T10:00:00.000Z",
+      closedBy: "admin-1"
+    });
+
+    await expect(winningsCreditJobStore.getJobByTicketId("ticket-211")).resolves.toMatchObject({
+      status: "done"
+    });
+    await expect(walletLedgerService.getWalletSnapshot("seed-user", "RUB")).resolves.toMatchObject({
+      availableMinor: 50_000,
+      reservedMinor: 0
+    });
+    expect((await notificationStore.listUserNotifications("seed-user")).map((notification) => notification.title)).toEqual([
+      "Тираж закрыт: билет выиграл",
+      "Выигрыш зачислен"
+    ]);
+  });
+
+  it("rejects draw close while canonical purchases are still unmarked", async () => {
     const service = createService({
       canonicalPurchaseStore: new StubCanonicalPurchaseStore([
         createAwaitingDrawClosePurchase({
@@ -128,20 +312,129 @@ describe("DrawClosureService", () => {
       drawId: "draw-300",
       drawAt: "2026-04-20T10:00:00.000Z"
     });
-    await service.closeDraw({
+
+    await expect(
+      service.closeDraw({
+        lotteryCode: "bolshaya-8",
+        drawId: "draw-300",
+        drawAt: "2026-04-20T10:00:00.000Z",
+        closedBy: "admin-1"
+      })
+    ).rejects.toThrow(/must be marked win\/lose before draw can be closed/i);
+  });
+
+  it("publishes canonical outcome and emits notifications even without a legacy ticket row", async () => {
+    const canonicalPurchaseStore = new StubCanonicalPurchaseStore([
+      createAwaitingDrawClosePurchase({
+        requestId: "req-201",
+        drawId: "draw-201"
+      })
+    ]);
+    const ticketStore = new StubTicketStore();
+    const notificationStore = new StubNotificationStore();
+    const service = createService({
+      canonicalPurchaseStore,
+      ticketStore,
+      notificationStore
+    });
+
+    await service.createDraw({
       lotteryCode: "bolshaya-8",
-      drawId: "draw-300",
+      drawId: "draw-201",
+      drawAt: "2026-04-20T10:00:00.000Z"
+    });
+    await service.markTicketResult({
+      requestId: "req-201",
+      mark: "win",
+      markedBy: "admin-1"
+    });
+    const closed = await service.closeDraw({
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-201",
       drawAt: "2026-04-20T10:00:00.000Z",
       closedBy: "admin-1"
     });
 
-    await expect(
-      service.settleDraw({
-        lotteryCode: "bolshaya-8",
-        drawId: "draw-300",
-        settledBy: "admin-1"
+    expect(closed.draw).toMatchObject({
+      status: "settled",
+      resultVisibility: "visible"
+    });
+    await expect(canonicalPurchaseStore.getPurchaseByLegacyRequestId("req-201")).resolves.toMatchObject({
+      status: "settled",
+      resultStatus: "win",
+      resultVisibility: "visible"
+    });
+    expect((await ticketStore.listTickets()).length).toBe(0);
+    expect((await notificationStore.listUserNotifications("seed-user")).length).toBe(2);
+  });
+
+  it("completes legacy closed canonical draws through the same close action", async () => {
+    const canonicalPurchaseStore = new StubCanonicalPurchaseStore([
+      createAwaitingDrawClosePurchase({
+        requestId: "req-202",
+        drawId: "draw-202"
       })
-    ).rejects.toThrow(/must be marked win\/lose before settlement/i);
+    ]);
+    const ticketStore = new StubTicketStore([
+      createPurchasedTicketRecord({
+        ticketId: "ticket-202",
+        requestId: "req-202",
+        userId: "seed-user",
+        lotteryCode: "bolshaya-8",
+        drawId: "draw-202",
+        purchasedAt: "2026-04-18T10:00:00.000Z",
+        externalReference: "ext-202"
+      })
+    ]);
+    const service = createService({
+      canonicalDrawStore: new StubCanonicalDrawStore([
+        closeCanonicalDraw(
+          createOpenCanonicalDraw({
+            lotteryCode: "bolshaya-8",
+            drawId: "draw-202",
+            drawAt: "2026-04-20T10:00:00.000Z",
+            openedAt: "2026-04-18T10:00:00.000Z"
+          }),
+          {
+            closedAt: "2026-04-20T11:00:00.000Z",
+            closedBy: "admin-old"
+          }
+        )
+      ]),
+      canonicalPurchaseStore,
+      ticketStore
+    });
+
+    await service.markTicketResult({
+      requestId: "req-202",
+      mark: "lose",
+      markedBy: "admin-1"
+    });
+    const closed = await service.closeDraw({
+      lotteryCode: "bolshaya-8",
+      drawId: "draw-202",
+      drawAt: "2026-04-20T10:00:00.000Z",
+      closedBy: "admin-2"
+    });
+
+    expect(closed.alreadyClosed).toBe(false);
+    expect(closed.draw).toMatchObject({
+      status: "settled",
+      resultVisibility: "visible",
+      closedBy: "admin-old",
+      settledBy: "admin-2"
+    });
+    await expect(canonicalPurchaseStore.getPurchaseByLegacyRequestId("req-202")).resolves.toMatchObject({
+      status: "settled",
+      resultStatus: "lose",
+      resultVisibility: "visible"
+    });
+    await expect(ticketStore.getTicketByRequestId("req-202")).resolves.toMatchObject({
+      verificationStatus: "verified",
+      winningAmountMinor: 0,
+      resultSource: "admin_emulated",
+      adminResultMark: "lose"
+    });
   });
 });
 
@@ -151,6 +444,7 @@ function createService(input?: {
   readonly ticketStore?: TicketStore;
   readonly drawClosureStore?: DrawClosureStore;
   readonly notificationStore?: NotificationStore;
+  readonly winningsCreditService?: Pick<WinningsCreditService, "enqueueCreditJob" | "processCreditJobForTicket">;
 }): DrawClosureService {
   return new DrawClosureService({
     ticketStore: input?.ticketStore ?? new StubTicketStore(),
@@ -158,6 +452,7 @@ function createService(input?: {
     canonicalPurchaseStore: input?.canonicalPurchaseStore ?? new StubCanonicalPurchaseStore(),
     drawClosureStore: input?.drawClosureStore ?? new StubDrawClosureStore(),
     notificationStore: input?.notificationStore ?? new StubNotificationStore(),
+    ...(input?.winningsCreditService ? { winningsCreditService: input.winningsCreditService } : {}),
     timeSource: new StubTimeSource()
   });
 }
@@ -369,6 +664,60 @@ class StubNotificationStore implements NotificationStore {
   }
 }
 
+class StubWinningsCreditJobStore implements WinningsCreditJobStore {
+  private jobs: WinningsCreditJob[] = [];
+
+  async saveJob(job: WinningsCreditJob): Promise<void> {
+    const filtered = this.jobs.filter((entry) => entry.jobId !== job.jobId);
+    this.jobs = [...filtered, { ...job }];
+  }
+
+  async getJobByTicketId(ticketId: string): Promise<WinningsCreditJob | null> {
+    return this.jobs.find((entry) => entry.ticketId === ticketId) ?? null;
+  }
+
+  async listJobs(): Promise<readonly WinningsCreditJob[]> {
+    return this.jobs.map((job) => ({ ...job }));
+  }
+
+  async listQueuedJobs(): Promise<readonly WinningsCreditJob[]> {
+    return this.jobs.filter((job) => job.status === "queued").map((job) => ({ ...job }));
+  }
+
+  async clearAll(): Promise<void> {
+    this.jobs = [];
+  }
+}
+
+class StubLedgerStore implements LedgerStore {
+  private entries: LedgerEntry[] = [];
+
+  async listEntries(): Promise<readonly LedgerEntry[]> {
+    return this.entries.map(cloneLedgerEntry);
+  }
+
+  async listEntriesByUser(userId: string): Promise<readonly LedgerEntry[]> {
+    return this.entries.filter((entry) => entry.userId === userId).map(cloneLedgerEntry);
+  }
+
+  async appendEntry(entry: LedgerEntry): Promise<void> {
+    this.entries = [...this.entries, cloneLedgerEntry(entry)];
+  }
+
+  async clearAll(): Promise<void> {
+    this.entries = [];
+  }
+}
+
+class StubLedgerEntryFactory implements WalletLedgerEntryFactory {
+  private index = 0;
+
+  nextEntryId(): string {
+    this.index += 1;
+    return `ledger-${this.index}`;
+  }
+}
+
 function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): CanonicalPurchaseRecord {
   return {
     snapshot: {
@@ -382,5 +731,12 @@ function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): Canonica
     settledAt: record.settledAt,
     externalTicketReference: record.externalTicketReference,
     journal: record.journal.map((entry) => ({ ...entry }))
+  };
+}
+
+function cloneLedgerEntry(entry: LedgerEntry): LedgerEntry {
+  return {
+    ...entry,
+    reference: { ...entry.reference }
   };
 }

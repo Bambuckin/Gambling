@@ -150,6 +150,41 @@ describe("PurchaseRequestQueryService", () => {
     });
   });
 
+  it("keeps awaiting_confirmation while canonical purchase has not reached the queue yet", async () => {
+    const awaiting = createRequest({
+      requestId: "req-405-awaiting",
+      userId: "seed-user",
+      createdAt: "2026-04-05T20:00:00.000Z"
+    });
+    const canonical = createSubmittedCanonicalPurchase({
+      purchaseId: "purchase-405-awaiting",
+      legacyRequestId: "req-405-awaiting",
+      userId: "seed-user",
+      lotteryCode: "demo-lottery",
+      drawId: "draw-100",
+      payload: { draw_count: 1 },
+      costMinor: 100,
+      currency: "RUB",
+      submittedAt: "2026-04-05T20:00:00.000Z"
+    });
+
+    const service = new PurchaseRequestQueryService({
+      requestStore: new InMemoryPurchaseRequestStore([awaiting]),
+      queueStore: new InMemoryPurchaseQueueStore([]),
+      canonicalPurchaseStore: new InMemoryCanonicalPurchaseStore([canonical]),
+      purchaseAttemptStore: new InMemoryPurchaseAttemptStore([])
+    });
+
+    const rows = await service.listUserRequests("seed-user");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      requestId: "req-405-awaiting",
+      status: "awaiting_confirmation",
+      attemptCount: 0,
+      finalResult: null
+    });
+  });
+
   it("projects canonical request state and attempt count when canonical truth is available", async () => {
     const legacy = appendPurchaseRequestTransition(
       appendPurchaseRequestTransition(createRequest({
@@ -347,6 +382,64 @@ describe("PurchaseRequestQueryService", () => {
       status: "executing",
       attemptCount: 1
     });
+  });
+
+  it("lists canonical-first request rows for a draw even when legacy request records are missing", async () => {
+    const canonical = appendCanonicalPurchaseTransition(
+      appendCanonicalPurchaseTransition(
+        appendCanonicalPurchaseTransition(
+          createSubmittedCanonicalPurchase({
+            purchaseId: "purchase-409",
+            legacyRequestId: "req-409",
+            userId: "seed-user",
+            lotteryCode: "demo-lottery",
+            drawId: "draw-409",
+            payload: { draw_count: 1 },
+            costMinor: 100,
+            currency: "RUB",
+            submittedAt: "2026-04-05T20:00:00.000Z"
+          }),
+          "queued",
+          {
+            eventId: "purchase-409:queued",
+            occurredAt: "2026-04-05T20:01:00.000Z"
+          }
+        ),
+        "processing",
+        {
+          eventId: "purchase-409:processing",
+          occurredAt: "2026-04-05T20:02:00.000Z"
+        }
+      ),
+      "purchased",
+      {
+        eventId: "purchase-409:purchased",
+        occurredAt: "2026-04-05T20:03:00.000Z",
+        externalTicketReference: "ext-409"
+      }
+    );
+    const otherDrawLegacyRequest = createRequest({
+      requestId: "req-410",
+      userId: "seed-user",
+      createdAt: "2026-04-05T20:04:00.000Z"
+    });
+
+    const service = new PurchaseRequestQueryService({
+      requestStore: new InMemoryPurchaseRequestStore([otherDrawLegacyRequest]),
+      queueStore: new InMemoryPurchaseQueueStore([]),
+      canonicalPurchaseStore: new InMemoryCanonicalPurchaseStore([canonical]),
+      purchaseAttemptStore: new InMemoryPurchaseAttemptStore([])
+    });
+
+    const rows = await service.listRequestsByDraw("demo-lottery", "draw-409");
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        requestId: "req-409",
+        drawId: "draw-409",
+        status: "success"
+      })
+    ]);
   });
 });
 

@@ -1,6 +1,7 @@
 import { appendPurchaseRequestTransition, rankQueueForExecution, type PurchaseRequestRecord } from "@lottery/domain";
 import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
-import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
+import type { PurchaseQueueItem } from "../ports/purchase-queue-store.js";
+import type { PurchaseQueueTransport } from "../ports/purchase-queue-transport.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TerminalExecutionLock } from "../ports/terminal-execution-lock.js";
 import type { TimeSource } from "../ports/time-source.js";
@@ -12,7 +13,7 @@ import {
 
 export interface PurchaseExecutionQueueServiceDependencies {
   readonly requestStore: PurchaseRequestStore;
-  readonly queueStore: PurchaseQueueStore;
+  readonly queueStore: PurchaseQueueTransport;
   readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
   readonly executionLock: TerminalExecutionLock;
   readonly timeSource: TimeSource;
@@ -30,7 +31,7 @@ export interface ReserveNextQueuedRequestResult {
 
 export class PurchaseExecutionQueueService {
   private readonly requestStore: PurchaseRequestStore;
-  private readonly queueStore: PurchaseQueueStore;
+  private readonly queueStore: PurchaseQueueTransport;
   private readonly canonicalPurchaseStore: CanonicalPurchaseStore | null;
   private readonly executionLock: TerminalExecutionLock;
   private readonly timeSource: TimeSource;
@@ -52,7 +53,7 @@ export class PurchaseExecutionQueueService {
 
     let keepLock = false;
     try {
-      let queueItems = await this.queueStore.listQueueItems();
+      let queueItems = await this.queueStore.listSnapshot();
       if (queueItems.some((item) => item.status === "executing")) {
         const repairedQueueItems = await this.repairRecoveredExecutingItems(queueItems);
         if (repairedQueueItems === null) {
@@ -87,7 +88,7 @@ export class PurchaseExecutionQueueService {
 
         const request = await this.requestStore.getRequestById(queueItem.requestId);
         if (!request) {
-          await this.queueStore.removeQueueItem(queueItem.requestId);
+          await this.queueStore.complete(queueItem.requestId);
           continue;
         }
 
@@ -116,14 +117,16 @@ export class PurchaseExecutionQueueService {
           occurredAt: nowIso,
           note: `terminal execution reserved by ${workerId}`
         });
-        const nextQueueItem: PurchaseQueueItem = {
-          ...queueItem,
-          attemptCount: queueItem.attemptCount + 1,
-          status: "executing"
-        };
-
-        await this.requestStore.saveRequest(nextRequest);
-        await this.queueStore.saveQueueItem(nextQueueItem);
+        const nextQueueItem = await this.queueStore.reserve(queueItem.requestId);
+        if (!nextQueueItem) {
+          continue;
+        }
+        try {
+          await this.requestStore.saveRequest(nextRequest);
+        } catch (error) {
+          await this.queueStore.requeue(queueItem.requestId).catch(() => undefined);
+          throw error;
+        }
 
         keepLock = true;
         return {
@@ -157,17 +160,14 @@ export class PurchaseExecutionQueueService {
     for (const queueItem of queueItems.filter((item) => item.status === "executing")) {
       const request = await this.requestStore.getRequestById(queueItem.requestId);
       if (!request) {
-        await this.queueStore.removeQueueItem(queueItem.requestId);
-        changed = true;
-        continue;
-      }
+          await this.queueStore.complete(queueItem.requestId);
+          changed = true;
+          continue;
+        }
 
       const canonicalPurchase = await ensureCanonicalPurchaseForRequest(this.canonicalPurchaseStore, request);
       if (canonicalPurchase.status === "purchase_failed_retryable") {
-        await this.queueStore.saveQueueItem({
-          ...queueItem,
-          status: "queued"
-        });
+        await this.queueStore.requeue(queueItem.requestId);
         changed = true;
         continue;
       }
@@ -179,7 +179,7 @@ export class PurchaseExecutionQueueService {
         canonicalPurchase.status === "settled" ||
         canonicalPurchase.status === "canceled"
       ) {
-        await this.queueStore.removeQueueItem(queueItem.requestId);
+        await this.queueStore.complete(queueItem.requestId);
         changed = true;
         continue;
       }
@@ -187,7 +187,7 @@ export class PurchaseExecutionQueueService {
       return null;
     }
 
-    return changed ? this.queueStore.listQueueItems() : queueItems;
+    return changed ? this.queueStore.listSnapshot() : queueItems;
   }
 }
 

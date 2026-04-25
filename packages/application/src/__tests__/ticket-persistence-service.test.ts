@@ -55,6 +55,30 @@ describe("TicketPersistenceService", () => {
     expect((await ticketStore.listTickets()).length).toBe(1);
   });
 
+  it("can publish purchase success without writing a legacy ticket row", async () => {
+    const ticketStore = new InMemoryTicketStore();
+    const notificationStore = new InMemoryNotificationStore();
+    const service = new TicketPersistenceService({
+      ticketStore,
+      notificationStore,
+      persistLegacyTicket: false
+    });
+
+    const result = await service.persistSuccessfulPurchaseTicket({
+      request: createSuccessRequest("req-953"),
+      purchasedAt: "2026-04-05T23:33:00.000Z",
+      ticketId: "canonical:purchase-953",
+      externalReference: "demo-ext-953"
+    });
+
+    expect(result.replayed).toBe(false);
+    expect(result.ticket.ticketId).toBe("canonical:purchase-953");
+    expect((await ticketStore.listTickets()).length).toBe(0);
+    await expect(notificationStore.getNotificationById("canonical:purchase-953:purchase_success")).resolves.toMatchObject({
+      referenceTicketId: "canonical:purchase-953"
+    });
+  });
+
   it("rejects non-success request state", async () => {
     const ticketStore = new InMemoryTicketStore();
     const notificationStore = new InMemoryNotificationStore();

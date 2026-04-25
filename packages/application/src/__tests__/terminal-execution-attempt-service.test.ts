@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { CanonicalPurchaseRecord, NotificationRecord, PurchaseAttemptRecord, PurchaseRequestRecord, TicketRecord } from "@lottery/domain";
+import type {
+  CanonicalPurchaseRecord,
+  LedgerEntry,
+  NotificationRecord,
+  PurchaseAttemptRecord,
+  PurchaseRequestRecord,
+  TicketRecord
+} from "@lottery/domain";
 import {
   appendCanonicalPurchaseTransition,
   appendPurchaseRequestTransition,
@@ -13,12 +20,15 @@ import type { NotificationStore } from "../ports/notification-store.js";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
+import type { LedgerStore } from "../ports/ledger-store.js";
 import type { TerminalExecutionResult } from "../ports/terminal-executor.js";
+import type { TimeSource } from "../ports/time-source.js";
 import { TicketPersistenceService } from "../services/ticket-persistence-service.js";
 import {
   TerminalExecutionAttemptService,
   TerminalExecutionAttemptServiceError
 } from "../services/terminal-execution-attempt-service.js";
+import { type WalletLedgerEntryFactory, WalletLedgerService } from "../services/wallet-ledger-service.js";
 
 describe("TerminalExecutionAttemptService", () => {
   it("records successful attempt, moves request to success, and removes queue item", async () => {
@@ -62,6 +72,55 @@ describe("TerminalExecutionAttemptService", () => {
     expect(result.journalNote).toContain("outcome=success");
     expect(await queueStore.getQueueItemByRequestId("req-801")).toBeNull();
     expect((await ticketStore.listTickets()).length).toBe(1);
+  });
+
+  it("debits reserved funds when purchase succeeds", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([createExecutingRequest("req-801-ledger")]);
+    const queueStore = new InMemoryPurchaseQueueStore([
+      queueItem({
+        requestId: "req-801-ledger",
+        status: "executing",
+        attemptCount: 1
+      })
+    ]);
+    const walletLedgerService = createWalletLedgerService();
+    await seedReservedFundsForRequest(walletLedgerService, "req-801-ledger");
+    const ticketStore = new InMemoryTicketStore();
+    const notificationStore = new StubNotificationStore();
+    const ticketPersistenceService = new TicketPersistenceService({
+      ticketStore,
+      notificationStore
+    });
+    const service = new TerminalExecutionAttemptService({
+      requestStore,
+      queueStore,
+      ticketPersistenceService,
+      walletLedgerService
+    });
+
+    await service.recordAttemptResult({
+      requestId: "req-801-ledger",
+      attempt: 1,
+      startedAt: "2026-04-05T22:10:00.000Z",
+      result: terminalResult({
+        requestId: "req-801-ledger",
+        nextState: "success",
+        rawOutput: "[terminal] success",
+        externalTicketReference: "demo-ext-801-ledger"
+      })
+    });
+
+    expect(await walletLedgerService.getWalletSnapshot("seed-user", "RUB")).toEqual({
+      userId: "seed-user",
+      availableMinor: 910,
+      reservedMinor: 0,
+      currency: "RUB"
+    });
+    expect((await walletLedgerService.listEntries("seed-user")).map((entry) => entry.operation)).toEqual([
+      "credit",
+      "reserve",
+      "debit"
+    ]);
   });
 
   it("records retrying attempt and re-queues item with queued status", async () => {
@@ -182,6 +241,55 @@ describe("TerminalExecutionAttemptService", () => {
     });
   });
 
+  it("releases reserved funds when purchase fails terminally", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([createExecutingRequest("req-803-ledger")]);
+    const queueStore = new InMemoryPurchaseQueueStore([
+      queueItem({
+        requestId: "req-803-ledger",
+        status: "executing",
+        attemptCount: 1
+      })
+    ]);
+    const walletLedgerService = createWalletLedgerService();
+    await seedReservedFundsForRequest(walletLedgerService, "req-803-ledger");
+    const ticketStore = new InMemoryTicketStore();
+    const notificationStore = new StubNotificationStore();
+    const ticketPersistenceService = new TicketPersistenceService({
+      ticketStore,
+      notificationStore
+    });
+    const service = new TerminalExecutionAttemptService({
+      requestStore,
+      queueStore,
+      ticketPersistenceService,
+      walletLedgerService
+    });
+
+    const result = await service.recordAttemptResult({
+      requestId: "req-803-ledger",
+      attempt: 1,
+      startedAt: "2026-04-05T22:12:00.000Z",
+      result: terminalResult({
+        requestId: "req-803-ledger",
+        nextState: "error",
+        rawOutput: "[terminal] hard failure"
+      })
+    });
+
+    expect(result.request.state).toBe("error");
+    expect(await walletLedgerService.getWalletSnapshot("seed-user", "RUB")).toEqual({
+      userId: "seed-user",
+      availableMinor: 1000,
+      reservedMinor: 0,
+      currency: "RUB"
+    });
+    expect((await walletLedgerService.listEntries("seed-user")).map((entry) => entry.operation)).toEqual([
+      "credit",
+      "reserve",
+      "release"
+    ]);
+  });
+
   it("records canonical attempt history and advances canonical purchase to awaiting_draw_close on success", async () => {
     const requestStore = new InMemoryPurchaseRequestStore([createExecutingRequest("req-804")]);
     const queueStore = new InMemoryPurchaseQueueStore([
@@ -227,6 +335,52 @@ describe("TerminalExecutionAttemptService", () => {
     await expect(canonicalPurchaseStore.getPurchaseByLegacyRequestId("req-804")).resolves.toMatchObject({
       status: "awaiting_draw_close",
       externalTicketReference: "demo-ext-804"
+    });
+  });
+
+  it("publishes canonical success without writing a legacy ticket row", async () => {
+    const requestStore = new InMemoryPurchaseRequestStore([createExecutingRequest("req-806")]);
+    const queueStore = new InMemoryPurchaseQueueStore([
+      queueItem({
+        requestId: "req-806",
+        status: "executing",
+        attemptCount: 1
+      })
+    ]);
+    const canonicalPurchaseStore = new InMemoryCanonicalPurchaseStore([createCanonicalProcessingPurchase("req-806")]);
+    const purchaseAttemptStore = new InMemoryPurchaseAttemptStore();
+    const ticketStore = new InMemoryTicketStore();
+    const notificationStore = new StubNotificationStore();
+    const ticketPersistenceService = new TicketPersistenceService({
+      ticketStore,
+      notificationStore,
+      persistLegacyTicket: false
+    });
+    const service = new TerminalExecutionAttemptService({
+      requestStore,
+      queueStore,
+      canonicalPurchaseStore,
+      purchaseAttemptStore,
+      ticketPersistenceService
+    });
+
+    const result = await service.recordAttemptResult({
+      requestId: "req-806",
+      attempt: 1,
+      startedAt: "2026-04-05T22:12:00.000Z",
+      result: terminalResult({
+        requestId: "req-806",
+        nextState: "success",
+        rawOutput: "[terminal] success",
+        externalTicketReference: "demo-ext-806"
+      })
+    });
+
+    expect(result.ticket?.ticketId).toBe("canonical:req-806");
+    expect((await ticketStore.listTickets()).length).toBe(0);
+    await expect(canonicalPurchaseStore.getPurchaseByLegacyRequestId("req-806")).resolves.toMatchObject({
+      status: "awaiting_draw_close",
+      externalTicketReference: "demo-ext-806"
     });
   });
 
@@ -397,6 +551,59 @@ class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
     return item ? { ...item } : null;
   }
 
+  async listSnapshot(): Promise<readonly PurchaseQueueItem[]> {
+    return this.listQueueItems();
+  }
+
+  async getByRequestId(requestId: string): Promise<PurchaseQueueItem | null> {
+    return this.getQueueItemByRequestId(requestId);
+  }
+
+  async enqueue(item: PurchaseQueueItem): Promise<void> {
+    await this.saveQueueItem(item);
+  }
+
+  async reserve(requestId: string): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing || existing.status !== "queued") {
+      return null;
+    }
+
+    const nextItem: PurchaseQueueItem = {
+      ...existing,
+      attemptCount: existing.attemptCount + 1,
+      status: "executing"
+    };
+    await this.saveQueueItem(nextItem);
+    return nextItem;
+  }
+
+  async requeue(requestId: string): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing) {
+      return null;
+    }
+
+    const nextItem = existing.status === "queued" ? existing : { ...existing, status: "queued" as const };
+    await this.saveQueueItem(nextItem);
+    return nextItem;
+  }
+
+  async reprioritize(requestId: string, priority: PurchaseQueueItem["priority"]): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing) {
+      return null;
+    }
+
+    const nextItem = existing.priority === priority ? existing : { ...existing, priority };
+    await this.saveQueueItem(nextItem);
+    return nextItem;
+  }
+
+  async complete(requestId: string): Promise<void> {
+    await this.removeQueueItem(requestId);
+  }
+
   async saveQueueItem(item: PurchaseQueueItem): Promise<void> {
     const filtered = this.items.filter((entry) => entry.requestId !== item.requestId);
     this.items = [...filtered, { ...item }];
@@ -495,6 +702,67 @@ class InMemoryTicketStore implements TicketStore {
   async clearAll(): Promise<void> {}
 }
 
+function createWalletLedgerService(): WalletLedgerService {
+  return new WalletLedgerService({
+    ledgerStore: new InMemoryLedgerStore(),
+    timeSource: {
+      nowIso() {
+        return "2026-04-05T22:12:30.000Z";
+      }
+    } satisfies TimeSource,
+    entryFactory: new SequentialEntryFactory()
+  });
+}
+
+async function seedReservedFundsForRequest(walletLedgerService: WalletLedgerService, requestId: string): Promise<void> {
+  await walletLedgerService.recordEntry({
+    userId: "seed-user",
+    operation: "credit",
+    amountMinor: 1000,
+    currency: "RUB",
+    idempotencyKey: `seed-user-credit:${requestId}`,
+    reference: {
+      requestId: `seed-credit:${requestId}`
+    },
+    createdAt: "2026-04-05T22:00:00.000Z"
+  });
+  await walletLedgerService.reserveFunds({
+    userId: "seed-user",
+    requestId,
+    amountMinor: 90,
+    currency: "RUB",
+    idempotencyKey: `${requestId}:reserve`,
+    createdAt: "2026-04-05T22:01:00.000Z"
+  });
+}
+
+class InMemoryLedgerStore implements LedgerStore {
+  private entries: LedgerEntry[] = [];
+
+  async listEntries(): Promise<readonly LedgerEntry[]> {
+    return this.entries.map(cloneLedgerEntry);
+  }
+
+  async listEntriesByUser(userId: string): Promise<readonly LedgerEntry[]> {
+    return this.entries.filter((entry) => entry.userId === userId).map(cloneLedgerEntry);
+  }
+
+  async appendEntry(entry: LedgerEntry): Promise<void> {
+    this.entries = [...this.entries, cloneLedgerEntry(entry)];
+  }
+
+  async clearAll(): Promise<void> {}
+}
+
+class SequentialEntryFactory implements WalletLedgerEntryFactory {
+  private index = 0;
+
+  nextEntryId(): string {
+    this.index += 1;
+    return `ledger-${this.index}`;
+  }
+}
+
 function cloneRequestRecord(record: PurchaseRequestRecord): PurchaseRequestRecord {
   return {
     snapshot: {
@@ -565,6 +833,13 @@ function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): Canonica
     settledAt: record.settledAt,
     externalTicketReference: record.externalTicketReference,
     journal: record.journal.map((entry) => ({ ...entry }))
+  };
+}
+
+function cloneLedgerEntry(entry: LedgerEntry): LedgerEntry {
+  return {
+    ...entry,
+    reference: { ...entry.reference }
   };
 }
 

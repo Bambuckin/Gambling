@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { PurchaseRequestRecord } from "@lottery/domain";
+import type { CanonicalPurchaseRecord, PurchaseRequestRecord } from "@lottery/domain";
 import {
+  appendCanonicalPurchaseTransition,
   appendPurchaseRequestTransition,
-  createAwaitingConfirmationRequest
+  createAwaitingConfirmationRequest,
+  createSubmittedCanonicalPurchase
 } from "@lottery/domain";
+import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TimeSource } from "../ports/time-source.js";
@@ -69,15 +72,35 @@ describe("TerminalHealthService", () => {
     expect(snapshot.consecutiveFailures).toBe(0);
     expect(snapshot.lastErrorAt).toBeNull();
   });
+
+  it("prefers canonical failures when canonical purchases exist without legacy request rows", async () => {
+    const service = createService({
+      requests: [],
+      queueItems: [],
+      canonicalPurchases: [
+        createCanonicalFinalFailure("purchase-908", "req-908", "2026-04-05T22:20:00.000Z"),
+        createCanonicalFinalFailure("purchase-909", "req-909", "2026-04-05T22:19:00.000Z"),
+        createCanonicalSuccess("purchase-910", "req-910", "2026-04-05T22:18:00.000Z")
+      ]
+    });
+
+    const snapshot = await service.getStateSnapshot();
+
+    expect(snapshot.state).toBe("degraded");
+    expect(snapshot.consecutiveFailures).toBe(2);
+    expect(snapshot.lastErrorAt).toBe("2026-04-05T22:20:00.000Z");
+  });
 });
 
 function createService(input: {
   readonly requests: readonly PurchaseRequestRecord[];
   readonly queueItems: readonly PurchaseQueueItem[];
+  readonly canonicalPurchases?: readonly CanonicalPurchaseRecord[];
 }): TerminalHealthService {
   return new TerminalHealthService({
     requestStore: new InMemoryPurchaseRequestStore(input.requests),
     queueStore: new InMemoryPurchaseQueueStore(input.queueItems),
+    canonicalPurchaseStore: new InMemoryCanonicalPurchaseStore(input.canonicalPurchases ?? []),
     timeSource: {
       nowIso() {
         return "2026-04-05T22:30:00.000Z";
@@ -151,6 +174,89 @@ function queueItem(input: {
   };
 }
 
+function createCanonicalFinalFailure(
+  purchaseId: string,
+  legacyRequestId: string,
+  failedAt: string
+): CanonicalPurchaseRecord {
+  return appendCanonicalPurchaseTransition(
+    appendCanonicalPurchaseTransition(
+      appendCanonicalPurchaseTransition(
+        createSubmittedCanonicalPurchase({
+          purchaseId,
+          legacyRequestId,
+          userId: "seed-user",
+          lotteryCode: "demo-lottery",
+          drawId: "draw-400",
+          payload: {
+            draw_count: 1
+          },
+          costMinor: 100,
+          currency: "RUB",
+          submittedAt: "2026-04-05T22:00:00.000Z"
+        }),
+        "queued",
+        {
+          eventId: `${purchaseId}:queued`,
+          occurredAt: "2026-04-05T22:01:00.000Z"
+        }
+      ),
+      "processing",
+      {
+        eventId: `${purchaseId}:processing`,
+        occurredAt: "2026-04-05T22:02:00.000Z"
+      }
+    ),
+    "purchase_failed_final",
+    {
+      eventId: `${purchaseId}:failed`,
+      occurredAt: failedAt
+    }
+  );
+}
+
+function createCanonicalSuccess(
+  purchaseId: string,
+  legacyRequestId: string,
+  purchasedAt: string
+): CanonicalPurchaseRecord {
+  return appendCanonicalPurchaseTransition(
+    appendCanonicalPurchaseTransition(
+      appendCanonicalPurchaseTransition(
+        createSubmittedCanonicalPurchase({
+          purchaseId,
+          legacyRequestId,
+          userId: "seed-user",
+          lotteryCode: "demo-lottery",
+          drawId: "draw-400",
+          payload: {
+            draw_count: 1
+          },
+          costMinor: 100,
+          currency: "RUB",
+          submittedAt: "2026-04-05T22:00:00.000Z"
+        }),
+        "queued",
+        {
+          eventId: `${purchaseId}:queued`,
+          occurredAt: "2026-04-05T22:01:00.000Z"
+        }
+      ),
+      "processing",
+      {
+        eventId: `${purchaseId}:processing`,
+        occurredAt: "2026-04-05T22:02:00.000Z"
+      }
+    ),
+    "purchased",
+    {
+      eventId: `${purchaseId}:purchased`,
+      occurredAt: purchasedAt,
+      externalTicketReference: `ext-${purchaseId}`
+    }
+  );
+}
+
 class InMemoryPurchaseRequestStore implements PurchaseRequestStore {
   private records: PurchaseRequestRecord[];
 
@@ -203,6 +309,34 @@ class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
   async clearAll(): Promise<void> {}
 }
 
+class InMemoryCanonicalPurchaseStore implements CanonicalPurchaseStore {
+  private records: CanonicalPurchaseRecord[];
+
+  constructor(records: readonly CanonicalPurchaseRecord[]) {
+    this.records = records.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async listPurchases(): Promise<readonly CanonicalPurchaseRecord[]> {
+    return this.records.map(cloneCanonicalPurchaseRecord);
+  }
+
+  async getPurchaseById(purchaseId: string): Promise<CanonicalPurchaseRecord | null> {
+    const record = this.records.find((entry) => entry.snapshot.purchaseId === purchaseId) ?? null;
+    return record ? cloneCanonicalPurchaseRecord(record) : null;
+  }
+
+  async getPurchaseByLegacyRequestId(legacyRequestId: string): Promise<CanonicalPurchaseRecord | null> {
+    const record = this.records.find((entry) => entry.snapshot.legacyRequestId === legacyRequestId) ?? null;
+    return record ? cloneCanonicalPurchaseRecord(record) : null;
+  }
+
+  async savePurchase(): Promise<void> {
+    throw new Error("not needed in test");
+  }
+
+  async clearAll(): Promise<void> {}
+}
+
 function cloneRequestRecord(record: PurchaseRequestRecord): PurchaseRequestRecord {
   return {
     snapshot: {
@@ -210,6 +344,22 @@ function cloneRequestRecord(record: PurchaseRequestRecord): PurchaseRequestRecor
       payload: { ...record.snapshot.payload }
     },
     state: record.state,
+    journal: record.journal.map((entry) => ({ ...entry }))
+  };
+}
+
+function cloneCanonicalPurchaseRecord(record: CanonicalPurchaseRecord): CanonicalPurchaseRecord {
+  return {
+    snapshot: {
+      ...record.snapshot,
+      payload: { ...record.snapshot.payload }
+    },
+    status: record.status,
+    resultStatus: record.resultStatus,
+    resultVisibility: record.resultVisibility,
+    purchasedAt: record.purchasedAt,
+    settledAt: record.settledAt,
+    externalTicketReference: record.externalTicketReference,
     journal: record.journal.map((entry) => ({ ...entry }))
   };
 }

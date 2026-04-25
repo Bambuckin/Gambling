@@ -1,13 +1,14 @@
-import type { LedgerEntry } from "@lottery/domain";
 import type { TicketStore } from "../ports/ticket-store.js";
 import type { LedgerStore } from "../ports/ledger-store.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
+import type { TicketQueryService, TicketView } from "./ticket-query-service.js";
 import { buildBalanceSnapshot, sortLedgerEntries } from "@lottery/domain";
 
 export interface UserCabinetStatsServiceDependencies {
   readonly ticketStore: TicketStore;
   readonly ledgerStore: LedgerStore;
   readonly requestStore: PurchaseRequestStore;
+  readonly ticketQueryService?: Pick<TicketQueryService, "listUserTickets">;
 }
 
 export interface UserCabinetSummary {
@@ -44,20 +45,21 @@ export class UserCabinetStatsService {
   private readonly ticketStore: TicketStore;
   private readonly ledgerStore: LedgerStore;
   private readonly requestStore: PurchaseRequestStore;
+  private readonly ticketQueryService: Pick<TicketQueryService, "listUserTickets"> | null;
 
   constructor(dependencies: UserCabinetStatsServiceDependencies) {
     this.ticketStore = dependencies.ticketStore;
     this.ledgerStore = dependencies.ledgerStore;
     this.requestStore = dependencies.requestStore;
+    this.ticketQueryService = dependencies.ticketQueryService ?? null;
   }
 
   async getCabinetSummary(userId: string, currency: string): Promise<UserCabinetSummary> {
-    const [tickets, entries] = await Promise.all([
-      this.ticketStore.listTickets(),
+    const [userTickets, entries] = await Promise.all([
+      this.listUserTickets(userId),
       this.ledgerStore.listEntriesByUser(userId)
     ]);
 
-    const userTickets = tickets.filter((t) => t.userId === userId);
     const sortedEntries = sortLedgerEntries(entries);
     const snapshot = buildBalanceSnapshot({ userId, currency, entries: sortedEntries });
 
@@ -82,8 +84,7 @@ export class UserCabinetStatsService {
   }
 
   async getCabinetTickets(userId: string, filter?: CabinetFilter): Promise<CabinetTicketView[]> {
-    const tickets = await this.ticketStore.listTickets();
-    let userTickets = tickets.filter((t) => t.userId === userId);
+    let userTickets = await this.listUserTickets(userId);
 
     if (filter?.lottery) {
       userTickets = userTickets.filter((t) => t.lotteryCode === filter.lottery);
@@ -118,4 +119,20 @@ export class UserCabinetStatsService {
       }))
       .sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt));
   }
+
+  private async listUserTickets(userId: string): Promise<readonly CabinetTicketSource[]> {
+    if (this.ticketQueryService) {
+      return this.ticketQueryService.listUserTickets(userId);
+    }
+
+    const tickets = await this.ticketStore.listTickets();
+    return tickets.filter((ticket) => ticket.userId === userId);
+  }
 }
+
+type CabinetTicketSource = Pick<
+  TicketView,
+  "ticketId" | "requestId" | "lotteryCode" | "drawId" | "winningAmountMinor" | "claimState" | "resultSource" | "purchasedAt"
+> & {
+  readonly userId?: string;
+};

@@ -13,11 +13,10 @@ The documented contour is the current `bolshaya-8` working slice with:
 - purchase only against open draws, including draws created manually from admin;
 - queued request pickup by exactly one worker;
 - manual draw handling by admin;
+- explicit winning fulfillment split into wallet credit or cash desk;
 - admin test cleanup controls for queue/runtime and empty-draw deletion;
 - terminal-side visibility for consumed requests;
-- result visibility and notifications back on the user page.
-
-It does not claim that final checkout/payment automation is complete.
+- result visibility, account summary, and notifications back on the user page.
 
 ## Main User Flow
 
@@ -35,8 +34,10 @@ It does not claim that final checkout/payment automation is complete.
   - select an open draw, including a draw created manually in admin;
   - confirm the request;
   - watch request status;
+  - see canonical-first account totals in `Итоги по аккаунту`;
   - see purchase and result notifications;
-  - see final ticket result after draw closure.
+  - see final ticket result after draw closure;
+  - choose `Зачислить` or `В кассу` for a visible win.
 
 ### 3. Queueing
 
@@ -47,7 +48,7 @@ It does not claim that final checkout/payment automation is complete.
 
 - `apps/terminal-worker/src/main.ts` runs the worker loop.
 - In the current contour, Big 8 runs in mock-success mode by default unless `LOTTERY_BIG8_TERMINAL_MODE=real` is set explicitly.
-- The worker reserves queued requests, executes the Big 8 emulated terminal handler, and persists request/ticket progress into shared storage.
+- The worker reserves queued requests, executes the Big 8 terminal handler, and persists request/ticket progress into shared storage.
 - Queue entries may disappear very quickly because the worker can reserve them immediately.
 - In mock mode the worker no longer injects default Big 8 draws on its own. Purchase should target draws created from admin.
 
@@ -58,18 +59,21 @@ It does not claim that final checkout/payment automation is complete.
   - see system summary;
   - inspect queue snapshot;
   - inspect terminal/last-request rows;
+  - inspect problem requests, alerts, and recent operations audit;
   - create a draw manually and immediately expose it for purchase;
   - delete an empty test draw;
   - clear queued runtime state for tests;
   - reset test runtime state completely;
   - mark ticket as `win` or `lose`;
+  - close cash-desk payouts;
+  - inspect winnings-credit jobs;
   - close the draw.
 
 ### 6. User result visibility
 
 - After draw closure, the user page shows ticket result state and claim state.
-- The current simplified page also shows live notifications about successful purchase and closed-draw result.
-- The page still does not expose a dedicated payout widget.
+- The current page also shows live notifications about successful purchase and closed-draw result.
+- The same page now exposes explicit fulfillment actions for winning tickets, while admin retains the cash-desk issuance control.
 
 ## Runtime Ownership
 
@@ -90,7 +94,7 @@ Web owns:
 - admin draw commands;
 - open-draw filtering against draw closures;
 - notification read-model presentation on the user page;
-- read-model presentation for queue, tickets, and terminal receipts.
+- read-model presentation for queue, tickets, receiver rows, account summary, and fulfillment actions.
 
 Web does not own:
 
@@ -121,12 +125,15 @@ Key files:
 - `packages/application/src/services/draw-closure-service.ts`
 - `packages/application/src/services/ticket-persistence-service.ts`
 - `packages/application/src/services/ticket-query-service.ts`
+- `packages/application/src/services/terminal-receiver-query-service.ts`
+- `packages/application/src/services/admin-operations-query-service.ts`
 
 Application layer owns:
 
 - typed use-case services;
 - request, queue, draw-closure, and ticket contracts;
-- lifecycle orchestration between ports.
+- lifecycle orchestration between ports;
+- canonical-first projections for admin, receiver, and user-facing read models.
 
 ### Infrastructure layer
 
@@ -151,12 +158,13 @@ The shared Postgres-backed contour now persists:
 - registry entries and draw snapshots;
 - ledger entries and wallet state;
 - purchase requests and queue items;
-- tickets and verification jobs;
+- canonical purchases, canonical draws, and purchase attempts;
+- compatibility ticket rows when they still exist from older slices;
 - draw closures;
 - notifications;
 - cash desk requests;
 - winnings credit jobs;
-- terminal execution lock state.
+- advisory terminal execution lock ownership outside the old lock table.
 
 This is why web and worker can observe the same request/ticket/draw state across processes.
 
@@ -192,14 +200,16 @@ Intentionally exposed:
 - draw selection;
 - request confirmation;
 - request status timeline;
+- canonical-first `Итоги по аккаунту`;
 - notification feed for purchase/result events;
-- ticket result table.
+- ticket result table;
+- explicit `Зачислить` and `В кассу` actions for winning tickets.
 
 Intentionally not exposed:
 
-- direct payout buttons;
-- secondary cabinet analytics block;
 - wallet movement history table.
+- a separate dedicated payout page;
+- a separate cabinet route beyond the lottery page.
 
 ### `/admin`
 
@@ -208,8 +218,11 @@ Intentionally exposed:
 - system summary;
 - queue snapshot;
 - terminal/last requests;
+- problem requests, alerts, and recent operations audit;
 - manual draw creation;
 - empty draw deletion;
+- cash-desk payout issuance;
+- winnings-credit job visibility;
 - queue cleanup and full test runtime reset;
 - ticket mark and draw closure controls.
 
@@ -221,7 +234,6 @@ Intentionally exposed:
 
 ## Known Gaps
 
-- Final checkout/payment automation after cart stage is still open.
 - NLoto selector hardening is still open.
 - Security hardening remains follow-up work, not current contour.
 

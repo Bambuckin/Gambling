@@ -5,11 +5,13 @@ import type { TicketStore } from "../ports/ticket-store.js";
 export interface TicketPersistenceServiceDependencies {
   readonly ticketStore: TicketStore;
   readonly notificationStore: NotificationStore;
+  readonly persistLegacyTicket?: boolean;
 }
 
 export interface PersistSuccessfulPurchaseTicketInput {
   readonly request: PurchaseRequestRecord;
   readonly purchasedAt: string;
+  readonly ticketId?: string | null;
   readonly externalReference?: string | null;
 }
 
@@ -38,10 +40,12 @@ export class TicketPersistenceServiceError extends Error {
 export class TicketPersistenceService {
   private readonly ticketStore: TicketStore;
   private readonly notificationStore: NotificationStore;
+  private readonly persistLegacyTicket: boolean;
 
   constructor(dependencies: TicketPersistenceServiceDependencies) {
     this.ticketStore = dependencies.ticketStore;
     this.notificationStore = dependencies.notificationStore;
+    this.persistLegacyTicket = dependencies.persistLegacyTicket ?? true;
   }
 
   async persistSuccessfulPurchaseTicket(
@@ -57,6 +61,7 @@ export class TicketPersistenceService {
       );
     }
 
+    const ticketId = resolveTicketId(input);
     const existing = await this.ticketStore.getTicketByRequestId(request.snapshot.requestId);
     if (existing) {
       return {
@@ -65,8 +70,26 @@ export class TicketPersistenceService {
       };
     }
 
+    if (!this.persistLegacyTicket) {
+      const existingNotification = await this.notificationStore.getNotificationById(`${ticketId}:purchase_success`);
+      if (existingNotification) {
+        return {
+          ticket: createPurchasedTicketRecord({
+            ticketId,
+            requestId: request.snapshot.requestId,
+            userId: request.snapshot.userId,
+            lotteryCode: request.snapshot.lotteryCode,
+            drawId: request.snapshot.drawId,
+            purchasedAt: input.purchasedAt,
+            externalReference: input.externalReference ?? null
+          }),
+          replayed: true
+        };
+      }
+    }
+
     const ticket = createPurchasedTicketRecord({
-      ticketId: `${request.snapshot.requestId}:ticket`,
+      ticketId,
       requestId: request.snapshot.requestId,
       userId: request.snapshot.userId,
       lotteryCode: request.snapshot.lotteryCode,
@@ -75,7 +98,9 @@ export class TicketPersistenceService {
       externalReference: input.externalReference ?? null
     });
 
-    await this.ticketStore.saveTicket(ticket);
+    if (this.persistLegacyTicket) {
+      await this.ticketStore.saveTicket(ticket);
+    }
 
     await this.notificationStore.saveNotification(
       createNotification({
@@ -96,6 +121,15 @@ export class TicketPersistenceService {
       replayed: false
     };
   }
+}
+
+function resolveTicketId(input: PersistSuccessfulPurchaseTicketInput): string {
+  const normalizedTicketId = input.ticketId?.trim();
+  if (normalizedTicketId) {
+    return normalizedTicketId;
+  }
+
+  return `${input.request.snapshot.requestId}:ticket`;
 }
 
 function cloneRequest(request: PurchaseRequestRecord): PurchaseRequestRecord {

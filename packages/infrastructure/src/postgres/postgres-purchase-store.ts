@@ -5,7 +5,9 @@ import type {
   NotificationStore,
   PurchaseAttemptStore,
   PurchaseQueueItem,
+  PurchaseQueuePriority,
   PurchaseQueueStore,
+  PurchaseQueueTransport,
   PurchaseRequestStore,
   TerminalExecutionLock,
   TicketStore,
@@ -23,7 +25,7 @@ import {
   type TicketRecord,
   type TicketVerificationJob
 } from "@lottery/domain";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { deepClone, last, normalizeText, optionalNormalizedText } from "./utils.js";
 
 export class PostgresPurchaseRequestStore implements PurchaseRequestStore {
@@ -427,7 +429,7 @@ export class PostgresPurchaseAttemptStore implements PurchaseAttemptStore {
   }
 }
 
-export class PostgresPurchaseQueueStore implements PurchaseQueueStore {
+export class PostgresPurchaseQueueStore implements PurchaseQueueStore, PurchaseQueueTransport {
   private readonly pool: Pool;
 
   constructor(pool: Pool) {
@@ -460,6 +462,59 @@ export class PostgresPurchaseQueueStore implements PurchaseQueueStore {
 
     const row = result.rows[0];
     return row ? deepClone(row.item as PurchaseQueueItem) : null;
+  }
+
+  async listSnapshot(): Promise<readonly PurchaseQueueItem[]> {
+    return this.listQueueItems();
+  }
+
+  async getByRequestId(requestId: string): Promise<PurchaseQueueItem | null> {
+    return this.getQueueItemByRequestId(requestId);
+  }
+
+  async enqueue(item: PurchaseQueueItem): Promise<void> {
+    await this.saveQueueItem(item);
+  }
+
+  async reserve(requestId: string): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing || existing.status !== "queued") {
+      return null;
+    }
+
+    const nextItem: PurchaseQueueItem = {
+      ...existing,
+      attemptCount: existing.attemptCount + 1,
+      status: "executing"
+    };
+    await this.saveQueueItem(nextItem);
+    return nextItem;
+  }
+
+  async requeue(requestId: string): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing) {
+      return null;
+    }
+
+    const nextItem: PurchaseQueueItem = existing.status === "queued" ? existing : { ...existing, status: "queued" };
+    await this.saveQueueItem(nextItem);
+    return nextItem;
+  }
+
+  async reprioritize(requestId: string, priority: PurchaseQueuePriority): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing) {
+      return null;
+    }
+
+    const nextItem: PurchaseQueueItem = existing.priority === priority ? existing : { ...existing, priority };
+    await this.saveQueueItem(nextItem);
+    return nextItem;
+  }
+
+  async complete(requestId: string): Promise<void> {
+    await this.removeQueueItem(requestId);
   }
 
   async saveQueueItem(item: PurchaseQueueItem): Promise<void> {
@@ -868,71 +923,123 @@ export interface PostgresTerminalExecutionLockOptions {
   readonly ttlSeconds?: number;
 }
 
+export interface PostgresTerminalExecutionAdvisoryKey {
+  readonly classId: number;
+  readonly objectId: number;
+}
+
+const TERMINAL_EXECUTION_LOCK_NAMESPACE = 24024;
+
+export function createTerminalExecutionAdvisoryKey(lockName: string): PostgresTerminalExecutionAdvisoryKey {
+  const normalizedLockName = normalizeText(lockName, "lockName");
+  return {
+    classId: TERMINAL_EXECUTION_LOCK_NAMESPACE,
+    objectId: hashAdvisoryLockName(normalizedLockName)
+  };
+}
+
 export class PostgresTerminalExecutionLock implements TerminalExecutionLock {
   private readonly pool: Pool;
   private readonly lockName: string;
-  private readonly ttlSeconds: number;
+  private readonly advisoryKey: PostgresTerminalExecutionAdvisoryKey;
+  private heldClient: PoolClient | null = null;
+  private heldOwnerId: string | null = null;
 
   constructor(pool: Pool, options: PostgresTerminalExecutionLockOptions = {}) {
     this.pool = pool;
     this.lockName = normalizeText(options.lockName ?? "main-terminal", "lockName");
-    const rawTtl = Math.trunc(options.ttlSeconds ?? 30);
-    this.ttlSeconds = Number.isFinite(rawTtl) ? Math.max(5, rawTtl) : 30;
+    this.advisoryKey = createTerminalExecutionAdvisoryKey(this.lockName);
   }
 
   async acquire(ownerId: string): Promise<boolean> {
     const normalizedOwnerId = normalizeText(ownerId, "ownerId");
+    if (this.heldClient) {
+      return this.heldOwnerId === normalizedOwnerId;
+    }
 
-    const result = await this.pool.query(
-      `
-        insert into lottery_terminal_execution_locks (
-          lock_name,
-          owner_id,
-          acquired_at,
-          expires_at
-        )
-        values (
-          $1,
-          $2,
-          now(),
-          now() + make_interval(secs => $3)
-        )
-        on conflict (lock_name)
-        do update
-          set owner_id = excluded.owner_id,
-              acquired_at = excluded.acquired_at,
-              expires_at = excluded.expires_at
-          where lottery_terminal_execution_locks.owner_id = excluded.owner_id
-             or lottery_terminal_execution_locks.expires_at < now()
-        returning owner_id
-      `,
-      [this.lockName, normalizedOwnerId, this.ttlSeconds]
-    );
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ acquired: boolean }>(
+        `
+          select pg_try_advisory_lock($1, $2) as acquired
+        `,
+        [this.advisoryKey.classId, this.advisoryKey.objectId]
+      );
+      const acquired = result.rows[0]?.acquired === true;
+      if (!acquired) {
+        client.release();
+        return false;
+      }
 
-    return result.rowCount === 1;
+      this.heldClient = client;
+      this.heldOwnerId = normalizedOwnerId;
+      return true;
+    } catch (error) {
+      client.release();
+      throw error;
+    }
   }
 
   async release(ownerId: string): Promise<void> {
     const normalizedOwnerId = normalizeText(ownerId, "ownerId");
+    if (!this.heldClient || this.heldOwnerId !== normalizedOwnerId) {
+      return;
+    }
 
-    await this.pool.query(
-      `
-        delete from lottery_terminal_execution_locks
-        where lock_name = $1 and owner_id = $2
-      `,
-      [this.lockName, normalizedOwnerId]
-    );
+    await this.releaseHeldClient(this.heldClient);
+    this.heldClient = null;
+    this.heldOwnerId = null;
   }
 
   async clearAll(): Promise<void> {
+    if (this.heldClient) {
+      await this.releaseHeldClient(this.heldClient);
+      this.heldClient = null;
+      this.heldOwnerId = null;
+    }
+
     await this.pool.query(
       `
-        delete from lottery_terminal_execution_locks
-        where lock_name = $1
+        with holders as (
+          select distinct pid
+          from pg_locks
+          where locktype = 'advisory'
+            and classid = $1
+            and objid = $2
+            and objsubid = 2
+            and pid <> pg_backend_pid()
+        )
+        select pg_terminate_backend(pid)
+        from holders
       `,
-      [this.lockName]
+      [this.advisoryKey.classId, this.advisoryKey.objectId]
     );
   }
+
+  private async releaseHeldClient(client: PoolClient): Promise<void> {
+    try {
+      await client.query(
+        `
+          select pg_advisory_unlock($1, $2)
+        `,
+        [this.advisoryKey.classId, this.advisoryKey.objectId]
+      );
+    } catch {
+      // The session may already be gone because another process cleared the lock.
+    } finally {
+      client.release();
+    }
+  }
+}
+
+function hashAdvisoryLockName(input: string): number {
+  let hash = 2166136261;
+  for (const character of input) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 1) || 1;
 }
 
 function normalizePurchaseRequestRecord(record: PurchaseRequestRecord): PurchaseRequestRecord {

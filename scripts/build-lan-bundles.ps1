@@ -60,6 +60,9 @@ function Invoke-Main {
   if (-not $SkipInstall.IsPresent) {
     Write-Host "[lan-bundles] installing workspace dependencies"
     corepack pnpm install
+    if ($LASTEXITCODE -ne 0) {
+      throw "workspace dependency install failed"
+    }
   }
 
   $envPath = if ([System.IO.Path]::IsPathRooted($EnvFile)) {
@@ -83,10 +86,34 @@ function Invoke-Main {
 
   $sharedPostgresUrl = Resolve-PostgresUrl -EnvMap $envMap -ServerIp $resolvedServerIp
   $resolvedServerPort = Resolve-ServerPort -EnvMap $envMap -FallbackPort $ServerPort
+  $terminalLockTtlSeconds = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_TERMINAL_LOCK_TTL_SECONDS" -DefaultValue "30").Trim()
+  $terminalPollIntervalMs = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_TERMINAL_POLL_INTERVAL_MS" -DefaultValue "3000").Trim()
+  $liveDrawSyncEnabled = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_BIG8_LIVE_DRAW_SYNC_ENABLED" -DefaultValue "true").Trim()
+  $terminalMode = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_BIG8_TERMINAL_MODE" -DefaultValue "mock").Trim()
+  $terminalBrowserUrl = if ($terminalMode -eq "real") {
+    (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_TERMINAL_BROWSER_URL" -DefaultValue "http://127.0.0.1:9222").Trim()
+  } else {
+    ""
+  }
+  $terminalPageUrl = if ($terminalMode -eq "real") {
+    (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_TERMINAL_PAGE_URL" -DefaultValue "").Trim()
+  } else {
+    ""
+  }
+  $purchaseAutomation = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_BIG8_PURCHASE_AUTOMATION_ENABLED" -DefaultValue "true").Trim()
+  $cartAutomation = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_BIG8_CART_AUTOMATION_ENABLED" -DefaultValue "").Trim()
+  $drawSyncIntervalMs = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_BIG8_DRAW_SYNC_INTERVAL_MS" -DefaultValue "5000").Trim()
+  $drawModalWaitMs = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_BIG8_DRAW_MODAL_WAIT_MS" -DefaultValue "2500").Trim()
+  $drawTtlSeconds = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_BIG8_DRAW_TTL_SECONDS" -DefaultValue "45").Trim()
+  $actionTimeoutMs = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_BIG8_ACTION_TIMEOUT_MS" -DefaultValue "8000").Trim()
+  $reloadBeforePurchase = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_BIG8_RELOAD_BEFORE_PURCHASE" -DefaultValue "true").Trim()
+  $mockLatencyMs = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_BIG8_MOCK_LATENCY_MS" -DefaultValue "250").Trim()
+  $handlerCodes = (Get-EnvValue -EnvMap $envMap -Key "LOTTERY_TERMINAL_HANDLER_CODES" -DefaultValue "bolshaya-8").Trim()
   $webBaseUrl = "http://$resolvedServerIp`:$resolvedServerPort"
-$clientUrl = "$webBaseUrl/lottery/bolshaya-8"
-$terminalMonitorUrl = "$webBaseUrl/terminal/receiver"
-$profileTag = (Get-Date -Format "yyyyMMdd-HHmmss")
+  $clientUrl = "$webBaseUrl/login"
+  $lotteryUrl = "$webBaseUrl/lottery/bolshaya-8"
+  $terminalMonitorUrl = "$webBaseUrl/terminal/receiver"
+  $profileTag = (Get-Date -Format "yyyyMMdd-HHmmss")
 
   $nodeBinaryPath = Resolve-NodeBinaryPath
   $esbuildCliPath = Resolve-EsbuildCliPath -Root $root
@@ -126,13 +153,21 @@ $profileTag = (Get-Date -Format "yyyyMMdd-HHmmss")
     "LOTTERY_STORAGE_BACKEND=postgres",
     "LOTTERY_POSTGRES_URL=$sharedPostgresUrl",
     "DATABASE_URL=$sharedPostgresUrl",
-    "LOTTERY_TERMINAL_LOCK_TTL_SECONDS=30",
-    "LOTTERY_TERMINAL_POLL_INTERVAL_MS=3000",
-    "LOTTERY_BIG8_LIVE_DRAW_SYNC_ENABLED=true",
-    "LOTTERY_BIG8_CART_AUTOMATION_ENABLED=true",
-    "LOTTERY_BIG8_TERMINAL_MODE=mock",
-    "LOTTERY_BIG8_MOCK_LATENCY_MS=250",
-    "LOTTERY_TERMINAL_HANDLER_CODES=bolshaya-8",
+    "LOTTERY_TERMINAL_LOCK_TTL_SECONDS=$terminalLockTtlSeconds",
+    "LOTTERY_TERMINAL_POLL_INTERVAL_MS=$terminalPollIntervalMs",
+    "LOTTERY_BIG8_LIVE_DRAW_SYNC_ENABLED=$liveDrawSyncEnabled",
+    "LOTTERY_BIG8_PURCHASE_AUTOMATION_ENABLED=$purchaseAutomation",
+    "LOTTERY_BIG8_CART_AUTOMATION_ENABLED=$cartAutomation",
+    "LOTTERY_BIG8_TERMINAL_MODE=$terminalMode",
+    "LOTTERY_BIG8_MOCK_LATENCY_MS=$mockLatencyMs",
+    "LOTTERY_BIG8_DRAW_SYNC_INTERVAL_MS=$drawSyncIntervalMs",
+    "LOTTERY_BIG8_DRAW_MODAL_WAIT_MS=$drawModalWaitMs",
+    "LOTTERY_BIG8_DRAW_TTL_SECONDS=$drawTtlSeconds",
+    "LOTTERY_BIG8_ACTION_TIMEOUT_MS=$actionTimeoutMs",
+    "LOTTERY_BIG8_RELOAD_BEFORE_PURCHASE=$reloadBeforePurchase",
+    "LOTTERY_TERMINAL_BROWSER_URL=$terminalBrowserUrl",
+    "LOTTERY_TERMINAL_PAGE_URL=$terminalPageUrl",
+    "LOTTERY_TERMINAL_HANDLER_CODES=$handlerCodes",
     "LOTTERY_TERMINAL_RECEIVER_LABEL=$TerminalReceiverLabel"
   )
   Write-TextFile -Path (Join-Path $terminalBundlePath "terminal-receiver.env") -Value ($terminalEnvLines -join [Environment]::NewLine)
@@ -143,6 +178,7 @@ $profileTag = (Get-Date -Format "yyyyMMdd-HHmmss")
     builtAt = $builtAt
     webBaseUrl = $webBaseUrl
     clientUrl = $clientUrl
+    lotteryUrl = $lotteryUrl
     serverIp = $resolvedServerIp
     serverPort = $resolvedServerPort
   clientHostName = $ClientHostName
@@ -155,6 +191,7 @@ $profileTag = (Get-Date -Format "yyyyMMdd-HHmmss")
     webBaseUrl = $webBaseUrl
     monitorUrl = $terminalMonitorUrl
     clientUrl = $clientUrl
+    lotteryUrl = $lotteryUrl
     serverIp = $resolvedServerIp
     serverPort = $resolvedServerPort
   terminalHostName = $TerminalHostName
@@ -179,7 +216,8 @@ HOW TO START:
 
 WHAT IT DOES:
   - Opens Chrome or Edge in KIOSK MODE (fullscreen, no address bar)
-  - Targets: $clientUrl
+  - Starts at: $clientUrl
+  - Manual test page after login: $lotteryUrl
   - Keeps browser profile inside this folder
   - Console window stays open and shows status
 
@@ -226,7 +264,7 @@ HOW TO STOP:
 
 WHAT IT DOES:
   - Launches portable node runtime from this folder (no install needed)
-  - Starts Big 8 mock terminal receiver against shared Postgres on $resolvedServerIp
+  - Starts terminal receiver against shared Postgres on $resolvedServerIp using configured mode: $terminalMode
   - Opens receiver monitor at $terminalMonitorUrl
   - Writes worker logs to .\logs\
 
@@ -561,7 +599,10 @@ Write-Host "  LOTTERY CASHIER KIOSK" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Server: $($config.webBaseUrl)" -ForegroundColor White
-Write-Host "  Page:   $($config.clientUrl)" -ForegroundColor White
+Write-Host "  Start:  $($config.clientUrl)" -ForegroundColor White
+if ($config.PSObject.Properties.Name -contains "lotteryUrl") {
+  Write-Host "  Test:   $($config.lotteryUrl)" -ForegroundColor White
+}
 Write-Host ""
 Write-Host "----------------------------------------" -ForegroundColor Yellow
 Write-Host "  HOW TO EXIT:" -ForegroundColor Yellow

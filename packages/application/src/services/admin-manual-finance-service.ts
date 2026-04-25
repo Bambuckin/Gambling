@@ -23,6 +23,16 @@ export interface ManualBalanceAdjustmentResult {
   readonly snapshot: BalanceSnapshot;
 }
 
+export interface AdminUserBalanceInput {
+  readonly userIds: readonly string[];
+  readonly currency: string;
+}
+
+export interface AdminUserBalanceView extends BalanceSnapshot {
+  readonly entryCount: number;
+  readonly lastLedgerAt: string | null;
+}
+
 export class AdminManualFinanceService {
   private readonly ledgerStore: LedgerStore;
   private readonly timeSource: TimeSource;
@@ -97,5 +107,40 @@ export class AdminManualFinanceService {
       currency,
       entries: sortLedgerEntries(entries)
     });
+  }
+
+  async listUserBalances(input: AdminUserBalanceInput): Promise<readonly AdminUserBalanceView[]> {
+    const currency = input.currency.trim().toUpperCase();
+    const uniqueUserIds = [...new Set(input.userIds.map((userId) => userId.trim()).filter(Boolean))];
+    const allEntries = await this.ledgerStore.listEntries();
+    const entriesByUserId = new Map<string, LedgerEntry[]>();
+
+    for (const entry of allEntries) {
+      if (entry.currency !== currency) {
+        continue;
+      }
+
+      const group = entriesByUserId.get(entry.userId) ?? [];
+      group.push(entry);
+      entriesByUserId.set(entry.userId, group);
+    }
+
+    return uniqueUserIds
+      .map((userId): AdminUserBalanceView => {
+        const entries = sortLedgerEntries(entriesByUserId.get(userId) ?? []);
+        const snapshot = buildBalanceSnapshot({
+          userId,
+          currency,
+          entries
+        });
+        const lastEntry = entries.at(-1) ?? null;
+
+        return {
+          ...snapshot,
+          entryCount: entries.length,
+          lastLedgerAt: lastEntry?.createdAt ?? null
+        };
+      })
+      .sort((left, right) => left.userId.localeCompare(right.userId));
   }
 }

@@ -117,8 +117,12 @@ class DemoLotteryPurchaseHandler implements LotteryPurchaseHandlerContract {
 }
 
 function createDefaultHandlersFromEnv(): readonly LotteryPurchaseHandlerContract[] {
-  const big8CartAutomationEnabled =
-    (process.env.LOTTERY_BIG8_CART_AUTOMATION_ENABLED ?? "true").trim().toLowerCase() !== "false";
+  const big8PurchaseAutomationEnabled =
+    (process.env.LOTTERY_BIG8_PURCHASE_AUTOMATION_ENABLED ??
+      process.env.LOTTERY_BIG8_CART_AUTOMATION_ENABLED ??
+      "true")
+      .trim()
+      .toLowerCase() !== "false";
   const big8TerminalMode = (process.env.LOTTERY_BIG8_TERMINAL_MODE ?? "mock").trim().toLowerCase();
   const useBig8RealTerminal = big8TerminalMode === "real";
   const big8MockLatencyMs = readPositiveIntFromEnv("LOTTERY_BIG8_MOCK_LATENCY_MS");
@@ -141,7 +145,7 @@ function createDefaultHandlersFromEnv(): readonly LotteryPurchaseHandlerContract
 
   const codes = readDefaultLotteryCodes();
   return codes.map((code) =>
-    code === "bolshaya-8" && big8CartAutomationEnabled
+    code === "bolshaya-8" && big8PurchaseAutomationEnabled
       ? useBig8RealTerminal
         ? new Big8TerminalCartHandler(big8HandlerOptions)
         : new Big8MockTerminalHandler({

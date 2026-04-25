@@ -85,10 +85,13 @@ Required for `apps/terminal-worker`:
 Big 8 worker toggles:
 
 - `LOTTERY_BIG8_TERMINAL_MODE`
-  - `real` for live browser automation
-  - `mock` for payload verification without live checkout
+  - `real` for live browser automation with terminal purchase
+  - `mock` for payload verification without live NL checkout
 - `LOTTERY_BIG8_LIVE_DRAW_SYNC_ENABLED`
+- `LOTTERY_BIG8_PURCHASE_AUTOMATION_ENABLED`
+  - preferred flag for the live Big 8 terminal purchase path
 - `LOTTERY_BIG8_CART_AUTOMATION_ENABLED`
+  - backward-compatible alias for `LOTTERY_BIG8_PURCHASE_AUTOMATION_ENABLED`
 - `LOTTERY_BIG8_DRAW_SYNC_INTERVAL_MS`
 - `LOTTERY_BIG8_DRAW_MODAL_WAIT_MS`
 - `LOTTERY_BIG8_DRAW_TTL_SECONDS`
@@ -106,7 +109,7 @@ Terminal browser integration:
 These become required when:
 
 - terminal mode is not `mock`, and
-- either live draw sync or cart automation is enabled.
+- either live draw sync or Big 8 purchase automation is enabled.
 
 Validation logic lives in:
 
@@ -143,11 +146,15 @@ When backend is `postgres`, these tables matter most:
 - `lottery_draw_snapshots`
 - `lottery_ledger_entries`
 - `lottery_purchase_requests`
+- `lottery_purchases`
 - `lottery_purchase_queue_items`
+- `lottery_purchase_attempts`
+- `lottery_draws`
 - `lottery_tickets`
-- `lottery_ticket_verification_jobs`
 - `lottery_operations_audit_events`
-- `lottery_terminal_execution_locks`
+- `lottery_notifications`
+- `lottery_cash_desk_requests`
+- `lottery_winnings_credit_jobs`
 
 Defined in:
 

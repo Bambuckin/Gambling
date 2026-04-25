@@ -1,6 +1,6 @@
 import type { LedgerEntry } from "@lottery/domain";
 import { SystemTimeSource, WalletLedgerService, type LedgerStore } from "@lottery/application";
-import { InMemoryLedgerStore, PostgresLedgerStore } from "@lottery/infrastructure";
+import { createDefaultLedgerEntries, InMemoryLedgerStore, PostgresLedgerStore } from "@lottery/infrastructure";
 import { getWebPostgresPool, getWebStorageBackend } from "../runtime/postgres-runtime";
 
 export const LEDGER_DEFAULT_CURRENCY = "RUB";
@@ -32,6 +32,10 @@ export function getWalletLedgerService(): WalletLedgerService {
 
 export function getLedgerStoreInstance(): LedgerStore {
   return getLedgerStore();
+}
+
+export async function ensureDefaultLedgerEntries(): Promise<void> {
+  await getWalletLedgerService().ensureEntries(createDefaultLedgerEntries(new Date()));
 }
 
 function readSeedEntries(): LedgerEntry[] {
@@ -120,56 +124,8 @@ function sanitizeReference(input: unknown): LedgerEntry["reference"] | null {
 }
 
 function defaultSeedEntries(): LedgerEntry[] {
-  const now = Date.now();
-
-  return [
-    {
-      entryId: "seed-user-credit",
-      userId: "seed-user",
-      operation: "credit",
-      amountMinor: 220_000,
-      currency: LEDGER_DEFAULT_CURRENCY,
-      idempotencyKey: "seed-user-credit",
-      reference: {
-        requestId: "seed-user-credit"
-      },
-      createdAt: new Date(now - 4 * 60 * 1000).toISOString()
-    },
-    {
-      entryId: "seed-admin-credit",
-      userId: "seed-admin",
-      operation: "credit",
-      amountMinor: 500_000,
-      currency: LEDGER_DEFAULT_CURRENCY,
-      idempotencyKey: "seed-admin-credit",
-      reference: {
-        requestId: "seed-admin-credit"
-      },
-      createdAt: new Date(now - 3 * 60 * 1000).toISOString()
-    },
-    {
-      entryId: "seed-tester-credit",
-      userId: "seed-tester",
-      operation: "credit",
-      amountMinor: 180_000,
-      currency: LEDGER_DEFAULT_CURRENCY,
-      idempotencyKey: "seed-tester-credit",
-      reference: {
-        requestId: "seed-tester-credit"
-      },
-      createdAt: new Date(now - 2 * 60 * 1000).toISOString()
-    },
-    {
-      entryId: "seed-tester-reserve",
-      userId: "seed-tester",
-      operation: "reserve",
-      amountMinor: 20_000,
-      currency: LEDGER_DEFAULT_CURRENCY,
-      idempotencyKey: "seed-tester-reserve",
-      reference: {
-        requestId: "seed-tester-reserve"
-      },
-      createdAt: new Date(now - 60 * 1000).toISOString()
-    }
-  ];
+  return createDefaultLedgerEntries(new Date()).map((entry) => ({
+    ...entry,
+    currency: LEDGER_DEFAULT_CURRENCY
+  }));
 }

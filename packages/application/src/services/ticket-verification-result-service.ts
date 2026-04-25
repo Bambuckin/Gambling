@@ -1,13 +1,9 @@
 import { applyTicketVerificationOutcome, type TicketRecord } from "@lottery/domain";
-import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
 import type { TimeSource } from "../ports/time-source.js";
-import type { WalletLedgerService } from "./wallet-ledger-service.js";
 
 export interface TicketVerificationResultServiceDependencies {
   readonly ticketStore: TicketStore;
-  readonly purchaseRequestStore: PurchaseRequestStore;
-  readonly walletLedgerService: WalletLedgerService;
   readonly timeSource: TimeSource;
 }
 
@@ -51,14 +47,10 @@ export class TicketVerificationResultServiceError extends Error {
 
 export class TicketVerificationResultService {
   private readonly ticketStore: TicketStore;
-  private readonly purchaseRequestStore: PurchaseRequestStore;
-  private readonly walletLedgerService: WalletLedgerService;
   private readonly timeSource: TimeSource;
 
   constructor(dependencies: TicketVerificationResultServiceDependencies) {
     this.ticketStore = dependencies.ticketStore;
-    this.purchaseRequestStore = dependencies.purchaseRequestStore;
-    this.walletLedgerService = dependencies.walletLedgerService;
     this.timeSource = dependencies.timeSource;
   }
 
@@ -88,8 +80,6 @@ export class TicketVerificationResultService {
           winningAmountMinor: normalizedOutcome.winningAmountMinor
         });
 
-    const credited = await this.creditWinningsIfNeeded(updatedTicket, verificationEventId);
-
     if (!isReplay) {
       await this.ticketStore.saveTicket(updatedTicket);
     }
@@ -100,41 +90,8 @@ export class TicketVerificationResultService {
       winningAmountMinor: updatedTicket.winningAmountMinor,
       rawOutput: updatedTicket.verificationRawOutput ?? rawOutput,
       replayed: isReplay,
-      winningsCredited: credited
+      winningsCredited: false
     };
-  }
-
-  private async creditWinningsIfNeeded(ticket: TicketRecord, verificationEventId: string): Promise<boolean> {
-    if (ticket.verificationStatus !== "verified") {
-      return false;
-    }
-
-    const winningAmountMinor = ticket.winningAmountMinor ?? 0;
-    if (winningAmountMinor <= 0) {
-      return false;
-    }
-
-    const request = await this.purchaseRequestStore.getRequestById(ticket.requestId);
-    if (!request) {
-      throw new TicketVerificationResultServiceError(
-        `request "${ticket.requestId}" not found for ticket "${ticket.ticketId}"`,
-        {
-          code: "request_not_found"
-        }
-      );
-    }
-
-    const credit = await this.walletLedgerService.creditWinnings({
-      userId: ticket.userId,
-      requestId: ticket.requestId,
-      ticketId: ticket.ticketId,
-      verificationEventId,
-      drawId: ticket.drawId,
-      amountMinor: winningAmountMinor,
-      currency: request.snapshot.currency
-    });
-
-    return !credit.replayed;
   }
 }
 

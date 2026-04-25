@@ -1,48 +1,48 @@
 # Runtime Handoff
 
-This file is the short operational handoff for the current repository state.
+Это короткий операционный handoff по текущему состоянию runtime.
 
-## Read First
+## Читать в таком порядке
 
-1. `docs/handoff/big8-current-wave/README.md`
-2. `docs/runbooks/deployment-bootstrap.md`
+1. `docs/runbooks/deployment-bootstrap.md`
+2. `docs/runbooks/current-working-contour-smoke.md`
 3. `.planning/STATE.md`
 
-## What Actually Works Now
+## Что реально работает сейчас
 
-- Web and terminal worker can share one Postgres-backed runtime through `LOTTERY_STORAGE_BACKEND=postgres`.
-- Shared persistence now covers identities, sessions, draws, ledger, purchase requests, purchase queue, tickets, verification jobs, draw closures, notifications, cash desk requests, winnings credit jobs, and the terminal execution lock.
-- The user flow works as: prepare ticket -> confirm -> queue request -> worker picks it up -> emulated purchase saves ticket/reference -> admin marks ticket win/lose if needed -> admin closes draw -> user sees result and notification.
-- The admin flow works as: watch system summary -> inspect queue -> inspect terminal/last requests -> manually create draw -> user can buy against that open draw -> delete empty draw if needed -> mark ticket -> close draw.
-- The terminal receiver page is the quickest operator proof that a queued request really reached the terminal side.
+- `apps/web` и `apps/terminal-worker` живут на одном Postgres runtime через `LOTTERY_STORAGE_BACKEND=postgres`.
+- Каноническая истина уже первична для текущих admin, receiver и user read surfaces; активный Big 8 -> winnings contour больше не зависит от legacy ticket write-path, а legacy `purchase_request` и `ticket` остались только как compatibility/read-repair fallback.
+- Полный ручной контур работает так: логин -> админ открывает тираж -> пользователь создаёт и подтверждает заявку -> worker забирает её -> админ помечает билет и закрывает тираж -> пользователь видит результат -> пользователь выбирает `Зачислить` или `В кассу` -> worker проводит credit job, а админ может закрыть cash-desk выплату.
+- `/terminal/receiver` остаётся самым быстрым подтверждением того, что заявка реально дошла до terminal side.
 
-## Important Operational Nuances
+## Важные нюансы
 
-- Queue depth alone is not enough. The worker may reserve a request immediately, so `/admin` can show an empty queue while the same request is already visible in the terminal/last-requests block or on `/terminal/receiver`.
-- `db:init` now reads local `.env` the same way as runtime preflight. You do not need to export `LOTTERY_POSTGRES_URL` manually if it is already present in `.env`.
-- The terminal worker now also auto-loads the repository `.env` on boot, so direct `pnpm start:worker` or `pnpm dev:worker` no longer falls back to in-memory storage when Postgres is configured only in `.env`.
-- Big 8 terminal emulation is the default runtime mode now. Switch to the real terminal only by setting `LOTTERY_BIG8_TERMINAL_MODE=real`.
-- In mock mode the worker keeps existing snapshots fresh but does not auto-seed new Big 8 draws. The intended operator path is: create draw in admin -> buy against that draw -> close draw in admin.
-- Manual draws are preserved in available draw options even after later draw snapshot refreshes, so admin-created draws remain purchasable until they are closed or deleted.
-- `/admin` now contains test cleanup controls: clear pending queue/runtime state, full test reset, and empty-draw deletion.
-- The simplified current UI now shows purchase/result notifications on `/lottery/bolshaya-8`, but still does not expose a dedicated payout widget.
+- Пустая очередь сама по себе не значит, что покупка пропала. Worker может сразу зарезервировать заявку, и тогда она уже видна в terminal rows или на `/terminal/receiver`.
+- `db:init`, `start:web` и `start:worker` читают `.env` напрямую. Не нужно отдельно экспортировать `LOTTERY_POSTGRES_URL`, если он уже лежит в `.env`.
+- Big 8 по умолчанию всё ещё идёт в `mock`-режиме. Для живого терминала нужно явно включить `LOTTERY_BIG8_TERMINAL_MODE=real`.
+- В `mock`-режиме worker больше не создаёт тестовые тиражи сам. Нормальный путь теперь такой: создать тираж в `/admin`, купить билет, потом закрыть тираж там же.
+- Ручные тиражи сохраняются в списке purchasable draws и не исчезают из формы после фонового refresh.
+- Credit jobs обрабатываются самим worker loop. Cash-desk заявки создаются на пользовательской странице и закрываются действием `Выдать` в `/admin`.
+- На `/lottery/bolshaya-8` теперь есть canonical-first блок `Итоги по аккаунту`, а у выигрышного билета есть явные действия `Зачислить` и `В кассу`.
+- LAN client bundle стартует с `/login`, а terminal bundle открывает монитор `/terminal/receiver`.
 
-## Current UI Surface
+## Текущая UI-поверхность
 
-- `/admin`: system summary, queue snapshot, terminal/last requests, manual draw management.
-- `/terminal/receiver`: live terminal-side request history.
-- `/lottery/bolshaya-8`: ticket creation, confirmation, open-draw selection, request states, purchase/result notifications, and ticket results. Secondary cabinet analytics and wallet history were intentionally removed from the page.
+- `/login`: вход в ручной smoke и LAN kiosk contour.
+- `/admin`: системная сводка, очередь, terminal rows, problem contour, alerts, recent audit, ручные тиражи, cash-desk выплаты, credit jobs, cleanup/reset.
+- `/terminal/receiver`: canonical-first история terminal-side заявок.
+- `/lottery/bolshaya-8`: создание билета, подтверждение заявки, выбор открытого тиража, статусы заявки, уведомления, результаты билетов, `Итоги по аккаунту`, `Зачислить`, `В кассу`.
 
-## Known Remaining Gaps
+## Что ещё не закончено
 
-1. Final checkout/payment automation after cart stage is still not implemented.
-2. Selector hardening for long-term NLoto DOM drift still needs more artifacts and validation.
-3. Security hardening remains optional follow-up work: stronger password hashing, TLS/proxy setup, broader RBAC.
-4. If the active lottery catalog changes, refresh:
+1. Real Big 8 flow now reaches truthful terminal purchase; remaining live risk is NLoto selector/session hardening under the target LAN setup.
+2. Advisory execution lock and explicit purchase-queue transport seam are now live; active purchase -> draw -> result -> winnings flow больше не использует legacy ticket write-model как operational truth.
+3. Полного destructive cleanup compatibility tables ещё нет; legacy `ticket`/request residue остаётся отдельным cleanup/migration шагом, а не активной runtime-зависимостью.
+4. Если меняется каталог лотерей, синхронизируй:
    - `packages/infrastructure/src/seeds/default-lottery-catalog.ts`
    - `apps/web/src/lib/ui/lottery-presentation.ts`
 
-## Fast Start
+## Быстрый старт
 
 ```powershell
 # server
@@ -53,14 +53,14 @@ This file is the short operational handoff for the current repository state.
 .\scripts\start-worker-runtime.ps1 -EnvFile .env
 ```
 
-## Fast Diagnostics
+## Быстрая диагностика
 
 ```powershell
 corepack pnpm runtime:doctor:queue
 ```
 
-Use it before touching the live terminal when the admin page shows queued requests that are not moving.
+Запускай это до разбора live terminal, если заявки висят или `/admin` и `/terminal/receiver` расходятся по картине.
 
-## Launch Checklist
+## Основной checklist
 
 - `docs/runbooks/launch-readiness-checklist.md`

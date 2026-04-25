@@ -1,5 +1,5 @@
-import { isBig8PurchaseDraftPayload, type Big8PurchaseDraftPayload, type PurchaseRequestRecord } from "@lottery/domain";
-import { getPurchaseRuntimeStores } from "./purchase-runtime";
+import { isBig8PurchaseDraftPayload, type Big8PurchaseDraftPayload, type PurchaseDraftPayload } from "@lottery/domain";
+import { getTerminalReceiverQueryService } from "./purchase-runtime";
 
 export interface MockTerminalInboxRow {
   readonly requestId: string;
@@ -20,47 +20,40 @@ export interface MockTerminalInboxRow {
 const DEFAULT_LIMIT = 40;
 
 export async function listMockTerminalInboxRows(limit = DEFAULT_LIMIT): Promise<readonly MockTerminalInboxRow[]> {
-  const normalizedLimit = Number.isFinite(limit) ? Math.max(1, Math.trunc(limit)) : DEFAULT_LIMIT;
-  const { requestStore } = getPurchaseRuntimeStores();
-  const records = await requestStore.listRequests();
+  const rows = await getTerminalReceiverQueryService().listRows({
+    limit,
+    lotteryCode: "bolshaya-8"
+  });
 
-  return records
-    .filter((record) => record.snapshot.lotteryCode === "bolshaya-8")
-    .map(toInboxRow)
-    .filter(
-      (row) =>
-        row.state !== "awaiting_confirmation" &&
-        row.state !== "confirmed" &&
-        row.state !== "canceled" &&
-        row.state !== "reserve_released"
-    )
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-    .slice(0, normalizedLimit);
+  return rows.map(toInboxRow);
 }
 
-function toInboxRow(record: PurchaseRequestRecord): MockTerminalInboxRow {
-  const reversedJournal = [...record.journal].reverse();
-  const latestEntry = reversedJournal[0] ?? null;
-  const reservedEntry =
-    reversedJournal.find(
-      (entry) => entry.toState === "executing" && (entry.note ?? "").includes("terminal execution reserved")
-    ) ?? null;
-  const latestAttemptEntry = reversedJournal.find((entry) => (entry.note ?? "").includes("terminal_attempt")) ?? null;
-
-  const payloadFromSnapshot = isBig8PurchaseDraftPayload(record.snapshot.payload) ? record.snapshot.payload : null;
-  const rawOutput = latestAttemptEntry ? extractRawOutput(latestAttemptEntry.note ?? "") : null;
+function toInboxRow(row: {
+  readonly requestId: string;
+  readonly userId: string;
+  readonly drawId: string;
+  readonly state: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly reservedAt: string | null;
+  readonly attemptCount: number;
+  readonly payload: PurchaseDraftPayload | null;
+  readonly workerRawOutput: string | null;
+}): MockTerminalInboxRow {
+  const payloadFromSnapshot = row.payload && isBig8PurchaseDraftPayload(row.payload) ? row.payload : null;
+  const rawOutput = row.workerRawOutput;
   const payloadFromRawOutput = rawOutput ? decodePayloadFromRawOutput(rawOutput) : null;
   const resolvedPayload = payloadFromRawOutput ?? payloadFromSnapshot;
 
   return {
-    requestId: record.snapshot.requestId,
-    userId: record.snapshot.userId,
-    drawId: record.snapshot.drawId,
-    state: record.state,
-    createdAt: record.snapshot.createdAt,
-    updatedAt: latestEntry?.occurredAt ?? record.snapshot.createdAt,
-    reservedAt: reservedEntry?.occurredAt ?? null,
-    attemptCount: record.journal.filter((entry) => (entry.note ?? "").includes("terminal_attempt")).length,
+    requestId: row.requestId,
+    userId: row.userId,
+    drawId: row.drawId,
+    state: row.state,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    reservedAt: row.reservedAt,
+    attemptCount: row.attemptCount,
     receiverLabel: rawOutput ? extractRawOutputField(rawOutput, "receiver") : null,
     phoneMasked: resolvedPayload ? maskPhone(resolvedPayload.contactPhone) : null,
     ticketCount: resolvedPayload?.tickets.length ?? 0,
@@ -82,17 +75,6 @@ function decodePayloadFromRawOutput(rawOutput: string): Big8PurchaseDraftPayload
   } catch {
     return null;
   }
-}
-
-function extractRawOutput(note: string): string | null {
-  const marker = "rawOutput=";
-  const position = note.indexOf(marker);
-  if (position < 0) {
-    return null;
-  }
-
-  const value = note.slice(position + marker.length).trim();
-  return value.length > 0 ? value : null;
 }
 
 function extractRawOutputField(rawOutput: string, fieldKey: string): string | null {

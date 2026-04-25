@@ -9,22 +9,26 @@ import {
 } from "@lottery/domain";
 import type { CanonicalPurchaseStore } from "../ports/canonical-purchase-store.js";
 import type { PurchaseAttemptStore } from "../ports/purchase-attempt-store.js";
-import type { PurchaseQueueItem, PurchaseQueueStore } from "../ports/purchase-queue-store.js";
+import type { PurchaseQueueItem } from "../ports/purchase-queue-store.js";
+import type { PurchaseQueueTransport } from "../ports/purchase-queue-transport.js";
 import type { PurchaseRequestStore } from "../ports/purchase-request-store.js";
 import type { TerminalExecutionResult } from "../ports/terminal-executor.js";
+import { buildCanonicalTicketId } from "./canonical-compatibility.js";
 import {
   applyCanonicalAttemptOutcome,
   ensureCanonicalPurchaseForRequest,
   markCanonicalPurchaseAwaitingDrawClose
 } from "./canonical-purchase-state.js";
 import type { TicketPersistenceService } from "./ticket-persistence-service.js";
+import type { WalletLedgerService } from "./wallet-ledger-service.js";
 
 export interface TerminalExecutionAttemptServiceDependencies {
   readonly requestStore: PurchaseRequestStore;
-  readonly queueStore: PurchaseQueueStore;
+  readonly queueStore: PurchaseQueueTransport;
   readonly canonicalPurchaseStore?: CanonicalPurchaseStore;
   readonly purchaseAttemptStore?: PurchaseAttemptStore;
   readonly ticketPersistenceService?: TicketPersistenceService;
+  readonly walletLedgerService?: WalletLedgerService;
 }
 
 export interface RecordTerminalAttemptInput {
@@ -63,10 +67,11 @@ export class TerminalExecutionAttemptServiceError extends Error {
 
 export class TerminalExecutionAttemptService {
   private readonly requestStore: PurchaseRequestStore;
-  private readonly queueStore: PurchaseQueueStore;
+  private readonly queueStore: PurchaseQueueTransport;
   private readonly canonicalPurchaseStore: CanonicalPurchaseStore | null;
   private readonly purchaseAttemptStore: PurchaseAttemptStore | null;
   private readonly ticketPersistenceService: TicketPersistenceService | null;
+  private readonly walletLedgerService: WalletLedgerService | null;
 
   constructor(dependencies: TerminalExecutionAttemptServiceDependencies) {
     this.requestStore = dependencies.requestStore;
@@ -74,6 +79,7 @@ export class TerminalExecutionAttemptService {
     this.canonicalPurchaseStore = dependencies.canonicalPurchaseStore ?? null;
     this.purchaseAttemptStore = dependencies.purchaseAttemptStore ?? null;
     this.ticketPersistenceService = dependencies.ticketPersistenceService ?? null;
+    this.walletLedgerService = dependencies.walletLedgerService ?? null;
   }
 
   async recordAttemptResult(input: RecordTerminalAttemptInput): Promise<RecordTerminalAttemptResult> {
@@ -109,7 +115,7 @@ export class TerminalExecutionAttemptService {
       );
     }
 
-    let queueItem = await this.queueStore.getQueueItemByRequestId(requestId);
+    let queueItem = await this.queueStore.getByRequestId(requestId);
     if (!queueItem && !existingAttempt) {
       throw new TerminalExecutionAttemptServiceError(`queue item for request "${requestId}" not found`, {
         code: "queue_item_not_found"
@@ -161,16 +167,7 @@ export class TerminalExecutionAttemptService {
     }
 
     if (normalizedAttempt.outcome === "retrying") {
-      const nextQueueItem: PurchaseQueueItem | null =
-        queueItem && queueItem.status !== "queued"
-          ? {
-              ...queueItem,
-              status: "queued"
-            }
-          : queueItem;
-      if (nextQueueItem) {
-        await this.queueStore.saveQueueItem(nextQueueItem);
-      }
+      const nextQueueItem = queueItem ? await this.queueStore.requeue(requestId) : null;
       return {
         request: nextRequest,
         queueItem: nextQueueItem ?? null,
@@ -180,7 +177,7 @@ export class TerminalExecutionAttemptService {
     }
 
     if (queueItem) {
-      await this.queueStore.removeQueueItem(requestId);
+      await this.queueStore.complete(requestId);
       queueItem = null;
     }
     let ticket: TicketRecord | null = null;
@@ -188,6 +185,11 @@ export class TerminalExecutionAttemptService {
       const persisted = await this.ticketPersistenceService.persistSuccessfulPurchaseTicket({
         request: nextRequest,
         purchasedAt: normalizedAttempt.finishedAt,
+        ...(canonicalPurchase
+          ? {
+              ticketId: buildCanonicalTicketId(canonicalPurchase.snapshot.purchaseId)
+            }
+          : {}),
         externalReference: input.result.externalTicketReference ?? null
       });
       ticket = persisted.ticket;
@@ -202,6 +204,7 @@ export class TerminalExecutionAttemptService {
         }
       }
     }
+    await this.reconcileLedgerForAttempt(nextRequest, normalizedAttempt, ticket);
 
     return {
       request: nextRequest,
@@ -209,6 +212,42 @@ export class TerminalExecutionAttemptService {
       ticket,
       journalNote
     };
+  }
+
+  private async reconcileLedgerForAttempt(
+    request: PurchaseRequestRecord,
+    normalizedAttempt: ReturnType<typeof normalizeTerminalAttempt>,
+    ticket: TicketRecord | null
+  ): Promise<void> {
+    if (!this.walletLedgerService) {
+      return;
+    }
+
+    if (normalizedAttempt.outcome === "success") {
+      await this.walletLedgerService.debitReservedFunds({
+        userId: request.snapshot.userId,
+        requestId: request.snapshot.requestId,
+        amountMinor: request.snapshot.costMinor,
+        currency: request.snapshot.currency,
+        ...(ticket ? { ticketId: ticket.ticketId } : {}),
+        drawId: request.snapshot.drawId,
+        idempotencyKey: `${request.snapshot.requestId}:purchase-debit`,
+        createdAt: normalizedAttempt.finishedAt
+      });
+      return;
+    }
+
+    if (normalizedAttempt.outcome === "error") {
+      await this.walletLedgerService.releaseReservedFunds({
+        userId: request.snapshot.userId,
+        requestId: request.snapshot.requestId,
+        amountMinor: request.snapshot.costMinor,
+        currency: request.snapshot.currency,
+        drawId: request.snapshot.drawId,
+        idempotencyKey: `${request.snapshot.requestId}:error-release`,
+        createdAt: normalizedAttempt.finishedAt
+      });
+    }
   }
 }
 

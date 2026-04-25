@@ -11,11 +11,13 @@ import type { WalletLedgerService } from "./wallet-ledger-service.js";
 import type { TicketStore } from "../ports/ticket-store.js";
 import type { TimeSource } from "../ports/time-source.js";
 
+type WinningsLedgerWriter = Pick<WalletLedgerService, "creditWinnings">;
+
 export interface WinningsCreditServiceDependencies {
   readonly winningsCreditJobStore: WinningsCreditJobStore;
   readonly ticketStore: TicketStore;
   readonly ticketClaimService: TicketClaimService;
-  readonly walletLedgerService: WalletLedgerService;
+  readonly walletLedgerService: WinningsLedgerWriter;
   readonly timeSource: TimeSource;
 }
 
@@ -23,7 +25,7 @@ export class WinningsCreditService {
   private readonly winningsCreditJobStore: WinningsCreditJobStore;
   private readonly ticketStore: TicketStore;
   private readonly ticketClaimService: TicketClaimService;
-  private readonly walletLedgerService: WalletLedgerService;
+  private readonly walletLedgerService: WinningsLedgerWriter;
   private readonly timeSource: TimeSource;
 
   constructor(dependencies: WinningsCreditServiceDependencies) {
@@ -35,8 +37,11 @@ export class WinningsCreditService {
   }
 
   async enqueueCreditJob(input: {
+    readonly requestId: string;
+    readonly purchaseId: string;
     readonly ticketId: string;
     readonly userId: string;
+    readonly drawId: string;
     readonly winningAmountMinor: number;
     readonly currency: string;
   }): Promise<WinningsCreditJob> {
@@ -45,13 +50,16 @@ export class WinningsCreditService {
       return existing;
     }
 
-    await this.ticketClaimService.startCreditClaim(input.ticketId);
+    await this.startCreditClaimIfLegacyTicketExists(input.ticketId);
 
     const nowIso = this.timeSource.nowIso();
     const job = createWinningsCreditJob({
-      jobId: `${input.ticketId}:credit`,
+      jobId: `${input.purchaseId}:credit`,
+      requestId: input.requestId,
+      purchaseId: input.purchaseId,
       ticketId: input.ticketId,
       userId: input.userId,
+      drawId: input.drawId,
       winningAmountMinor: input.winningAmountMinor,
       currency: input.currency,
       createdAt: nowIso
@@ -70,31 +78,51 @@ export class WinningsCreditService {
       return null;
     }
 
-    const job = queued[0]!;
+    return this.processCreditJob(queued[0]!);
+  }
+
+  async processCreditJobForTicket(ticketId: string): Promise<{
+    readonly job: WinningsCreditJob;
+    readonly credited: boolean;
+  } | null> {
+    const normalizedTicketId = ticketId.trim();
+    if (!normalizedTicketId) {
+      return null;
+    }
+
+    const job = await this.winningsCreditJobStore.getJobByTicketId(normalizedTicketId);
+    if (!job || job.status !== "queued") {
+      return null;
+    }
+
+    return this.processCreditJob(job);
+  }
+
+  private async processCreditJob(job: WinningsCreditJob): Promise<{
+    readonly job: WinningsCreditJob;
+    readonly credited: boolean;
+  }> {
     const started = startWinningsCreditJob(job);
     await this.winningsCreditJobStore.saveJob(started);
 
     try {
-      const ticket = await this.ticketStore.getTicketById(job.ticketId);
-      if (!ticket) {
-        throw new Error(`ticket "${job.ticketId}" not found for credit job`);
-      }
-
       await this.walletLedgerService.creditWinnings({
         userId: job.userId,
-        requestId: ticket.requestId,
+        purchaseId: job.purchaseId,
+        requestId: job.requestId,
         ticketId: job.ticketId,
-        verificationEventId: `${job.ticketId}:admin-resolve`,
+        sourceEventId: job.jobId,
+        verificationEventId: job.jobId,
         amountMinor: job.winningAmountMinor,
         currency: job.currency,
-        drawId: ticket.drawId
+        drawId: job.drawId
       });
 
       const nowIso = this.timeSource.nowIso();
       const completed = completeWinningsCreditJob(started, nowIso);
       await this.winningsCreditJobStore.saveJob(completed);
 
-      await this.ticketClaimService.markTicketCredited(job.ticketId);
+      await this.markTicketCreditedIfLegacyTicketExists(job.ticketId);
 
       return { job: completed, credited: true };
     } catch (error) {
@@ -108,5 +136,27 @@ export class WinningsCreditService {
 
   async listQueuedJobs(): Promise<readonly WinningsCreditJob[]> {
     return this.winningsCreditJobStore.listQueuedJobs();
+  }
+
+  async listJobs(): Promise<readonly WinningsCreditJob[]> {
+    return this.winningsCreditJobStore.listJobs();
+  }
+
+  private async startCreditClaimIfLegacyTicketExists(ticketId: string): Promise<void> {
+    const ticket = await this.ticketStore.getTicketById(ticketId);
+    if (!ticket) {
+      return;
+    }
+
+    await this.ticketClaimService.startCreditClaim(ticketId);
+  }
+
+  private async markTicketCreditedIfLegacyTicketExists(ticketId: string): Promise<void> {
+    const ticket = await this.ticketStore.getTicketById(ticketId);
+    if (!ticket) {
+      return;
+    }
+
+    await this.ticketClaimService.markTicketCredited(ticketId);
   }
 }

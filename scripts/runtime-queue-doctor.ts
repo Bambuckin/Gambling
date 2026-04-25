@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { getPostgresPool } from "../packages/infrastructure/src/postgres/postgres-client.js";
+import { createTerminalExecutionAdvisoryKey } from "../packages/infrastructure/src/postgres/postgres-purchase-store.js";
 import { readLotteryStorageBackendFromEnv } from "../packages/infrastructure/src/postgres/storage-backend.js";
 
 interface CliOptions {
@@ -34,8 +35,9 @@ async function main(): Promise<void> {
   }
 
   const pool = getPostgresPool(connectionString);
+  const executionLockKey = createTerminalExecutionAdvisoryKey("main-terminal");
   try {
-    const [queueCounts, requestCounts, lockRows, oldestQueued] = await Promise.all([
+    const [queueCounts, requestCounts, advisoryLockRows, oldestQueued] = await Promise.all([
       pool.query(`
         select
           count(*) filter (where status = 'queued')::int as queued_count,
@@ -50,11 +52,24 @@ async function main(): Promise<void> {
           count(*) filter (where state = 'error')::int as error_requests
         from lottery_purchase_requests
       `),
-      pool.query(`
-        select lock_name, owner_id, acquired_at, expires_at
-        from lottery_terminal_execution_locks
-        order by acquired_at desc
-      `),
+      pool.query(
+        `
+          select
+            l.pid,
+            a.application_name,
+            a.state,
+            a.backend_start,
+            a.query_start
+          from pg_locks l
+          join pg_stat_activity a on a.pid = l.pid
+          where l.locktype = 'advisory'
+            and l.classid = $1
+            and l.objid = $2
+            and l.objsubid = 2
+          order by a.backend_start desc
+        `,
+        [executionLockKey.classId, executionLockKey.objectId]
+      ),
       pool.query(`
         select request_id, status, enqueued_at
         from lottery_purchase_queue_items
@@ -71,7 +86,7 @@ async function main(): Promise<void> {
         {
           queue,
           requests,
-          terminalLocks: lockRows.rows,
+          advisoryLocks: advisoryLockRows.rows,
           oldestQueued: oldestQueued.rows
         },
         null,
@@ -81,9 +96,9 @@ async function main(): Promise<void> {
 
     const queuedCount = Number(queue.queued_count ?? 0);
     const executingCount = Number(queue.executing_count ?? 0);
-    if (queuedCount > 0 && executingCount === 0 && lockRows.rows.length === 0) {
+    if (queuedCount > 0 && executingCount === 0 && advisoryLockRows.rows.length === 0) {
       console.log(
-        "[queue-doctor] suspicious state: queued requests exist but no executing queue item and no terminal lock holder"
+        "[queue-doctor] suspicious state: queued requests exist but no executing queue item and no advisory lock holder"
       );
     }
   } finally {

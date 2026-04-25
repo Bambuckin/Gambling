@@ -5,6 +5,7 @@ import {
   closeCanonicalDraw,
   closeDrawClosure,
   createNotification,
+  createPurchasedTicketRecord,
   createOpenCanonicalDraw,
   createOpenDrawClosure,
   resolveTicketFromAdminMark,
@@ -25,7 +26,9 @@ import type { DrawClosureStore } from "../ports/draw-closure-store.js";
 import type { NotificationStore } from "../ports/notification-store.js";
 import type { TicketStore } from "../ports/ticket-store.js";
 import type { TimeSource } from "../ports/time-source.js";
+import { buildCanonicalTicketId } from "./canonical-compatibility.js";
 import { markCanonicalPurchaseAwaitingDrawClose } from "./canonical-purchase-state.js";
+import type { WinningsCreditService } from "./winnings-credit-service.js";
 
 export interface DrawClosureServiceDependencies {
   readonly ticketStore: TicketStore;
@@ -33,6 +36,7 @@ export interface DrawClosureServiceDependencies {
   readonly canonicalPurchaseStore: CanonicalPurchaseStore;
   readonly drawClosureStore: DrawClosureStore;
   readonly notificationStore: NotificationStore;
+  readonly winningsCreditService?: Pick<WinningsCreditService, "enqueueCreditJob" | "processCreditJobForTicket">;
   readonly timeSource: TimeSource;
 }
 
@@ -69,26 +73,13 @@ export interface CloseDrawResult {
   readonly draw: CanonicalDrawRecord;
 }
 
-export interface SettleDrawInput {
-  readonly lotteryCode: string;
-  readonly drawId: string;
-  readonly settledBy: string;
-}
-
-export interface SettleDrawResult {
-  readonly alreadySettled: boolean;
-  readonly draw: CanonicalDrawRecord;
-  readonly publishedPurchases: readonly CanonicalPurchaseRecord[];
-  readonly resolvedTickets: readonly TicketRecord[];
-  readonly notifications: readonly NotificationRecord[];
-}
-
 export class DrawClosureService {
   private readonly ticketStore: TicketStore;
   private readonly canonicalDrawStore: CanonicalDrawStore;
   private readonly canonicalPurchaseStore: CanonicalPurchaseStore;
   private readonly drawClosureStore: DrawClosureStore;
   private readonly notificationStore: NotificationStore;
+  private readonly winningsCreditService: Pick<WinningsCreditService, "enqueueCreditJob" | "processCreditJobForTicket"> | null;
   private readonly timeSource: TimeSource;
 
   constructor(dependencies: DrawClosureServiceDependencies) {
@@ -97,6 +88,7 @@ export class DrawClosureService {
     this.canonicalPurchaseStore = dependencies.canonicalPurchaseStore;
     this.drawClosureStore = dependencies.drawClosureStore;
     this.notificationStore = dependencies.notificationStore;
+    this.winningsCreditService = dependencies.winningsCreditService ?? null;
     this.timeSource = dependencies.timeSource;
   }
 
@@ -134,10 +126,6 @@ export class DrawClosureService {
     const draw = await this.canonicalDrawStore.getDraw(purchase.snapshot.lotteryCode, purchase.snapshot.drawId);
     if (!draw) {
       throw new Error(`draw "${purchase.snapshot.drawId}" for "${purchase.snapshot.lotteryCode}" is not created`);
-    }
-
-    if (draw.status === "open") {
-      throw new Error(`draw "${draw.drawId}" must be closed before results can be marked`);
     }
 
     if (draw.status === "settled") {
@@ -194,7 +182,7 @@ export class DrawClosureService {
       drawId: input.drawId,
       drawAt: input.drawAt
     });
-    if (draw.status !== "open") {
+    if (draw.status === "settled") {
       return {
         alreadyClosed: true,
         draw
@@ -202,107 +190,34 @@ export class DrawClosureService {
     }
 
     const nowIso = this.timeSource.nowIso();
-    const closed = closeCanonicalDraw(draw, {
-      closedAt: nowIso,
-      closedBy: requireNonEmpty(input.closedBy, "closedBy")
-    });
-    await this.canonicalDrawStore.saveDraw(closed);
-    await this.drawClosureStore.saveClosure(
-      closeDrawClosure(createOpenDrawClosure(input.lotteryCode, input.drawId), input.closedBy, nowIso)
-    );
+    const normalizedPurchases = await this.normalizePurchasesForClose(draw, nowIso);
+    this.assertPurchasesResolvedBeforeClosePublication(normalizedPurchases);
+    const closedBy = requireNonEmpty(input.closedBy, "closedBy");
 
-    return {
-      alreadyClosed: false,
-      draw: closed
-    };
-  }
-
-  async settleDraw(input: SettleDrawInput): Promise<SettleDrawResult> {
-    const draw = await this.canonicalDrawStore.getDraw(input.lotteryCode, input.drawId);
-    if (!draw) {
-      throw new Error(`draw "${input.drawId}" for "${input.lotteryCode}" not found`);
-    }
-
+    const closed =
+      draw.status === "open"
+        ? closeCanonicalDraw(draw, {
+            closedAt: nowIso,
+            closedBy
+          })
+        : draw;
     if (draw.status === "open") {
-      throw new Error(`draw "${draw.drawId}" must be closed before settlement`);
-    }
-
-    if (draw.status === "settled") {
-      return {
-        alreadySettled: true,
-        draw,
-        publishedPurchases: [],
-        resolvedTickets: [],
-        notifications: []
-      };
-    }
-
-    const nowIso = this.timeSource.nowIso();
-    const purchases = (await this.canonicalPurchaseStore.listPurchases())
-      .filter((purchase) => purchase.snapshot.lotteryCode === draw.lotteryCode && purchase.snapshot.drawId === draw.drawId)
-      .filter((purchase) => purchase.status === "purchased" || purchase.status === "awaiting_draw_close" || purchase.status === "settled");
-
-    const normalizedPurchases = await Promise.all(
-      purchases.map(async (purchase) => {
-        if (purchase.status !== "purchased") {
-          return purchase;
-        }
-
-        const repaired = markCanonicalPurchaseAwaitingDrawClose(purchase, {
-          eventId: `${purchase.snapshot.purchaseId}:awaiting_draw_close:settlement-repair`,
-          occurredAt: nowIso,
-          note: "settlement repaired awaiting_draw_close state"
-        });
-        await this.canonicalPurchaseStore.savePurchase(repaired);
-        return repaired;
-      })
-    );
-
-    const unresolvedPurchase = normalizedPurchases.find(
-      (purchase) => purchase.status === "awaiting_draw_close" && purchase.resultStatus === "pending"
-    );
-    if (unresolvedPurchase) {
-      throw new Error(
-        `purchase "${unresolvedPurchase.snapshot.purchaseId}" must be marked win/lose before settlement`
+      await this.canonicalDrawStore.saveDraw(closed);
+      await this.drawClosureStore.saveClosure(
+        closeDrawClosure(createOpenDrawClosure(input.lotteryCode, input.drawId), closedBy, nowIso)
       );
     }
 
-    const settledDraw = settleCanonicalDraw(draw, {
+    const settled = settleCanonicalDraw(closed, {
       settledAt: nowIso,
-      settledBy: input.settledBy
+      settledBy: closedBy
     });
-    await this.canonicalDrawStore.saveDraw(settledDraw);
-
-    const publishedPurchases: CanonicalPurchaseRecord[] = [];
-    const resolvedTickets: TicketRecord[] = [];
-    const notifications: NotificationRecord[] = [];
-
-    for (const purchase of normalizedPurchases) {
-      const publishedPurchase = await this.publishPurchaseResult(purchase, nowIso, draw.drawId, input.settledBy);
-      publishedPurchases.push(publishedPurchase);
-
-      const ticket = await this.ticketStore.getTicketByRequestId(publishedPurchase.snapshot.legacyRequestId ?? publishedPurchase.snapshot.purchaseId);
-      if (!ticket || ticket.verificationStatus !== "pending") {
-        continue;
-      }
-
-      const resolved = resolveCompatibilityTicket(ticket, publishedPurchase.resultStatus, nowIso, input.settledBy);
-      await this.ticketStore.saveTicket(resolved);
-      resolvedTickets.push(resolved);
-
-      const ticketNotifications = buildTicketNotifications(resolved, draw.lotteryCode, draw.drawId, nowIso);
-      for (const notification of ticketNotifications) {
-        await this.notificationStore.saveNotification(notification);
-        notifications.push(notification);
-      }
-    }
+    await this.canonicalDrawStore.saveDraw(settled);
+    await this.publishSettledDrawResults(normalizedPurchases, draw, nowIso, closedBy);
 
     return {
-      alreadySettled: false,
-      draw: settledDraw,
-      publishedPurchases,
-      resolvedTickets,
-      notifications
+      alreadyClosed: false,
+      draw: settled
     };
   }
 
@@ -371,6 +286,136 @@ export class DrawClosureService {
 
     return nextPurchase;
   }
+
+  private async normalizePurchasesForClose(
+    draw: CanonicalDrawRecord,
+    nowIso: string
+  ): Promise<readonly CanonicalPurchaseRecord[]> {
+    const purchases = (await this.canonicalPurchaseStore.listPurchases())
+      .filter((purchase) => purchase.snapshot.lotteryCode === draw.lotteryCode && purchase.snapshot.drawId === draw.drawId)
+      .filter((purchase) => purchase.status === "purchased" || purchase.status === "awaiting_draw_close" || purchase.status === "settled");
+
+    return Promise.all(
+      purchases.map(async (purchase) => {
+        if (purchase.status !== "purchased") {
+          return purchase;
+        }
+
+        const repaired = markCanonicalPurchaseAwaitingDrawClose(purchase, {
+          eventId: `${purchase.snapshot.purchaseId}:awaiting_draw_close:close-repair`,
+          occurredAt: nowIso,
+          note: "draw close repaired awaiting_draw_close state"
+        });
+        await this.canonicalPurchaseStore.savePurchase(repaired);
+        return repaired;
+      })
+    );
+  }
+
+  private assertPurchasesResolvedBeforeClosePublication(
+    purchases: readonly CanonicalPurchaseRecord[]
+  ): void {
+    const unresolvedPurchase = purchases.find(
+      (purchase) => purchase.status === "awaiting_draw_close" && purchase.resultStatus === "pending"
+    );
+    if (unresolvedPurchase) {
+      throw new Error(
+        `purchase "${unresolvedPurchase.snapshot.purchaseId}" must be marked win/lose before draw can be closed`
+      );
+    }
+  }
+
+  private async publishSettledDrawResults(
+    purchases: readonly CanonicalPurchaseRecord[],
+    draw: CanonicalDrawRecord,
+    settledAt: string,
+    settledBy: string
+  ): Promise<{
+    readonly publishedPurchases: readonly CanonicalPurchaseRecord[];
+    readonly resolvedTickets: readonly TicketRecord[];
+    readonly notifications: readonly NotificationRecord[];
+  }> {
+    const publishedPurchases: CanonicalPurchaseRecord[] = [];
+    const resolvedTickets: TicketRecord[] = [];
+    const notifications: NotificationRecord[] = [];
+
+    for (const purchase of purchases) {
+      const publishedPurchase = await this.publishPurchaseResult(purchase, settledAt, draw.drawId, settledBy);
+      publishedPurchases.push(publishedPurchase);
+
+      const existingTicket = await this.ticketStore.getTicketByRequestId(
+        publishedPurchase.snapshot.legacyRequestId ?? publishedPurchase.snapshot.purchaseId
+      );
+      const compatibilityTicket = existingTicket ?? createCompatibilityTicket(publishedPurchase);
+      const resolved =
+        compatibilityTicket.verificationStatus === "pending"
+          ? resolveCompatibilityTicket(
+              compatibilityTicket,
+              publishedPurchase.resultStatus,
+              settledAt,
+              settledBy
+            )
+          : compatibilityTicket;
+      if (existingTicket && compatibilityTicket.verificationStatus === "pending") {
+        await this.ticketStore.saveTicket(resolved);
+      }
+      resolvedTickets.push(resolved);
+
+      const autoCreditStatus = await this.autoCreditWinningTicket(publishedPurchase, resolved);
+      const ticketNotifications = buildTicketNotifications(resolved, draw.lotteryCode, draw.drawId, settledAt, autoCreditStatus);
+      for (const notification of ticketNotifications) {
+        await this.notificationStore.saveNotification(notification);
+        notifications.push(notification);
+      }
+    }
+
+    return {
+      publishedPurchases,
+      resolvedTickets,
+      notifications
+    };
+  }
+
+  private async autoCreditWinningTicket(
+    purchase: CanonicalPurchaseRecord,
+    ticket: TicketRecord
+  ): Promise<"credited" | "pending" | null> {
+    const winningAmountMinor = ticket.winningAmountMinor ?? 0;
+    if (winningAmountMinor <= 0 || !this.winningsCreditService) {
+      return null;
+    }
+
+    const job = await this.winningsCreditService.enqueueCreditJob({
+      requestId: purchase.snapshot.legacyRequestId ?? purchase.snapshot.purchaseId,
+      purchaseId: purchase.snapshot.purchaseId,
+      ticketId: ticket.ticketId,
+      userId: purchase.snapshot.userId,
+      drawId: purchase.snapshot.drawId,
+      winningAmountMinor,
+      currency: purchase.snapshot.currency
+    });
+    if (job.status === "done") {
+      return "credited";
+    }
+    if (job.status !== "queued") {
+      return "pending";
+    }
+
+    const processed = await this.winningsCreditService.processCreditJobForTicket(ticket.ticketId);
+    return processed?.credited ? "credited" : "pending";
+  }
+}
+
+function createCompatibilityTicket(purchase: CanonicalPurchaseRecord): TicketRecord {
+  return createPurchasedTicketRecord({
+    ticketId: buildCanonicalTicketId(purchase.snapshot.purchaseId),
+    requestId: purchase.snapshot.legacyRequestId ?? purchase.snapshot.purchaseId,
+    userId: purchase.snapshot.userId,
+    lotteryCode: purchase.snapshot.lotteryCode,
+    drawId: purchase.snapshot.drawId,
+    purchasedAt: purchase.purchasedAt ?? purchase.snapshot.submittedAt,
+    externalReference: purchase.externalTicketReference ?? null
+  });
 }
 
 function resolveCompatibilityTicket(
@@ -396,7 +441,8 @@ function buildTicketNotifications(
   ticket: TicketRecord,
   lotteryCode: string,
   drawId: string,
-  nowIso: string
+  nowIso: string,
+  autoCreditStatus: "credited" | "pending" | null
 ): NotificationRecord[] {
   const notifications: NotificationRecord[] = [];
   const winningAmountMinor = ticket.winningAmountMinor ?? 0;
@@ -407,10 +453,12 @@ function buildTicketNotifications(
       notificationId: `${ticket.ticketId}:draw_closed_result_ready`,
       userId: ticket.userId,
       type: "draw_closed_result_ready" as NotificationType,
-      title: isWinningTicket ? "Тираж закрыт: билет выиграл" : "Тираж закрыт: билет не выиграл",
+      title: isWinningTicket
+        ? "\u0422\u0438\u0440\u0430\u0436 \u0437\u0430\u043a\u0440\u044b\u0442: \u0431\u0438\u043b\u0435\u0442 \u0432\u044b\u0438\u0433\u0440\u0430\u043b"
+        : "\u0422\u0438\u0440\u0430\u0436 \u0437\u0430\u043a\u0440\u044b\u0442: \u0431\u0438\u043b\u0435\u0442 \u043d\u0435 \u0432\u044b\u0438\u0433\u0440\u0430\u043b",
       body: isWinningTicket
-        ? `Тираж ${drawId} закрыт. Билет ${ticket.ticketId} выиграл ${formatMinorAsRub(winningAmountMinor)}.`
-        : `Тираж ${drawId} закрыт. Билет ${ticket.ticketId} не выиграл.`,
+        ? `\u0422\u0438\u0440\u0430\u0436 ${drawId} \u0437\u0430\u043a\u0440\u044b\u0442. \u0411\u0438\u043b\u0435\u0442 ${ticket.ticketId} \u0432\u044b\u0438\u0433\u0440\u0430\u043b ${formatMinorAsRub(winningAmountMinor)}.`
+        : `\u0422\u0438\u0440\u0430\u0436 ${drawId} \u0437\u0430\u043a\u0440\u044b\u0442. \u0411\u0438\u043b\u0435\u0442 ${ticket.ticketId} \u043d\u0435 \u0432\u044b\u0438\u0433\u0440\u0430\u043b.`,
       createdAt: nowIso,
       referenceTicketId: ticket.ticketId,
       referenceDrawId: drawId,
@@ -424,8 +472,14 @@ function buildTicketNotifications(
         notificationId: `${ticket.ticketId}:winning_actions_available`,
         userId: ticket.userId,
         type: "winning_actions_available" as NotificationType,
-        title: "Выигрыш доступен",
-        body: `Ваш билет выиграл. Сумма: ${formatMinorAsRub(winningAmountMinor)}. Выберите способ получения.`,
+        title:
+          autoCreditStatus === "credited"
+            ? "\u0412\u044b\u0438\u0433\u0440\u044b\u0448 \u0437\u0430\u0447\u0438\u0441\u043b\u0435\u043d"
+            : "\u0412\u044b\u0438\u0433\u0440\u044b\u0448 \u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d",
+        body:
+          autoCreditStatus === "credited"
+            ? `\u0412\u0430\u0448 \u0431\u0438\u043b\u0435\u0442 \u0432\u044b\u0438\u0433\u0440\u0430\u043b. \u0421\u0443\u043c\u043c\u0430 ${formatMinorAsRub(winningAmountMinor)} \u0437\u0430\u0447\u0438\u0441\u043b\u0435\u043d\u0430 \u043d\u0430 \u0441\u0447\u0451\u0442.`
+            : `\u0412\u0430\u0448 \u0431\u0438\u043b\u0435\u0442 \u0432\u044b\u0438\u0433\u0440\u0430\u043b. \u0421\u0443\u043c\u043c\u0430: ${formatMinorAsRub(winningAmountMinor)}. \u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u043f\u043e\u0441\u043e\u0431 \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u044f.`,
         createdAt: nowIso,
         referenceTicketId: ticket.ticketId,
         referenceDrawId: drawId,

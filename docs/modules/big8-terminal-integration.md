@@ -57,7 +57,7 @@ Observed/cart-related screens show:
 - cart view with editable items
 - final checkout buttons
 
-Current project scope stops at **add to cart**. Payment finalization is explicitly out of scope for the first live slice.
+Current project scope now extends through terminal purchase confirmation in the live Big 8 slice.
 
 ## DOM and Automation Hints From Existing Scripts
 
@@ -104,7 +104,7 @@ The operator scripts reference these elements:
 - cart button found via SVG/icon heuristics
 - phone keypad group buttons
 
-These heuristics are brittle but immediately useful for Phase 11 bootstrap.
+These heuristics are brittle but immediately useful for the current live Big 8 automation path.
 
 ## Integration Decisions For Current Roadmap Extension
 
@@ -112,27 +112,24 @@ These heuristics are brittle but immediately useful for Phase 11 bootstrap.
 - Draw list source of truth must come from the live terminal web UI, not seeded snapshots.
 - Shared state between web UI and terminal worker remains PostgreSQL-backed.
 - Worker should run on the terminal machine or in the same user session context as the browser it automates.
-- Initial production handler stops after tickets are added to cart.
+- Current production handler continues from ticket filling through terminal purchase confirmation.
 - The customer-facing web client must support multiple Big 8 tickets in one request, mirroring the terminal page concept.
 
-## Phase 11 Implementation Status (2026-04-13)
+## Current Implementation Status (2026-04-21)
 
-Phase 11 is now wired with a real terminal cart path for `bolshaya-8`:
+The live Big 8 worker path is now wired for direct terminal purchase for `bolshaya-8`:
 
 - worker handler `apps/terminal-worker/src/lib/big8-terminal-cart-handler.ts` attaches to the existing authenticated browser tab via Chrome remote debugging;
 - purchase payload from web request snapshot is used directly (`draw + tickets[] + contactPhone`);
 - draw is selected in the terminal modal and ticket data is applied ticket-by-ticket;
-- flow advances to phone step, enters account phone from payload, and clicks **add to cart**;
-- payment/checkout is intentionally not executed in this phase.
+- flow advances to phone step, enters account phone from payload, opens the cart/checkout step, and confirms terminal purchase;
+- worker returns a truthful purchased outcome instead of stopping at cart stage.
 
-Lifecycle semantics were split so cart is no longer treated as purchased:
+Lifecycle semantics remain honest:
 
-- new request state: `added_to_cart`;
-- terminal attempt outcome supports `added_to_cart`;
-- queue item is removed after successful cart add;
-- ticket persistence still happens only for real `success` purchase outcomes.
-
-This prevents false ticket records when execution only reaches cart.
+- tickets are persisted only after real terminal purchase success;
+- compatibility-only cart completion remains available only for lotteries that still declare `purchaseCompletionMode=emulate_after_cart`;
+- `bolshaya-8` now uses `purchaseCompletionMode=direct`.
 
 ## Implemented Terminal Flow (Current Handler)
 
@@ -148,13 +145,16 @@ Current deterministic flow implemented in worker:
 5. continue to phone step via `#to-add-phone` / text fallback;
 6. enter phone from payload;
 7. click add to cart (`#add-to-cart-button` / `#btn-buy` / text fallback);
-8. return handler result with `executionOutcome=added_to_cart`.
+8. open the checkout/purchase action from the terminal cart flow;
+9. confirm purchase and wait for the terminal success state;
+10. return handler result with `executionOutcome=ticket_purchased`.
 
-## Worker Environment Flags For Cart Automation
+## Worker Environment Flags For Big 8 Terminal Purchase
 
-Required for live cart automation:
+Required for live terminal purchase automation:
 
-- `LOTTERY_BIG8_CART_AUTOMATION_ENABLED=true`
+- `LOTTERY_BIG8_PURCHASE_AUTOMATION_ENABLED=true`
+- `LOTTERY_BIG8_CART_AUTOMATION_ENABLED=true` can still be used as a backward-compatible alias
 - `LOTTERY_BIG8_TERMINAL_MODE=real`
 - `LOTTERY_TERMINAL_BROWSER_URL=http://127.0.0.1:9222`
 - `LOTTERY_TERMINAL_PAGE_URL=https://webapp.cloud.nationallottery.ru/`
@@ -171,7 +171,7 @@ For single-machine verification without touching live NL checkout:
 
 - set `LOTTERY_BIG8_TERMINAL_MODE=mock`;
 - worker uses deterministic `Big8MockTerminalHandler` for `bolshaya-8`;
-- request still goes through normal queue/execution lifecycle and ends in `added_to_cart`;
+- request still goes through normal queue/execution lifecycle and ends in the purchased success path;
 - open `/debug/mock-terminal` to inspect payload snapshot + worker raw output.
 
 This mode is verification-only and does not replace live terminal integration.
@@ -188,9 +188,9 @@ This removes manual reload loops for observing queue/execution progression.
 ## Risks
 
 - Terminal site DOM may change, especially class names and button structure.
-- If the National Lottery session expires, draw sync and cart automation both fail.
+- If the National Lottery session expires, draw sync and purchase automation both fail.
 - The current repo now stores a user phone number in the access identity model, but seeded/demo data still needs production values.
-- Current phase models the first board as exactly 8 numbers for deterministic pricing. If the real rules allow more than 8 with different pricing, Phase 11 must extend the contract before checkout automation is finished.
+- Current phase models the first board as exactly 8 numbers for deterministic pricing. If the real rules allow more than 8 with different pricing, the Big 8 contract must be extended before broader product rollout.
 
 ## Recommended Technical Direction
 

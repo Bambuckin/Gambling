@@ -1,13 +1,37 @@
 import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { dirname, isAbsolute, resolve } from "node:path";
 
 const DEFAULT_ENV_RELATIVE_PATH = "../../../../../.env";
+const REPO_ENV_FROM_ENTRY = "../../../.env";
+const BUNDLE_ENV_FROM_ENTRY = "../terminal-receiver.env";
 
 export function loadWorkerEnvFromFile(relativePath = DEFAULT_ENV_RELATIVE_PATH): string | null {
-  const envFileUrl = new URL(relativePath, import.meta.url);
-  const envFilePath = fileURLToPath(envFileUrl);
+  const scriptPath = process.argv[1];
+  const scriptDir = scriptPath ? dirname(resolve(scriptPath)) : null;
+  const candidates = new Set<string>();
 
-  if (!existsSync(envFilePath)) {
+  if (isAbsolute(relativePath)) {
+    candidates.add(relativePath);
+  } else {
+    candidates.add(resolve(process.cwd(), relativePath));
+    candidates.add(resolve(process.cwd(), ".env"));
+    candidates.add(resolve(process.cwd(), BUNDLE_ENV_FROM_ENTRY));
+    if (scriptDir) {
+      candidates.add(resolve(scriptDir, relativePath));
+      candidates.add(resolve(scriptDir, REPO_ENV_FROM_ENTRY));
+      candidates.add(resolve(scriptDir, BUNDLE_ENV_FROM_ENTRY));
+    }
+  }
+
+  let envFilePath: string | null = null;
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      envFilePath = candidate;
+      break;
+    }
+  }
+
+  if (!envFilePath) {
     return null;
   }
 

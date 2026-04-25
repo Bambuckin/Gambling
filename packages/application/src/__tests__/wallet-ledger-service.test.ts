@@ -235,13 +235,15 @@ describe("WalletLedgerService", () => {
     await expect(reserveAction).rejects.toThrow("requestId is required");
   });
 
-  it("credits winnings with ticket-linked idempotency key", async () => {
+  it("credits winnings with canonical purchase-linked idempotency key", async () => {
     const service = createService();
 
     const credit = await service.creditWinnings({
       userId: "seed-user",
+      purchaseId: "purchase-ticket-win",
       requestId: "req-ticket-win",
       ticketId: "req-ticket-win:ticket",
+      sourceEventId: "purchase-ticket-win:credit",
       verificationEventId: "verify-1",
       amountMinor: 2300,
       currency: "RUB",
@@ -251,11 +253,12 @@ describe("WalletLedgerService", () => {
     expect(credit.replayed).toBe(false);
     expect(credit.entry.operation).toBe("credit");
     expect(credit.entry.reference).toEqual({
+      purchaseId: "purchase-ticket-win",
       requestId: "req-ticket-win",
       ticketId: "req-ticket-win:ticket",
       drawId: "draw-ticket-win"
     });
-    expect(credit.entry.idempotencyKey).toBe("req-ticket-win:ticket:winnings:verify-1");
+    expect(credit.entry.idempotencyKey).toBe("purchase-ticket-win:winnings:purchase-ticket-win:credit");
     expect(credit.snapshot).toEqual({
       userId: "seed-user",
       availableMinor: 2300,
@@ -264,21 +267,25 @@ describe("WalletLedgerService", () => {
     });
   });
 
-  it("suppresses duplicate winnings credits by verification event", async () => {
+  it("suppresses duplicate winnings credits by canonical purchase event", async () => {
     const service = createService();
 
     const first = await service.creditWinnings({
       userId: "seed-user",
+      purchaseId: "purchase-ticket-replay",
       requestId: "req-ticket-replay",
       ticketId: "req-ticket-replay:ticket",
+      sourceEventId: "purchase-ticket-replay:credit",
       verificationEventId: "verify-2",
       amountMinor: 1900,
       currency: "RUB"
     });
     const replay = await service.creditWinnings({
       userId: "seed-user",
+      purchaseId: "purchase-ticket-replay",
       requestId: "req-ticket-replay",
       ticketId: "req-ticket-replay:ticket",
+      sourceEventId: "purchase-ticket-replay:credit",
       verificationEventId: "verify-2",
       amountMinor: 1900,
       currency: "RUB"
@@ -288,7 +295,7 @@ describe("WalletLedgerService", () => {
     expect(replay.replayed).toBe(true);
     expect(replay.entry.entryId).toBe(first.entry.entryId);
     expect((await service.listEntries("seed-user")).map((entry) => entry.idempotencyKey)).toEqual([
-      "req-ticket-replay:ticket:winnings:verify-2"
+      "purchase-ticket-replay:winnings:purchase-ticket-replay:credit"
     ]);
   });
 
@@ -342,6 +349,42 @@ describe("WalletLedgerService", () => {
       reservedMinor: 0,
       currency: "RUB"
     });
+  });
+
+  it("ensures missing entries by idempotency key without duplicating existing history", async () => {
+    const existingEntry = createEntry({
+      entryId: "entry-existing",
+      userId: "seed-user",
+      operation: "credit",
+      amountMinor: 1000,
+      idempotencyKey: "seed-user-credit",
+      reference: {
+        requestId: "seed-credit"
+      }
+    });
+    const missingEntry = createEntry({
+      entryId: "entry-missing",
+      userId: "seed-admin",
+      operation: "credit",
+      amountMinor: 2000,
+      idempotencyKey: "seed-admin-credit",
+      reference: {
+        requestId: "seed-admin-credit"
+      },
+      createdAt: "2026-04-05T10:01:00.000Z"
+    });
+    const store = new InMemoryLedgerStore([existingEntry]);
+    const service = createService({ store });
+
+    const firstInsert = await service.ensureEntries([existingEntry, missingEntry]);
+    const secondInsert = await service.ensureEntries([existingEntry, missingEntry]);
+
+    expect(firstInsert).toBe(1);
+    expect(secondInsert).toBe(0);
+    expect((await service.listAllEntries()).map((entry) => entry.idempotencyKey)).toEqual([
+      "seed-user-credit",
+      "seed-admin-credit"
+    ]);
   });
 
   it("sorts history by createdAt then entryId", async () => {

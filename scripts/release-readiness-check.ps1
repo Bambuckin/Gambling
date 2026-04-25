@@ -2,10 +2,13 @@ $ErrorActionPreference = "Stop"
 
 $commands = @(
   "corepack pnpm --filter @lottery/domain test -- request-state-machine ledger-state-machine",
-  "corepack pnpm --filter @lottery/application test -- purchase-orchestration-service terminal-retry-service ticket-verification-result-service admin-queue-service operations-alert-service terminal-handler-resolver-service terminal-execution-attempt-service",
+  "corepack pnpm --filter @lottery/application test -- --runInBand purchase-request-query-service ticket-query-service user-cabinet-stats-service terminal-receiver-query-service admin-operations-query-service admin-queue-service winning-fulfillment-service winnings-credit-service ticket-verification-result-service admin-test-reset-service",
+  "corepack pnpm --filter @lottery/application typecheck",
   "corepack pnpm --filter @lottery/lottery-handlers typecheck",
   "corepack pnpm --filter @lottery/terminal-worker typecheck",
+  "corepack pnpm --filter @lottery/infrastructure typecheck",
   "corepack pnpm --filter @lottery/web build",
+  "corepack pnpm --filter @lottery/web typecheck",
   "corepack pnpm smoke"
 )
 

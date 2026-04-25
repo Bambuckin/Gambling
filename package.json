@@ -8,10 +8,10 @@
     "node": ">=20.11.0"
   },
   "scripts": {
-    "dev:web": "corepack pnpm --filter @lottery/web dev",
-    "dev:worker": "corepack pnpm --filter @lottery/terminal-worker dev",
-    "start:web": "corepack pnpm --filter @lottery/web start",
-    "start:worker": "corepack pnpm --filter @lottery/terminal-worker start",
+    "dev:web": "corepack pnpm tsx scripts/run-package-script-with-root-env.ts --filter=@lottery/web --script=dev",
+    "dev:worker": "corepack pnpm tsx scripts/run-package-script-with-root-env.ts --filter=@lottery/terminal-worker --script=dev",
+    "start:web": "corepack pnpm tsx scripts/run-package-script-with-root-env.ts --filter=@lottery/web --script=start",
+    "start:worker": "corepack pnpm tsx scripts/run-package-script-with-root-env.ts --filter=@lottery/terminal-worker --script=start",
     "lint": "corepack pnpm -r --if-present lint",
     "typecheck": "corepack pnpm -r --if-present typecheck",
     "test": "corepack pnpm -r --if-present test",

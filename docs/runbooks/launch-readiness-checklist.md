@@ -11,7 +11,8 @@ This document is the single place for launch scope:
 - Shared runtime state for `web` + `terminal-worker` through Postgres (`LOTTERY_STORAGE_BACKEND=postgres`).
 - Database schema bootstrap and seed: `scripts/postgres-init-and-seed.ts`.
 - Single active terminal executor lock: `PostgresTerminalExecutionLock`.
-- Customer UI refreshed to NLoto-like visual surface with preserved login/purchase/queue flow.
+- Current user/admin/receiver reads are canonical-first with legacy fallback only for compatibility gaps.
+- Customer UI keeps the working login/purchase/queue/result flow and now exposes account summary plus explicit winning actions on the lottery page.
 - Runtime env/IP templates:
   - `.env.example`
   - `ops/runtime/.env.web.template`
@@ -28,15 +29,15 @@ This document is the single place for launch scope:
 
 Blocking:
 
-- [ ] Big 8 is integrated only to cart stage (`added_to_cart`); payment/checkout automation is still not implemented.
+- [ ] Integration smoke in the target LAN must confirm Big 8 purchase reaches terminal success, draw closure works, and winner notifications return to the client page.
 - [ ] Real network and secret values filled in `.env` and `ops/runtime/hosts.template.json`.
-- [ ] Integration smoke in target LAN with live terminal flow.
 
 Recommended, non-blocking:
 
 - [ ] TLS/reverse proxy in front of `apps/web`.
 - [ ] Stronger secret management and rotation policy.
 - [ ] Centralized log collection beyond DB audit if required by operations.
+- [ ] Validate advisory lock / queue transport behavior under target LAN operating conditions.
 
 ## 3. How lottery/draw status is computed
 
@@ -61,7 +62,8 @@ Flow:
 2. `apps/web` validates session + payload, computes quote, creates request, queues request.
 3. `apps/terminal-worker` reserves queued request from shared DB and executes under terminal lock.
 4. Attempt result and ticket status are persisted to DB.
-5. Client/admin read updated status through `apps/web`.
+5. Client/admin read updated status through canonical-first query services in `apps/web`.
+6. Winning fulfillment continues either through worker-processed credit jobs or admin-confirmed cash-desk payouts.
 
 Network model:
 
@@ -122,6 +124,10 @@ Not required:
 - local worker
 - direct DB access
 
+Recommended for handoff:
+
+- copy `dist/lan-bundles/client-workstation` to cashier/client PCs instead of the whole repo.
+
 ## 6. Minimum env set required to start
 
 - `LOTTERY_STORAGE_BACKEND=postgres`
@@ -152,11 +158,29 @@ Terminal machine:
 Manual verification:
 
 - Login page works: `/login`
-- Purchase request can be created: `/lottery/mechtallion`
-- Queue/alerts visible: `/admin`
-- Worker logs show reservation + attempt + result traces
+- Purchase request can be created: `/lottery/bolshaya-8`
+- Queue, alerts, audit, payouts visible: `/admin`
+- Receiver history visible: `/terminal/receiver`
+- Worker logs show reservation, attempt, and credit-job traces
+- User page shows `Итоги по аккаунту`, ticket result state, `Зачислить`, and `В кассу`
 
-## 8. Files to hand to another model/account
+## 8. What To Copy To Each Machine
+
+- Main server:
+  - full repo checkout
+  - `.env`
+  - Node.js + Corepack
+- Terminal PC:
+  - `dist/lan-bundles/terminal-receiver`
+- Client PC:
+  - `dist/lan-bundles/client-workstation`
+
+If you are not using bundles:
+
+- server and worker still need the repo checkout;
+- client PCs still only need Chrome or Edge and LAN access.
+
+## 9. Files to hand to another model/account
 
 1. `docs/START-HERE.md`
 2. `docs/runbooks/launch-readiness-checklist.md`

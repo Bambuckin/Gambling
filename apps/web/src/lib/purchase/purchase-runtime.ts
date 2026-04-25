@@ -10,13 +10,18 @@ import {
   NotificationService,
   type PurchaseAttemptStore,
   PurchaseOrchestrationService,
+  type PurchaseQueueTransport,
   type PurchaseQueueStore,
   type PurchaseRequestStore,
   PurchaseRequestQueryService,
   PurchaseRequestService,
   SystemTimeSource,
   TicketClaimService,
+  TicketQueryService,
   type TicketStore,
+  TerminalReceiverQueryService,
+  UserCabinetStatsService,
+  WinningFulfillmentService,
   WinningsCreditService
 } from "@lottery/application";
 import {
@@ -41,7 +46,8 @@ import {
   PostgresPurchaseRequestStore,
   PostgresTerminalExecutionLock,
   PostgresTicketStore,
-  PostgresWinningsCreditJobStore
+  PostgresWinningsCreditJobStore,
+  createDefaultLedgerEntries
 } from "@lottery/infrastructure";
 import { getLedgerStoreInstance, getWalletLedgerService } from "../ledger/ledger-runtime";
 import { getSessionStoreInstance } from "../access/access-runtime";
@@ -55,7 +61,7 @@ const requestStore: PurchaseRequestStore =
   storageBackend === "postgres" && postgresPool
     ? new PostgresPurchaseRequestStore(postgresPool)
     : new InMemoryPurchaseRequestStore();
-const queueStore: PurchaseQueueStore =
+const queueStore: PurchaseQueueStore & PurchaseQueueTransport =
   storageBackend === "postgres" && postgresPool
     ? new PostgresPurchaseQueueStore(postgresPool)
     : new InMemoryPurchaseQueueStore();
@@ -102,6 +108,8 @@ let cachedOrchestrationService: PurchaseOrchestrationService | null = null;
 let cachedQueryService: PurchaseRequestQueryService | null = null;
 let cachedAdminQueueService: AdminQueueService | null = null;
 let cachedAdminOperationsQueryService: AdminOperationsQueryService | null = null;
+let cachedTerminalReceiverQueryService: TerminalReceiverQueryService | null = null;
+let cachedUserCabinetStatsService: UserCabinetStatsService | null = null;
 
 export function getPurchaseRequestService(): PurchaseRequestService {
   if (!cachedRequestService) {
@@ -128,6 +136,25 @@ export function getPurchaseOrchestrationService(): PurchaseOrchestrationService 
   return cachedOrchestrationService;
 }
 
+export async function recoverInterruptedLotteryPurchaseRequests(userId: string, lotteryCode: string): Promise<void> {
+  const normalizedUserId = userId.trim();
+  const normalizedLotteryCode = lotteryCode.trim().toLowerCase();
+  if (!normalizedUserId || !normalizedLotteryCode) {
+    return;
+  }
+
+  const purchaseOrchestrationService = getPurchaseOrchestrationService();
+  await purchaseOrchestrationService.recoverInterruptedRequests({
+    userId: normalizedUserId,
+    lotteryCode: normalizedLotteryCode
+  });
+  await purchaseOrchestrationService.reconcileDetachedReserves({
+    userId: normalizedUserId,
+    lotteryCode: normalizedLotteryCode,
+    currency: "RUB"
+  });
+}
+
 export function getPurchaseRequestQueryService(): PurchaseRequestQueryService {
   if (!cachedQueryService) {
     cachedQueryService = new PurchaseRequestQueryService({
@@ -146,6 +173,7 @@ export function getAdminQueueService(): AdminQueueService {
     cachedAdminQueueService = new AdminQueueService({
       requestStore,
       queueStore,
+      canonicalPurchaseStore,
       purchaseOrchestrationService: getPurchaseOrchestrationService()
     });
   }
@@ -167,6 +195,37 @@ export function getAdminOperationsQueryService(): AdminOperationsQueryService {
   return cachedAdminOperationsQueryService;
 }
 
+export function getTerminalReceiverQueryService(): TerminalReceiverQueryService {
+  if (!cachedTerminalReceiverQueryService) {
+    cachedTerminalReceiverQueryService = new TerminalReceiverQueryService({
+      requestStore,
+      queueStore,
+      canonicalPurchaseStore,
+      purchaseAttemptStore
+    });
+  }
+
+  return cachedTerminalReceiverQueryService;
+}
+
+export function getUserCabinetStatsService(): UserCabinetStatsService {
+  if (!cachedUserCabinetStatsService) {
+    cachedUserCabinetStatsService = new UserCabinetStatsService({
+      ticketStore,
+      ledgerStore: getLedgerStoreInstance(),
+      requestStore,
+      ticketQueryService: new TicketQueryService({
+        ticketStore,
+        canonicalPurchaseStore,
+        cashDeskRequestStore,
+        winningsCreditJobStore
+      })
+    });
+  }
+
+  return cachedUserCabinetStatsService;
+}
+
 export function getPurchaseRuntimeStores(): {
   readonly requestStore: PurchaseRequestStore;
   readonly queueStore: PurchaseQueueStore;
@@ -174,6 +233,8 @@ export function getPurchaseRuntimeStores(): {
   readonly canonicalDrawStore: CanonicalDrawStore;
   readonly purchaseAttemptStore: PurchaseAttemptStore;
   readonly ticketStore: TicketStore;
+  readonly cashDeskRequestStore: typeof cashDeskRequestStore;
+  readonly winningsCreditJobStore: typeof winningsCreditJobStore;
 } {
   return {
     requestStore,
@@ -181,7 +242,9 @@ export function getPurchaseRuntimeStores(): {
     canonicalPurchaseStore,
     canonicalDrawStore,
     purchaseAttemptStore,
-    ticketStore
+    ticketStore,
+    cashDeskRequestStore,
+    winningsCreditJobStore
   };
 }
 
@@ -196,6 +259,7 @@ export function getDrawClosureService(): DrawClosureService {
       canonicalPurchaseStore,
       drawClosureStore,
       notificationStore,
+      winningsCreditService: getWinningsCreditService(),
       timeSource: new SystemTimeSource()
     });
   }
@@ -216,6 +280,7 @@ export function getNotificationService(): NotificationService {
 let cachedTicketClaimService: TicketClaimService | null = null;
 let cachedCashDeskService: CashDeskService | null = null;
 let cachedWinningsCreditService: WinningsCreditService | null = null;
+let cachedWinningFulfillmentService: WinningFulfillmentService | null = null;
 
 export function getTicketClaimService(): TicketClaimService {
   if (!cachedTicketClaimService) {
@@ -245,6 +310,21 @@ export function getWinningsCreditService(): WinningsCreditService {
     });
   }
   return cachedWinningsCreditService;
+}
+
+export function getWinningFulfillmentService(): WinningFulfillmentService {
+  if (!cachedWinningFulfillmentService) {
+    cachedWinningFulfillmentService = new WinningFulfillmentService({
+      canonicalPurchaseStore,
+      ticketStore,
+      cashDeskRequestStore,
+      winningsCreditJobStore,
+      cashDeskService: getCashDeskService(),
+      winningsCreditService: getWinningsCreditService()
+    });
+  }
+
+  return cachedWinningFulfillmentService;
 }
 
 let cachedAdminManualFinanceService: AdminManualFinanceService | null = null;
@@ -279,7 +359,8 @@ export function getAdminTestResetService(): AdminTestResetService {
       sessionStore: getSessionStoreInstance(),
       executionLock,
       walletLedgerService: getWalletLedgerService(),
-      timeSource: new SystemTimeSource()
+      timeSource: new SystemTimeSource(),
+      resetSeedLedgerEntries: () => createDefaultLedgerEntries(new Date())
     });
   }
   return cachedAdminTestResetService;

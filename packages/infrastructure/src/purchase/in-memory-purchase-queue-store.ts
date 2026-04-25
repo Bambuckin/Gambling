@@ -1,6 +1,6 @@
-import type { PurchaseQueueItem, PurchaseQueueStore } from "@lottery/application";
+import type { PurchaseQueueItem, PurchaseQueuePriority, PurchaseQueueStore, PurchaseQueueTransport } from "@lottery/application";
 
-export class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
+export class InMemoryPurchaseQueueStore implements PurchaseQueueStore, PurchaseQueueTransport {
   private items: PurchaseQueueItem[];
 
   constructor(initialItems: readonly PurchaseQueueItem[] = []) {
@@ -17,6 +17,59 @@ export class InMemoryPurchaseQueueStore implements PurchaseQueueStore {
     const normalized = requestId.trim();
     const item = this.items.find((entry) => entry.requestId === normalized) ?? null;
     return item ? cloneItem(item) : null;
+  }
+
+  async listSnapshot(): Promise<readonly PurchaseQueueItem[]> {
+    return this.listQueueItems();
+  }
+
+  async getByRequestId(requestId: string): Promise<PurchaseQueueItem | null> {
+    return this.getQueueItemByRequestId(requestId);
+  }
+
+  async enqueue(item: PurchaseQueueItem): Promise<void> {
+    await this.saveQueueItem(item);
+  }
+
+  async reserve(requestId: string): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing || existing.status !== "queued") {
+      return null;
+    }
+
+    const next: PurchaseQueueItem = {
+      ...existing,
+      attemptCount: existing.attemptCount + 1,
+      status: "executing"
+    };
+    await this.saveQueueItem(next);
+    return next;
+  }
+
+  async requeue(requestId: string): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing) {
+      return null;
+    }
+
+    const next: PurchaseQueueItem = existing.status === "queued" ? existing : { ...existing, status: "queued" };
+    await this.saveQueueItem(next);
+    return next;
+  }
+
+  async reprioritize(requestId: string, priority: PurchaseQueuePriority): Promise<PurchaseQueueItem | null> {
+    const existing = await this.getQueueItemByRequestId(requestId);
+    if (!existing) {
+      return null;
+    }
+
+    const next: PurchaseQueueItem = existing.priority === priority ? existing : { ...existing, priority };
+    await this.saveQueueItem(next);
+    return next;
+  }
+
+  async complete(requestId: string): Promise<void> {
+    await this.removeQueueItem(requestId);
   }
 
   async saveQueueItem(item: PurchaseQueueItem): Promise<void> {

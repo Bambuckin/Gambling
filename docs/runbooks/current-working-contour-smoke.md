@@ -1,144 +1,197 @@
 # Current Working Contour Smoke
 
-Use this runbook to verify the current real contour from user request creation to admin draw closure and visible result.
+Этот runbook нужен для ручной проверки текущего рабочего контура: покупка билета, обработка терминалом, закрытие тиража, показ результата, зачисление выигрыша или кассовая выплата.
 
-## Goal
+## Цель
 
-Prove that the current working slice still does the following:
+Подтвердить, что система умеет:
 
-1. user prepares and confirms a ticket;
-2. request enters shared runtime;
-3. worker picks it up;
-4. admin sees it and manages draw result;
-5. user sees the final result.
-6. user sees the purchase/result notification on the same lottery page.
+1. впустить пользователя через `/login`;
+2. создать и подтвердить заявку на `/lottery/bolshaya-8`;
+3. провести заявку через общий runtime и terminal worker;
+4. показать заявку в `/admin` и `/terminal/receiver`;
+5. закрыть тираж одним действием администратора и сразу показать результат пользователю;
+6. дать пользователю выбрать `Зачислить` или `В кассу` для выигрышного билета;
+7. показать credit/cash-desk follow-up в `/admin`.
 
-## Preconditions
+## Предусловия
 
-- web runtime is started;
-- worker runtime is started;
-- shared Postgres is reachable if `LOTTERY_STORAGE_BACKEND=postgres`;
-- seeded login credentials are available;
-- for the current mock contour, create the draw manually from `/admin` before buying.
+- web runtime поднят;
+- worker runtime поднят;
+- web и worker смотрят в один и тот же Postgres, если `LOTTERY_STORAGE_BACKEND=postgres`;
+- есть seeded admin и обычный пользователь;
+- для mock contour тираж создается вручную из `/admin`;
+- Big 8 по умолчанию работает в mock-режиме, пока явно не задан `LOTTERY_BIG8_TERMINAL_MODE=real`;
+- credit jobs обрабатывает worker loop, а cash-desk payout закрывается действием администратора.
 
-Note:
+Если нужно проверить оба payout path за один прогон, создай минимум два выигрышных билета. Один и тот же выигрышный билет нельзя честно прогнать через `Зачислить` и `В кассу` одновременно.
 
-- direct worker launch through `pnpm start:worker` or `pnpm dev:worker` now auto-loads repository `.env`;
-- Big 8 mock mode is the default unless `LOTTERY_BIG8_TERMINAL_MODE=real` is set explicitly;
-- in mock mode the worker does not auto-create default purchasable draws anymore;
-- if the worker is not running at all, queued requests will remain in `queued` and admin will show terminal idle.
+## Step 1. Подними runtime
 
-## Step 1. Admin creates a test draw
+На сервере:
 
-1. Open `/admin`.
-2. Create a draw manually for `bolshaya-8`.
+```powershell
+.\scripts\bootstrap-runtime.ps1 -EnvFile .env -SeedMode if-empty
+.\scripts\start-web-runtime.ps1 -EnvFile .env
+```
 
-Expected:
+На terminal machine или локально в mock contour:
 
-- the new draw appears in the open draws block;
-- the same draw becomes available on `/lottery/bolshaya-8`;
-- if old test noise exists, admin can delete empty draws or use runtime cleanup controls before continuing.
+```powershell
+.\scripts\start-worker-runtime.ps1 -EnvFile .env
+```
 
-## Step 2. User creates a request
+Если гоняешь LAN bundles:
 
-1. Open `/login`.
-2. Log in as a regular user.
-3. Open `/lottery/bolshaya-8`.
-4. Select the manually created open draw.
-5. Prepare a ticket.
-5. Confirm the request.
+- на client PC открой `Start Client.cmd`;
+- на terminal PC открой `Start Terminal Receiver.cmd`.
 
-Expected:
+Ожидание:
 
-- request appears on the page in request history;
-- purchase notification appears after emulated successful purchase;
-- status becomes queued, executing, retrying, cart-stage, or success depending on worker timing;
-- no server error or missing-draw error appears unless the draw actually became unavailable.
+- `/login` открывается;
+- `/admin` открывается под admin;
+- `/terminal/receiver` открывается и не падает;
+- worker пишет heartbeat/poll logs без preflight error.
 
-## Step 3. Operator confirms terminal-side visibility
+## Step 2. Админ создает тестовый тираж
 
-Check both:
+1. Открой `/admin`.
+2. Создай draw для `bolshaya-8`.
+
+Ожидание:
+
+- draw появляется в блоке открытых тиражей;
+- draw становится доступен на `/lottery/bolshaya-8`;
+- если мешает старое тестовое состояние, удали пустые draws или сделай cleanup/reset до продолжения.
+
+## Step 3. Пользователь создает заявку
+
+1. Открой `/login`.
+2. Войди обычным пользователем.
+3. Перейди на `/lottery/bolshaya-8`.
+4. Убедись, что созданный draw виден в форме.
+5. Подготовь и подтверди минимум одну заявку.
+6. Для проверки обоих payout path повтори покупку второй раз по тому же draw.
+
+Ожидание:
+
+- заявка появляется в истории заявок;
+- после mock purchase приходит purchase notification;
+- пользовательская таблица показывает русские статусы, без raw backend/result/status строк;
+- блок `Итоги по аккаунту` остается видимым и страница не ломается;
+- после успешной покупки резерв очищается, а покупка отражается как финальное списание.
+
+## Step 4. Проверь terminal-side visibility
+
+Открой одновременно:
 
 1. `/admin`
 2. `/terminal/receiver`
 
-Expected:
+Ожидание:
 
-- request is visible either in queue snapshot or in terminal/last-request rows;
-- if queue is already empty, the request may still be visible on terminal side;
-- empty queue alone is not a failure.
+- заявка видна либо в queue snapshot, либо в terminal/last-request rows;
+- canonical-only visibility на `/terminal/receiver` не зависит от legacy request journal;
+- пустая очередь не считается ошибкой, если request уже ушел в terminal contour.
 
-## Step 4. Admin marks ticket outcome
+## Step 5. Админ помечает билет и закрывает тираж
 
-1. Stay on `/admin`.
-2. Find the draw row and the purchased ticket.
-3. Mark the ticket as `win` or `lose`.
+1. Останься в `/admin`.
+2. Найди tickets по этому draw.
+3. Для payout-проверок пометь минимум один билет как win.
+4. Закрой draw.
 
-Expected:
+Ожидание:
 
-- mark is accepted without page crash;
-- ticket row reflects the pre-closure mark.
+- mark action проходит без page crash;
+- draw становится закрытым/settled;
+- отдельной кнопки публикации результата нет;
+- пользователь получает closed-draw notifications;
+- ticket rows показывают итоговый результат и claim state.
 
-## Step 5. Admin closes the draw
+## Step 6. Пользователь видит финальный результат
 
-1. Close the draw from the same admin page.
+1. Вернись на `/lottery/bolshaya-8` тем же пользователем.
+2. Дождись live refresh или обнови страницу.
 
-Expected:
+Ожидание:
 
-- open draw becomes closed;
-- tickets in that draw receive final outcome state;
-- user notifications are created for closed-draw result;
-- repeated close attempt should not silently mutate already-closed draw state.
+- notification feed показывает итог покупки и итог закрытого тиража;
+- ticket table показывает результат без raw result/status строк;
+- для проигрыша действий нет;
+- для выигрыша видны кнопки `Зачислить` и `В кассу`;
+- блок `Итоги по аккаунту` отражает актуальное число билетов и суммарный результат.
 
-## Step 6. User sees final result
+## Step 7. Проверь путь `Зачислить`
 
-1. Return to `/lottery/bolshaya-8` as the same user.
+1. На одном выигрышном билете нажми `Зачислить`.
+2. Подожди один-два worker poll цикла.
+3. Обнови `/lottery/bolshaya-8` и `/admin`.
 
-Expected:
+Ожидание:
 
-- notification block shows whether the ticket won or not;
-- ticket result appears in the ticket table;
-- result source and claim state are visible;
-- user does not need a separate notification screen for this contour because the lottery page already shows the feed.
+- claim state меняется на `Зачисление в очереди`, затем на `Зачислен`;
+- доступный баланс пользователя растет на сумму выигрыша;
+- в `/admin` появляется строка в `Зачисления выигрышей`;
+- job доходит до `Зачислено`, а не зависает в queued.
+
+## Step 8. Проверь путь `В кассу`
+
+1. На другом выигрышном билете нажми `В кассу`.
+2. Открой `/admin`.
+3. Найди новую строку в `Кассовые выплаты`.
+4. Нажми `Выдать`.
+5. Вернись на `/lottery/bolshaya-8` и обнови страницу.
+
+Ожидание:
+
+- claim state становится `Ожидает кассу`;
+- в `/admin` появляется cash-desk request с правильной суммой и request/purchase identity;
+- после `Выдать` статус cash-desk row меняется на `Выдано`;
+- на пользовательской странице claim state меняется на `Выдан в кассе`.
 
 ## Failure Triage
 
-### Request not visible in queue
+### Заявка не видна в очереди
 
-Check `/terminal/receiver` and terminal/last-request rows on `/admin`.
+Проверь `/terminal/receiver` и terminal rows на `/admin`. Чаще всего это значит, что worker уже зарезервировал request: queue snapshot пуст, но canonical receiver history уже содержит запись.
 
-Most likely explanation:
+### Draw не появился на пользовательской странице
 
-- worker already reserved the request.
+Проверь:
 
-### Admin page shows no draw controls
+- draw действительно открыт, а не уже закрыт;
+- пользователь находится на той же лотерее `bolshaya-8`;
+- web и worker смотрят в одну базу;
+- старое тестовое состояние не застряло, при необходимости используй cleanup/reset.
 
-Check:
+### Credit job не дошел до `Зачислено`
 
-- you are logged in as admin;
-- draw data exists or can be created manually;
-- stale test state was not left behind; if needed use queue cleanup or full runtime reset.
+Проверь:
 
-### Result not visible after closure
+- worker реально запущен;
+- в worker log нет ошибок `credit job processing failed`;
+- user action создал job, и он виден в `/admin`.
 
-Check:
+### Cash-desk request не закрывается
 
-- ticket belongs to the same user;
-- draw was actually closed;
-- notification feed on the lottery page refreshed;
-- worker and web use the same storage backend and database.
+Проверь:
 
-## Useful Commands
+- в `/admin` нажата именно кнопка `Выдать` у нужной строки;
+- у cash-desk request нет старой уже оплаченной копии;
+- страница после действия обновилась и не показывает stale state.
+
+## Полезные команды
 
 ```powershell
 corepack pnpm runtime:preflight
 corepack pnpm runtime:doctor:queue
-corepack pnpm db:init
-corepack pnpm typecheck
+corepack pnpm release:check
 corepack pnpm --filter @lottery/web build
+corepack pnpm --filter @lottery/web typecheck
 ```
 
-## Related Docs
+## Связанные документы
 
 - `docs/modules/current-working-contour.md`
 - `docs/handoff-runtime.md`
